@@ -32,6 +32,7 @@ MVPで作る機能:
 ```
 docker compose build 
 docker compose up -d
+docker compose exec backend php artisan migrate
 ```
 
 ### 動かないときに確認

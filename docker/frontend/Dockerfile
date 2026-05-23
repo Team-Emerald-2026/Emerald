@@ -1,4 +1,4 @@
-FROM node:24-alpine
+FROM node:24-bullseye
 
 # 作業ディレクトリの設定
 WORKDIR /app/frontend
