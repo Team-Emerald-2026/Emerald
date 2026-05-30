@@ -32,8 +32,12 @@ MVPで作る機能:
 ```
 docker compose build 
 docker compose up -d
-docker compose exec backend composer install --no-interaction --prefer-dist --optimize-autoloader
 ```
+### npmが見つからないとき
+```
+docker compose run --rm frontend sh npm install
+```
+
 ### `vendor/autoload.php` がないと言われるとき（artisan/migrate/HTTP 500）
 原因: Composer 依存関係が未インストール。
 
