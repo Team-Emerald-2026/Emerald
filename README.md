@@ -35,7 +35,7 @@ docker compose up -d
 ```
 ### npmが見つからないとき
 ```
-docker compose run --rm frontend sh npm install
+docker compose run --rm frontend sh -c "npm install"
 ```
 
 ### `vendor/autoload.php` がないと言われるとき（artisan/migrate/HTTP 500）
