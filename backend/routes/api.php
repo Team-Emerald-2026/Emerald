@@ -1,8 +1,11 @@
 <?php
 
+use App\Http\Controllers\Api\V1\Auth\AuthController;
 use App\Http\Controllers\Api\V1\Map\FacilityController;
 use App\Http\Controllers\Api\V1\Store\StoreController;
-use App\Http\Controllers\Api\V1\Auth\AuthController;
+
+use App\Http\Controllers\Api\V1\Booth\Dashboard\DashboardController;
+
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Route;
 
@@ -21,7 +24,14 @@ Route::prefix('v1')->group(function () {
     Route::get('restaurants/{id}', [StoreController::class, 'show']);
     Route::post('auth/login', [AuthController::class, 'login']);
 
+});
+
+Route::prefix('v1/booth')->group(function () {
+    Route::post('auth/login', [AuthController::class, 'login']);
+
     Route::middleware('auth:sanctum')->group(function () {
         Route::post('auth/logout', [AuthController::class, 'logout']);
+        Route::get('dashboard', [DashboardController::class, 'index']);
     });
+
 });
