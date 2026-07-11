@@ -1,0 +1,373 @@
+openapi: 3.0.3
+info:
+  title: 京都TECH学園祭アプリ API
+  description: |
+    来場者向けアプリと店舗向け管理画面が利用する REST API。
+    実装は Laravel JSON:API 形式を基本とする。
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:8080/api/v1
+    description: ローカル（Docker / Nginx）
+  - url: https://api.example.com/api/v1
+    description: 本番（予定）
+
+tags:
+  - name: restaurants
+    description: 飲食店
+  - name: map
+    description: 校内マップ
+  - name: auth
+    description: 店舗認証
+  - name: store
+    description: 店舗向け操作（一部未実装）
+
+paths:
+  /restaurants:
+    get:
+      tags: [restaurants]
+      summary: 飲食店一覧取得
+      operationId: listRestaurants
+      security: []
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StoreCollection"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /restaurants/{id}:
+    get:
+      tags: [restaurants]
+      summary: 飲食店詳細取得
+      operationId: getRestaurant
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/StoreId"
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StoreResourceDocument"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /map/facilities:
+    get:
+      tags: [map]
+      summary: マップ表示データ取得
+      operationId: listMapFacilities
+      security: []
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MapFacilityCollection"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /auth/login:
+    post:
+      tags: [auth]
+      summary: 店舗ログイン（トークン発行）
+      description: |
+        Sanctum の personal access token を発行する。
+        api.md の `/store/login` とはパスが異なる（実装優先）。
+      operationId: login
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+            example:
+              login_id: cafe_admin
+              password: password123
+      responses:
+        "200":
+          description: ログイン成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /auth/logout:
+    post:
+      tags: [auth]
+      summary: ログアウト
+      operationId: logout
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: ログアウト成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Logged out
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /store/{id}/wait-time:
+    patch:
+      tags: [store]
+      summary: 待ち時間更新（未実装・予定）
+      description: api.md に定義あり。現状 routes 未実装。
+      operationId: updateWaitTime
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/StoreId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WaitTimeUpdateRequest"
+      responses:
+        "200":
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WaitTimeUpdateResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: Sanctum
+      description: Authorization: Bearer {token}
+
+  parameters:
+    StoreId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        example: store-101
+      description: 店舗ID
+
+  schemas:
+    JsonApiResourceIdentifier:
+      type: object
+      required: [type, id]
+      properties:
+        type:
+          type: string
+        id:
+          type: string
+
+    StoreAttributes:
+      type: object
+      properties:
+        name:
+          type: string
+          example: KTCカフェ
+        description:
+          type: string
+          nullable: true
+          example: 学園祭限定メニューを提供するカフェ
+        is_open:
+          type: boolean
+          example: true
+        current_wait_min:
+          type: integer
+          example: 10
+        current_queue_count:
+          type: integer
+          example: 5
+
+    StoreResource:
+      allOf:
+        - $ref: "#/components/schemas/JsonApiResourceIdentifier"
+        - type: object
+          properties:
+            type:
+              type: string
+              example: stores
+            attributes:
+              $ref: "#/components/schemas/StoreAttributes"
+
+    StoreResourceDocument:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/StoreResource"
+
+    StoreCollection:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/StoreResource"
+
+    MapFacilityAttributes:
+      type: object
+      properties:
+        store_id:
+          type: string
+          example: store-101
+        name:
+          type: string
+          example: KTCカフェ
+        type:
+          type: string
+          example: food
+        floor:
+          type: integer
+          example: 1
+        x:
+          type: number
+          example: 120
+        y:
+          type: number
+          example: 80
+
+    MapFacilityResource:
+      allOf:
+        - $ref: "#/components/schemas/JsonApiResourceIdentifier"
+        - type: object
+          properties:
+            type:
+              type: string
+              example: map_facilities
+            attributes:
+              $ref: "#/components/schemas/MapFacilityAttributes"
+
+    MapFacilityCollection:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/MapFacilityResource"
+
+    LoginRequest:
+      type: object
+      required: [login_id, password]
+      properties:
+        login_id:
+          type: string
+        password:
+          type: string
+          format: password
+
+    LoginResponse:
+      type: object
+      properties:
+        token:
+          type: string
+          example: "1|xxxxxxxx"
+        store_id:
+          type: string
+          example: store-101
+
+    WaitTimeUpdateRequest:
+      type: object
+      required: [current_wait_min, current_queue_count]
+      properties:
+        current_wait_min:
+          type: integer
+          minimum: 0
+          example: 20
+        current_queue_count:
+          type: integer
+          minimum: 0
+          example: 10
+
+    WaitTimeUpdateResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          example: store-101
+        current_wait_min:
+          type: integer
+        current_queue_count:
+          type: integer
+        updated_at:
+          type: string
+          format: date-time
+
+    ErrorBody:
+      type: object
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              example: NOT_FOUND
+            message:
+              type: string
+            details:
+              nullable: true
+
+  responses:
+    BadRequest:
+      description: パラメータ不正
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorBody"
+    Unauthorized:
+      description: 認証失敗
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorBody"
+    Forbidden:
+      description: 権限不足
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorBody"
+    NotFound:
+      description: リソース未発見
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorBody"
+    ValidationError:
+      description: バリデーションエラー
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorBody"
+    InternalError:
+      description: サーバーエラー
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorBody"
