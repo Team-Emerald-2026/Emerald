@@ -30,6 +30,20 @@ const campusMap = {
   name: '京都TECH学園祭 校内マップ',
 };
 
+const floors = ['1F', '2F', '3F', '4F', '5F', '6F', '7F', '8F'] as const;
+type MapFloor = (typeof floors)[number];
+
+const mapImageByFloor: Record<MapFloor, string> = {
+  '1F': '/campus-map-1f.png',
+  '2F': '/campus-map-2f.png',
+  '3F': '/campus-map-3f.png',
+  '4F': '/campus-map-4f.png',
+  '5F': '/campus-map-5f.png',
+  '6F': '/campus-map-6f.png',
+  '7F': '/campus-map-7f.png',
+  '8F': '/campus-map-8f.png',
+};
+
 const typeIcon: Record<BoothType, LucideIcon> = {
   体験: FlaskConical,
   フード: UtensilsCrossed,
@@ -97,7 +111,7 @@ function toFacility(facility: BackendMapFacility): Facility {
 
 export default function Map() {
   const [showFilter, setShowFilter] = useState(false);
-  const [floor, setFloor] = useState<'すべて' | Floor>('すべて');
+  const [floor, setFloor] = useState<'すべて' | MapFloor>('1F');
   const [type, setType] = useState<'すべて' | BoothType>('すべて');
   const [facilities, setFacilities] = useState<Facility[]>([]);
   const [loading, setLoading] = useState(true);
@@ -124,10 +138,6 @@ export default function Map() {
     return () => controller.abort();
   }, []);
 
-  const floors = useMemo(
-    () => Array.from(new Set(facilities.map((f) => f.floor))).sort((a, b) => Number(a.slice(0, -1)) - Number(b.slice(0, -1))),
-    [facilities],
-  );
   const boothTypes = useMemo(
     () => Array.from(new Set(facilities.map((f) => f.type))),
     [facilities],
@@ -222,11 +232,13 @@ export default function Map() {
         </div>
       )}
 
-      {/* 簡易マップ */}
-      <div
-        className="relative aspect-[4/3] w-full overflow-hidden rounded-2xl border border-border"
-        style={{ background: 'linear-gradient(135deg,#0f7b5f22,#7c5cff22)' }}
-      >
+      {/* 校内マップ */}
+      <div className="relative aspect-[4/3] w-full overflow-hidden rounded-2xl border border-border bg-muted">
+        <img
+          src={floor === 'すべて' ? mapImageByFloor['1F'] : mapImageByFloor[floor]}
+          alt={`${floor === 'すべて' ? '1F' : floor} 校内マップ`}
+          className="absolute inset-0 h-full w-full object-contain"
+        />
         {!loading && !error && filtered.map((f) => {
           const Icon = typeIcon[f.type];
           return (
