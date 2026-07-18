@@ -2,3 +2,5 @@
 /.env
 /.test
 backend/.env
+frontend/.env
+.github/copilot-instructions.md
