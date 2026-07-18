@@ -22,8 +22,6 @@ Route::prefix('v1')->group(function () {
     Route::get('map/facilities', [FacilityController::class, 'index']);
     Route::get('restaurants', [StoreController::class, 'index']);
     Route::get('restaurants/{id}', [StoreController::class, 'show']);
-    Route::post('auth/login', [AuthController::class, 'login']);
-
 });
 
 Route::prefix('v1/booth')->group(function () {
