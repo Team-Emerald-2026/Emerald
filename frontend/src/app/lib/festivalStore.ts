@@ -92,11 +92,25 @@ function getSnapshot() {
   return cache;
 }
 
+const selectorCache = new Map<
+  (state: FestivalState) => unknown,
+  { state: FestivalState; result: unknown }
+>();
+
 /** コンポーネントから状態を購読する */
 export function useFestival<T>(selector: (s: FestivalState) => T): T {
   return useSyncExternalStore(
     subscribe,
-    () => selector(getSnapshot()),
+    () => {
+      const state = getSnapshot();
+      const cached = selectorCache.get(selector);
+      if (cached && cached.state === state) {
+        return cached.result as T;
+      }
+      const result = selector(state);
+      selectorCache.set(selector, { state, result });
+      return result;
+    },
     () => selector(initialState),
   );
 }

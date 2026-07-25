@@ -24,6 +24,10 @@ export default function StoreRegister() {
       setError('店舗名を入力してください。');
       return;
     }
+    if (!description.trim()) {
+        setError('説明を入力してください。');
+        return;
+      }
     if (!loginId.trim()) {
       setError('ログインIDを入力してください。');
       return;
@@ -39,7 +43,7 @@ export default function StoreRegister() {
     try {
       const result = await registerStore({
         store_name: storeName.trim(),
-        description: description.trim() || undefined,
+        description: description.trim(),
         login_id: loginId.trim(),
         password,
       });
@@ -83,7 +87,7 @@ export default function StoreRegister() {
         </label>
 
         <label className="block text-sm">
-          <span className="mb-1 block text-muted-foreground">説明（任意）</span>
+        <span className="mb-1 block text-muted-foreground">説明</span>
           <textarea
             value={description}
             onChange={(e) => setDescription(e.target.value)}

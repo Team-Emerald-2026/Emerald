@@ -1,7 +1,8 @@
 import type { ReactNode } from 'react';
 import { Navigate, NavLink, useNavigate } from 'react-router-dom';
-import { LogOut, ShoppingCart, LayoutDashboard, Users, Megaphone, History } from 'lucide-react';
+import { LogOut, ShoppingCart, LayoutDashboard, Users, Megaphone, History, Store } from 'lucide-react';
 import { useFestival, logoutStore } from '../../lib/festivalStore';
+
 
 const links = [
   { to: '/store', label: 'レジ', icon: ShoppingCart, end: true },
@@ -9,6 +10,7 @@ const links = [
   { to: '/store/waiting', label: '待ち人数', icon: Users, end: false },
   { to: '/store/ticket', label: '受付番号', icon: Megaphone, end: false },
   { to: '/store/served', label: '提供済み', icon: History, end: false },
+  { to: '/store/profile', label: '店舗情報', icon: Store, end: false },
 ];
 
 export default function StoreShell({

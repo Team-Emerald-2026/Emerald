@@ -12,6 +12,7 @@ import StoreWaiting from './components/store/StoreWaiting';
 import StoreTicket from './components/store/StoreTicket';
 import StoreServed from './components/store/StoreServed';
 import StoreRegister from './components/store/StoreRegister';
+import StoreProfile from './components/store/StoreProfile';
 
 export const router = createBrowserRouter([
   {
@@ -35,5 +36,6 @@ export const router = createBrowserRouter([
   { path: '/store/waiting', element: <StoreWaiting /> },
   { path: '/store/ticket', element: <StoreTicket /> },
   { path: '/store/served', element: <StoreServed /> },
+  { path: '/store/profile', element: <StoreProfile /> },
   { path: '*', element: <NotFound /> },
 ]);
