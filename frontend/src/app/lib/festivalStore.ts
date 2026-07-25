@@ -94,11 +94,8 @@ function getSnapshot() {
 
 /** コンポーネントから状態を購読する */
 export function useFestival<T>(selector: (s: FestivalState) => T): T {
-  return useSyncExternalStore(
-    subscribe,
-    () => selector(getSnapshot()),
-    () => selector(initialState),
-  );
+  const state = useSyncExternalStore(subscribe, getSnapshot, () => initialState);
+  return selector(state);
 }
 
 /* ---- 操作（actions） ---- */
