@@ -3,7 +3,8 @@ import { useSyncExternalStore } from 'react';
 /**
  * 京都TECH学園祭 — 簡易データストア
  *
- * バックエンド未接続のため、注文（受付番号）と店舗セッションを localStorage に保持する。
+ * 注文（受付番号）など一部機能は localStorage に保持する。
+ * 店舗ログインとダッシュボードはバックエンド API を利用する。
  * 来場者の「注文を決定」で受付番号を発行し、店舗側の提供待ち一覧・受付番号表示・
  * ダッシュボードがその番号を共有する。
  *
@@ -33,7 +34,10 @@ interface FestivalState {
   counter: number; // 直近に発行した番号の連番（初期 100）
   bigNumber: string | null; // 「大きく表示」対象の番号
   waiting: number; // 店舗側の手動待ち人数カウンタ
-  session: string | null; // ログイン中の店舗ID
+  session: {
+    storeId: string;
+    token: string;
+  } | null; // ログイン中の店舗セッション
 }
 
 const KEY = 'kt_festival_state_v1';
@@ -138,9 +142,9 @@ export function adjustWaiting(delta: number) {
   write({ ...s, waiting: Math.max(0, s.waiting + delta) });
 }
 
-export function loginStore(storeId: string) {
+export function loginStore(storeId: string, token: string) {
   const s = read();
-  write({ ...s, session: storeId });
+  write({ ...s, session: { storeId, token } });
 }
 
 export function logoutStore() {

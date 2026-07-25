@@ -3,6 +3,7 @@ import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { Store, KeyRound } from 'lucide-react';
 import { loginStoreAccount } from '../../lib/api';
 import { useFestival, loginStore } from '../../lib/festivalStore';
+import { ApiError, loginBooth } from '../../lib/api';
 
 const TOKEN_KEY = 'kt_store_token';
 
