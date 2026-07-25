@@ -161,45 +161,27 @@ export function fetchMapFacilities(signal?: AbortSignal) {
   );
 }
 
-export interface AuthResponse {
-  token: string;
-  store_id: string;
-  store_name?: string;
-  login_id?: string;
-}
-
-async function postJson(path: string, body: Record<string, unknown>): Promise<unknown> {
-  const response = await fetch(`${apiBase}${path}`, {
+export function loginBooth(loginId: string, password: string, signal?: AbortSignal) {
+  return request('/v1/booth/auth/login', {
     method: 'POST',
-    headers: {
-      Accept: 'application/json',
-      'Content-Type': 'application/json',
+    signal,
+    body: {
+      login_id: loginId,
+      password,
     },
-    body: JSON.stringify(body),
+  }) as Promise<BoothLoginResponse>;
+}
+
+export function logoutBooth(token: string, signal?: AbortSignal) {
+  return request('/v1/booth/auth/logout', {
+    method: 'POST',
+    signal,
+    token,
   });
-
-  const payload = await response.json().catch(() => null);
-
-  if (!response.ok) {
-    const message =
-      payload && typeof payload === 'object' && 'message' in payload
-        ? String((payload as { message: unknown }).message)
-        : `API request failed: ${response.status}`;
-    throw new Error(message);
-  }
-
-  return payload;
 }
 
-export function registerStore(input: {
-  store_name: string;
-  description?: string;
-  login_id: string;
-  password: string;
-}) {
-  return postJson('/v1/auth/register', input) as Promise<AuthResponse>;
-}
-
-export function loginStoreAccount(input: { login_id: string; password: string }) {
-  return postJson('/v1/auth/login', input) as Promise<AuthResponse>;
+export function fetchBoothDashboard(token: string, signal?: AbortSignal) {
+  return request('/v1/booth/dashboard', { signal, token }).then((payload) =>
+    normalizeItem<BoothDashboard>(payload),
+  );
 }
