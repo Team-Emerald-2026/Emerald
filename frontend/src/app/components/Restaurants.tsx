@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { Plus, Minus, ShoppingCart, Info, CheckCircle2, ArrowLeft } from 'lucide-react';
-import { issueOrder } from '../lib/festivalStore';
+import { issueOrder, useFestival } from '../lib/festivalStore';
 import { fetchRestaurants, type BackendStore } from '../lib/api';
+import { Skeleton, SkeletonText } from './Skeleton';
 
 interface MenuItem {
   id: string;
@@ -21,7 +22,7 @@ interface Store {
 }
 
 const yen = (n: number) => `¥${n.toLocaleString('ja-JP')}`;
-const priceLabel = (price: number | null) => (price === null ? '価格未設定' : yen(price));
+const priceLabel = (price: number) => yen(price);
 
 function toStore(store: BackendStore): Store {
   return {
@@ -30,21 +31,35 @@ function toStore(store: BackendStore): Store {
     description: store.description ?? '店舗説明は未設定です',
     isOpen: store.is_open,
     waitMin: Number(store.current_wait_min) || 0,
-    items: [
-      {
-        id: `${store.id}:order`,
-        storeId: store.id,
-        name: `${store.name} 注文受付`,
-        desc: store.description ?? '当日の商品内容は店舗で確認してください',
-        price: null,
-      },
-    ],
+    items: [],
   };
+}
+
+function StoreCardSkeleton() {
+  return (
+    <section className="overflow-hidden rounded-2xl border border-border bg-card">
+      <div className="flex items-center justify-between gap-2 border-b border-border bg-muted/50 px-4 py-3">
+        <div className="min-w-0 flex-1 space-y-2">
+          <SkeletonText className="w-1/2" />
+          <SkeletonText className="w-4/5" />
+          <SkeletonText className="w-1/3" />
+        </div>
+        <Skeleton className="h-6 w-14 shrink-0 rounded-md" />
+      </div>
+      <div className="px-4 py-5">
+        <SkeletonText className="w-3/5" />
+        <SkeletonText className="mt-2 w-full" />
+        <SkeletonText className="mt-2 w-2/3" />
+      </div>
+    </section>
+  );
 }
 
 export default function Restaurants() {
   const { pathname } = useLocation();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const selectedStoreId = searchParams.get('store');
   const mode = pathname.endsWith('/cart')
     ? 'cart'
     : pathname.endsWith('/status')
@@ -57,6 +72,9 @@ export default function Restaurants() {
   const [orderNumber, setOrderNumber] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const confirmedOrder = useFestival((s) =>
+    orderNumber ? s.orders.find((order) => order.number === orderNumber) ?? null : null,
+  );
 
   useEffect(() => {
     const controller = new AbortController();
@@ -87,8 +105,19 @@ export default function Restaurants() {
     return index;
   }, [stores]);
 
+  const orderedStores = useMemo(() => {
+    if (!selectedStoreId) return stores;
+    return [...stores].sort((a, b) => {
+      if (a.id === selectedStoreId) return -1;
+      if (b.id === selectedStoreId) return 1;
+      return 0;
+    });
+  }, [stores, selectedStoreId]);
+
   const setQty = (id: string, qty: number) =>
     setCart((c) => {
+      const ref = itemIndex.get(id);
+      if (!ref || ref.item.price === null) return c;
       const next = { ...c };
       if (qty <= 0) delete next[id];
       else next[id] = qty;
@@ -102,7 +131,7 @@ export default function Restaurants() {
   const confirmOrder = () => {
     const items = cartEntries.flatMap(([id, q]) => {
       const ref = itemIndex.get(id);
-      return ref ? [{ name: ref.item.name, qty: q, store: ref.store.name }] : [];
+      return ref && ref.item.price !== null ? [{ name: ref.item.name, qty: q, store: ref.store.name }] : [];
     });
     if (items.length === 0) return;
     const number = issueOrder(items, total);
@@ -117,9 +146,9 @@ export default function Restaurants() {
       <h1 className="font-display text-2xl font-bold text-foreground">モバイルオーダー</h1>
       <nav className="flex gap-1 rounded-xl bg-muted p-1 text-sm">
         {[
-          { to: '/restaurants', label: '注文画面', active: mode === 'order' },
-          { to: '/restaurants/cart', label: 'カート確認', active: mode === 'cart' },
-          { to: '/restaurants/status', label: '注文番号', active: mode === 'status' },
+          { to: '/restaurants', label: '選ぶ', active: mode === 'order' },
+          { to: '/restaurants/cart', label: '確認', active: mode === 'cart' },
+          { to: '/restaurants/status', label: '番号', active: mode === 'status' },
         ].map((t) => (
           <Link
             key={t.to}
@@ -144,12 +173,6 @@ export default function Restaurants() {
       <div className="space-y-5 p-4">
         {header}
 
-        {loading && (
-          <div className="rounded-2xl border border-border bg-card p-6 text-center text-sm text-muted-foreground">
-            店舗情報を読み込み中です。
-          </div>
-        )}
-
         {error && (
           <div className="rounded-2xl border border-border bg-card p-6 text-center text-sm text-muted-foreground">
             {error}
@@ -161,8 +184,16 @@ export default function Restaurants() {
           style={{ backgroundColor: 'var(--info-soft)', color: 'var(--info)' }}
         >
           <Info className="mt-0.5 h-4 w-4 shrink-0" />
-          <p>商品を選んでカートに追加し、注文を決定すると受付番号が発行されます。番号で受け取りできます。</p>
+          <p>商品が登録されている店舗だけ注文できます。未登録の店舗は準備中として表示されます。</p>
         </div>
+
+        {loading && !error && (
+          <div className="space-y-3" aria-label="店舗情報を読み込み中">
+            {Array.from({ length: 3 }).map((_, index) => (
+              <StoreCardSkeleton key={index} />
+            ))}
+          </div>
+        )}
 
         {!loading && !error && stores.length === 0 && (
           <div className="rounded-2xl border border-border bg-card p-6 text-center text-sm text-muted-foreground">
@@ -170,8 +201,18 @@ export default function Restaurants() {
           </div>
         )}
 
-        {!loading && !error && stores.map((s) => (
-          <section key={s.id} className="overflow-hidden rounded-2xl border border-border bg-card">
+        {!loading && !error && orderedStores.map((s) => {
+          const hasOrderableItems = s.items.some((item) => item.price !== null);
+          const canOrder = s.isOpen && hasOrderableItems;
+
+          return (
+          <section
+            key={s.id}
+            className="overflow-hidden rounded-2xl border border-border bg-card"
+            style={{
+              boxShadow: selectedStoreId === s.id ? '0 0 0 2px var(--accent)' : 'none',
+            }}
+          >
             <div className="flex items-center justify-between gap-2 border-b border-border bg-muted/50 px-4 py-3">
               <div className="min-w-0">
                 <h2 className="truncate font-bold text-foreground">{s.name}</h2>
@@ -181,31 +222,40 @@ export default function Restaurants() {
               <span
                 className="shrink-0 rounded-md px-2 py-0.5 text-xs font-medium"
                 style={{
-                  backgroundColor: s.isOpen ? 'var(--ok-soft)' : 'var(--busy-soft)',
-                  color: s.isOpen ? 'var(--ok)' : 'var(--busy)',
+                  backgroundColor: canOrder ? 'var(--ok-soft)' : 'var(--busy-soft)',
+                  color: canOrder ? 'var(--ok)' : 'var(--busy)',
                 }}
               >
-                {s.isOpen ? '注文可能' : '受付停止'}
+                {canOrder ? '注文可能' : s.isOpen ? '準備中' : '受付停止'}
               </span>
             </div>
 
-            <ul className="divide-y divide-border">
+            {s.items.length === 0 ? (
+              <div className="px-4 py-5 text-sm text-muted-foreground">
+                <p className="font-medium text-foreground">この店舗は現在モバイル注文準備中です。</p>
+                <p className="mt-1">商品が登録されるまで、アプリからの注文はできません。店頭で案内をご確認ください。</p>
+              </div>
+            ) : (
+              <ul className="divide-y divide-border">
               {s.items.map((it) => {
                 const qty = cart[it.id] ?? 0;
+                const itemCanOrder = canOrder && it.price !== null;
                 return (
                   <li key={it.id} className="flex items-center gap-3 px-4 py-3">
                     <div className="min-w-0 flex-1">
                       <p className="font-medium text-foreground">{it.name}</p>
                       <p className="truncate text-xs text-muted-foreground">{it.desc}</p>
-                      <p className="mt-0.5 text-sm font-bold text-foreground">{priceLabel(it.price)}</p>
+                      <p className="mt-0.5 text-sm font-bold text-foreground">
+                        {it.price === null ? '価格未設定' : priceLabel(it.price)}
+                      </p>
                     </div>
                     {qty === 0 ? (
                       <button
                         type="button"
                         onClick={() => setQty(it.id, 1)}
-                        disabled={!s.isOpen}
+                        disabled={!itemCanOrder}
                         className="shrink-0 rounded-lg px-3 py-1.5 text-sm font-bold text-white"
-                        style={{ backgroundColor: 'var(--primary)', opacity: s.isOpen ? 1 : 0.4 }}
+                        style={{ backgroundColor: 'var(--primary)', opacity: itemCanOrder ? 1 : 0.4 }}
                       >
                         追加
                       </button>
@@ -234,9 +284,11 @@ export default function Restaurants() {
                   </li>
                 );
               })}
-            </ul>
+              </ul>
+            )}
           </section>
-        ))}
+          );
+        })}
 
         <div
           className="flex gap-2 rounded-xl p-3 text-sm"
@@ -383,8 +435,33 @@ export default function Restaurants() {
             {orderNumber}
           </p>
           <p className="text-sm text-muted-foreground">
-            番号が呼ばれたら、各屋台のカウンターでこの画面を見せて受け取ってください。
+            番号が呼ばれたら、受け取り場所でこの画面を見せてください。
           </p>
+          {confirmedOrder && (
+            <div className="mt-5 space-y-3 rounded-2xl bg-muted p-4 text-left text-sm">
+              <div>
+                <p className="font-bold text-foreground">受け取り場所</p>
+                <p className="text-muted-foreground">
+                  {Array.from(new Set(confirmedOrder.items.map((item) => item.store))).join('、')}
+                  のカウンター
+                </p>
+              </div>
+              <div>
+                <p className="font-bold text-foreground">支払い方法</p>
+                <p className="text-muted-foreground">支払いは店頭で行ってください。</p>
+              </div>
+              <div>
+                <p className="font-bold text-foreground">呼び出し状況</p>
+                <p className="text-muted-foreground">
+                  {confirmedOrder.status === 'called'
+                    ? '呼び出し済みです。受け取りカウンターへ向かってください。'
+                    : confirmedOrder.status === 'served'
+                      ? '受け渡し済みです。'
+                      : 'まだ呼び出し前です。番号が表示・呼び出しされるまでお待ちください。'}
+                </p>
+              </div>
+            </div>
+          )}
         </div>
       ) : (
         <div className="rounded-2xl border border-border bg-card p-8 text-center">
