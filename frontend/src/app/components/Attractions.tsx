@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react';
-import { Ticket, Flame, MapPin, Info } from 'lucide-react';
+import { Link, useSearchParams } from 'react-router-dom';
+import { Ticket, Flame, MapPin, Info, ShoppingBag, ChevronDown, ChevronUp } from 'lucide-react';
 import {
   fetchMapFacilities,
   fetchRestaurants,
   type BackendMapFacility,
   type BackendStore,
 } from '../lib/api';
+import { Skeleton, SkeletonText } from './Skeleton';
 
 type Category = '体験' | 'フード' | 'ステージ';
 
@@ -54,18 +56,55 @@ function toBooth(store: BackendStore, facility?: BackendMapFacility): Booth {
 }
 
 function waitStyle(min: number) {
-  if (min <= 0) return { label: '今すぐ', bg: 'var(--ok-soft)', fg: 'var(--ok)' };
+  if (min <= 0) return { label: 'すぐ入れる', bg: 'var(--ok-soft)', fg: 'var(--ok)' };
   if (min < 15) return { label: `${min}分`, bg: 'var(--ok-soft)', fg: 'var(--ok)' };
   if (min < 30) return { label: `${min}分`, bg: 'var(--warn-soft)', fg: 'var(--warn)' };
   return { label: `${min}分`, bg: 'var(--busy-soft)', fg: 'var(--busy)' };
 }
 
+function BoothCardSkeleton() {
+  return (
+    <li className="rounded-2xl border border-border bg-card p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1 space-y-2">
+          <SkeletonText className="w-2/3" />
+          <SkeletonText className="w-1/3" />
+        </div>
+        <div className="shrink-0 space-y-2">
+          <Skeleton className="h-7 w-16 rounded-lg" />
+          <SkeletonText className="ml-auto w-12" />
+        </div>
+      </div>
+      <div className="mt-4 grid grid-cols-3 gap-2">
+        <Skeleton className="h-9 rounded-xl" />
+        <Skeleton className="h-9 rounded-xl" />
+        <Skeleton className="h-9 rounded-xl" />
+      </div>
+    </li>
+  );
+}
+
 export default function Attractions() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [filter, setFilter] = useState<'すべて' | Category>('すべて');
   const [booths, setBooths] = useState<Booth[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const detailId = searchParams.get('detail');
   const list = booths.filter((b) => filter === 'すべて' || b.category === filter);
+  const selectedBooth = booths.find((b) => b.id === detailId) ?? null;
+
+  const showDetail = (id: string) => {
+    const next = new URLSearchParams(searchParams);
+    next.set('detail', id);
+    setSearchParams(next);
+  };
+
+  const hideDetail = () => {
+    const next = new URLSearchParams(searchParams);
+    next.delete('detail');
+    setSearchParams(next);
+  };
 
   useEffect(() => {
     const controller = new AbortController();
@@ -120,9 +159,11 @@ export default function Attractions() {
       </div>
 
       {loading && (
-        <div className="rounded-2xl border border-border bg-card p-6 text-center text-sm text-muted-foreground">
-          ブース情報を読み込み中です。
-        </div>
+        <ul className="space-y-3" aria-label="ブース情報を読み込み中">
+          {Array.from({ length: 4 }).map((_, index) => (
+            <BoothCardSkeleton key={index} />
+          ))}
+        </ul>
       )}
 
       {error && (
@@ -182,10 +223,61 @@ export default function Attractions() {
                     )}
                   </div>
                 )}
+
+                {detailId === b.id && (
+                  <div className="mt-3 rounded-xl bg-muted p-3 text-sm text-muted-foreground">
+                    <p>
+                      {b.name} は {b.area} の{b.category}ブースです。待ち時間の目安は
+                      {b.wait <= 0 ? '待ちなし' : `${b.wait}分`}です。
+                    </p>
+                  </div>
+                )}
+
+                <div className="mt-4 grid grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => (detailId === b.id ? hideDetail() : showDetail(b.id))}
+                    className="inline-flex items-center justify-center gap-1 rounded-xl border border-border px-3 py-2 text-xs font-bold text-foreground hover:bg-muted"
+                  >
+                    {detailId === b.id ? (
+                      <ChevronUp className="h-3.5 w-3.5" />
+                    ) : (
+                      <ChevronDown className="h-3.5 w-3.5" />
+                    )}
+                    詳細
+                  </button>
+                  <Link
+                    to={`/map?store=${encodeURIComponent(b.id)}`}
+                    className="inline-flex items-center justify-center gap-1 rounded-xl border border-border px-3 py-2 text-xs font-bold text-foreground hover:bg-muted"
+                  >
+                    <MapPin className="h-3.5 w-3.5" />
+                    マップ
+                  </Link>
+                  {b.category === 'フード' ? (
+                    <Link
+                      to={`/restaurants?store=${encodeURIComponent(b.id)}`}
+                      className="inline-flex items-center justify-center gap-1 rounded-xl px-3 py-2 text-xs font-bold text-white"
+                      style={{ backgroundColor: 'var(--accent)' }}
+                    >
+                      <ShoppingBag className="h-3.5 w-3.5" />
+                      注文
+                    </Link>
+                  ) : (
+                    <span className="inline-flex items-center justify-center rounded-xl bg-muted px-3 py-2 text-xs font-bold text-muted-foreground">
+                      注文対象外
+                    </span>
+                  )}
+                </div>
               </li>
             );
           })}
         </ul>
+      )}
+
+      {!loading && !error && detailId && !selectedBooth && (
+        <div className="rounded-2xl border border-border bg-card p-4 text-sm text-muted-foreground">
+          指定されたブースが見つかりませんでした。
+        </div>
       )}
 
       {/* 注意書き */}
