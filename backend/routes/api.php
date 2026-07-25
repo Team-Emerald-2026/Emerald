@@ -23,6 +23,7 @@ Route::prefix('v1')->group(function () {
     Route::get('restaurants', [StoreController::class, 'index']);
     Route::get('restaurants/{id}', [StoreController::class, 'show']);
     Route::post('auth/login', [AuthController::class, 'login']);
+    Route::post('auth/register', [AuthController::class, 'register']);
 
 });
 

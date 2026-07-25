@@ -99,3 +99,46 @@ export function fetchMapFacilities(signal?: AbortSignal) {
     normalizeCollection<BackendMapFacility>(payload),
   );
 }
+
+export interface AuthResponse {
+  token: string;
+  store_id: string;
+  store_name?: string;
+  login_id?: string;
+}
+
+async function postJson(path: string, body: Record<string, unknown>): Promise<unknown> {
+  const response = await fetch(`${apiBase}${path}`, {
+    method: 'POST',
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+
+  const payload = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    const message =
+      payload && typeof payload === 'object' && 'message' in payload
+        ? String((payload as { message: unknown }).message)
+        : `API request failed: ${response.status}`;
+    throw new Error(message);
+  }
+
+  return payload;
+}
+
+export function registerStore(input: {
+  store_name: string;
+  description?: string;
+  login_id: string;
+  password: string;
+}) {
+  return postJson('/v1/auth/register', input) as Promise<AuthResponse>;
+}
+
+export function loginStoreAccount(input: { login_id: string; password: string }) {
+  return postJson('/v1/auth/login', input) as Promise<AuthResponse>;
+}
