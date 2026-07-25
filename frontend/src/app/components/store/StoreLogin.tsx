@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { Store, KeyRound } from 'lucide-react';
 import { useFestival, loginStore } from '../../lib/festivalStore';
+import { ApiError, loginBooth } from '../../lib/api';
 
 export default function StoreLogin() {
   const session = useFestival((s) => s.session);
@@ -9,21 +10,36 @@ export default function StoreLogin() {
   const [id, setId] = useState('');
   const [pw, setPw] = useState('');
   const [error, setError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
   if (session) return <Navigate to="/store" replace />;
 
-  // デモ用認証：店舗IDが入力され、パスワードが "festival" なら通過
-  const submit = () => {
+  const submit = async () => {
+    if (submitting) return;
     if (!id.trim()) {
-      setError('店舗IDを入力してください。');
+      setError('ログインIDを入力してください。');
       return;
     }
-    if (pw !== 'festival') {
-      setError('パスワードが正しくありません。（デモ: festival）');
+    if (!pw) {
+      setError('パスワードを入力してください。');
       return;
     }
-    loginStore(id.trim());
-    navigate('/store');
+
+    setSubmitting(true);
+    setError('');
+    try {
+      const result = await loginBooth(id.trim(), pw);
+      loginStore(result.store_id, result.token);
+      navigate('/store/dashboard');
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 401) {
+        setError('ログインIDまたはパスワードが正しくありません。');
+      } else {
+        setError('ログインに失敗しました。時間をおいて再試行してください。');
+      }
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -41,13 +57,14 @@ export default function StoreLogin() {
 
       <div className="space-y-3 rounded-2xl border border-border bg-card p-5">
         <label className="block text-sm">
-          <span className="mb-1 block text-muted-foreground">店舗ID</span>
+          <span className="mb-1 block text-muted-foreground">ログインID</span>
           <div className="flex items-center gap-2 rounded-lg border border-input bg-background px-3">
             <Store className="h-4 w-4 text-muted-foreground" />
             <input
               value={id}
               onChange={(e) => setId(e.target.value)}
-              placeholder="例: yatai-a"
+              onKeyDown={(e) => e.key === 'Enter' && submit()}
+              placeholder="例: cafe_admin"
               className="w-full bg-transparent py-2.5 text-foreground outline-none"
             />
           </div>
@@ -61,7 +78,7 @@ export default function StoreLogin() {
               value={pw}
               onChange={(e) => setPw(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && submit()}
-              placeholder="festival"
+              placeholder="パスワード"
               className="w-full bg-transparent py-2.5 text-foreground outline-none"
             />
           </div>
@@ -76,10 +93,11 @@ export default function StoreLogin() {
         <button
           type="button"
           onClick={submit}
+          disabled={submitting}
           className="w-full rounded-xl py-3 font-bold text-white"
           style={{ backgroundColor: 'var(--primary)' }}
         >
-          ログイン
+          {submitting ? 'ログイン中...' : 'ログイン'}
         </button>
       </div>
     </div>
