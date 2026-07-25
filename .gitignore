@@ -3,5 +3,4 @@
 /.test
 backend/.env
 frontend/.env
-frontend/tests/result/api_benchmark_result.txt
 .github/copilot-instructions.md
