@@ -161,6 +161,32 @@ export function fetchMapFacilities(signal?: AbortSignal) {
   );
 }
 
+
+export function loginBooth(loginId: string, password: string, signal?: AbortSignal) {
+  return request('/v1/booth/auth/login', {
+    method: 'POST',
+    signal,
+    body: {
+      login_id: loginId,
+      password,
+    },
+  }) as Promise<BoothLoginResponse>;
+}
+
+export function logoutBooth(token: string, signal?: AbortSignal) {
+  return request('/v1/booth/auth/logout', {
+    method: 'POST',
+    signal,
+    token,
+  });
+}
+
+export function fetchBoothDashboard(token: string, signal?: AbortSignal) {
+  return request('/v1/booth/dashboard', { signal, token }).then((payload) =>
+    normalizeItem<BoothDashboard>(payload),
+  );
+}
+
 export interface AuthResponse {
   token: string;
   store_id: string;
@@ -200,6 +226,9 @@ export function registerStore(input: {
   return postJson('/v1/auth/register', input) as Promise<AuthResponse>;
 }
 
-export function loginStoreAccount(input: { login_id: string; password: string }) {
+export function loginStoreAccount(input: {
+  login_id: string;
+  password: string;
+}) {
   return postJson('/v1/auth/login', input) as Promise<AuthResponse>;
 }
