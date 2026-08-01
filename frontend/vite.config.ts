@@ -16,6 +16,11 @@ export default defineConfig(({ mode }) => {
       },
     },
     server: {
+      // Docker Desktop (Windows) では inotify が効かないことがあるためポーリングする
+      watch: {
+        usePolling: true,
+        interval: 500,
+      },
       proxy: {
         '/api': {
           target: apiProxyTarget,

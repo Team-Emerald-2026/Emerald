@@ -29,7 +29,7 @@ const tabs = [
   { to: '/', label: 'ホーム', icon: Home, end: true },
   { to: '/attractions', label: 'ブース', icon: Tent, end: false },
   { to: '/restaurants', label: '注文', icon: ShoppingBag, end: false },
-  { to: '/map', label: '校内', icon: MapPin, end: false },
+  { to: '/map', label: 'マップ', icon: MapPin, end: false },
 ];
 
 export default function Layout() {

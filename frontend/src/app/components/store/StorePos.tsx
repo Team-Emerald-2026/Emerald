@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, Minus, Receipt } from 'lucide-react';
+import { Minus, Receipt } from 'lucide-react';
 import StoreShell from './StoreShell';
 import { issueOrder, adjustWaiting } from '../../lib/festivalStore';
 
@@ -70,43 +70,38 @@ export default function StorePos() {
             return (
               <div
                 key={p.id}
-                className="rounded-2xl border border-border bg-card p-3"
+                role="button"
+                tabIndex={0}
+                onClick={() => setQty(p.id, qty + 1)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    setQty(p.id, qty + 1);
+                  }
+                }}
+                aria-label={`${p.name}を追加`}
+                className="relative min-h-28 cursor-pointer rounded-2xl border border-border bg-card p-3 pr-12 transition-colors hover:bg-muted/50 focus:outline-none focus:ring-2 focus:ring-primary"
               >
                 <p className="font-bold text-foreground">{p.name}</p>
                 <p className="text-sm text-muted-foreground">{yen(p.price)}</p>
-                <div className="mt-2 flex items-center justify-between">
-                  {qty > 0 ? (
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setQty(p.id, qty - 1)}
-                        aria-label="減らす"
-                        className="grid h-8 w-8 place-items-center rounded-full border border-border text-foreground"
-                      >
-                        <Minus className="h-4 w-4" />
-                      </button>
-                      <span className="w-5 text-center font-bold text-foreground">{qty}</span>
-                      <button
-                        type="button"
-                        onClick={() => setQty(p.id, qty + 1)}
-                        aria-label="増やす"
-                        className="grid h-8 w-8 place-items-center rounded-full text-white"
-                        style={{ backgroundColor: 'var(--primary)' }}
-                      >
-                        <Plus className="h-4 w-4" />
-                      </button>
-                    </div>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => setQty(p.id, 1)}
-                      className="w-full rounded-lg py-1.5 text-sm font-bold text-white"
-                      style={{ backgroundColor: 'var(--primary)' }}
-                    >
-                      追加
-                    </button>
-                  )}
-                </div>
+                {qty > 0 ? (
+                  <p className="mt-6 text-sm font-bold text-foreground">×{qty}</p>
+                ) : (
+                  <p className="mt-6 text-sm text-muted-foreground">カードをタップで追加</p>
+                )}
+                {qty > 0 && (
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setQty(p.id, qty - 1);
+                    }}
+                    aria-label={`${p.name}を減らす`}
+                    className="absolute right-2 top-2 grid h-10 w-10 place-items-center rounded-full border border-border bg-background text-foreground shadow-sm"
+                  >
+                    <Minus className="h-5 w-5" />
+                  </button>
+                )}
               </div>
             );
           })}

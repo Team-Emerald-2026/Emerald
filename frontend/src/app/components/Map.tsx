@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import {
   SlidersHorizontal,
   X,
@@ -13,12 +14,14 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { fetchMapFacilities, type BackendMapFacility } from '../lib/api';
+import { Skeleton, SkeletonText } from './Skeleton';
 
 type BoothType = '体験' | 'フード' | '物販' | 'トイレ' | '案内' | '救護室' | 'サポート';
 type Floor = `${number}F`;
 
 interface Facility {
   id: string;
+  storeId: string;
   name: string;
   type: BoothType;
   floor: Floor;
@@ -101,6 +104,7 @@ function toFacility(facility: BackendMapFacility): Facility {
 
   return {
     id: facility.id,
+    storeId: facility.store_id,
     name: facility.name,
     type: toBoothType(facility.type),
     floor: `${Number.isFinite(floor) ? floor : 1}F`,
@@ -109,13 +113,29 @@ function toFacility(facility: BackendMapFacility): Facility {
   };
 }
 
+function FacilityRowSkeleton() {
+  return (
+    <li className="flex items-center gap-3 rounded-xl border border-border bg-card px-3 py-2.5">
+      <Skeleton className="h-9 w-9 shrink-0 rounded-lg" />
+      <div className="min-w-0 flex-1 space-y-2">
+        <SkeletonText className="w-3/5" />
+        <SkeletonText className="w-1/3" />
+      </div>
+      <Skeleton className="h-8 w-14 shrink-0 rounded-lg" />
+    </li>
+  );
+}
+
 export default function Map() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [showFilter, setShowFilter] = useState(false);
   const [floor, setFloor] = useState<'すべて' | MapFloor>('1F');
   const [type, setType] = useState<'すべて' | BoothType>('すべて');
   const [facilities, setFacilities] = useState<Facility[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const targetStoreId = searchParams.get('store');
+  const targetFacilityId = searchParams.get('facility');
 
   useEffect(() => {
     const controller = new AbortController();
@@ -138,6 +158,15 @@ export default function Map() {
     return () => controller.abort();
   }, []);
 
+  useEffect(() => {
+    const target = facilities.find(
+      (f) => f.storeId === targetStoreId || f.id === targetFacilityId,
+    );
+    if (target && floors.includes(target.floor as MapFloor)) {
+      setFloor(target.floor as MapFloor);
+    }
+  }, [facilities, targetStoreId, targetFacilityId]);
+
   const boothTypes = useMemo(
     () => Array.from(new Set(facilities.map((f) => f.type))),
     [facilities],
@@ -146,6 +175,28 @@ export default function Map() {
   const match = (f: Facility) =>
     (floor === 'すべて' || f.floor === floor) && (type === 'すべて' || f.type === type);
   const filtered = facilities.filter(match);
+  const selectedFacility =
+    facilities.find(
+      (f) =>
+        f.storeId === targetStoreId ||
+        f.id === targetFacilityId,
+    ) ?? null;
+
+  const selectFacility = (f: Facility) => {
+    const next = new URLSearchParams(searchParams);
+    next.set(f.storeId ? 'store' : 'facility', f.storeId || f.id);
+    if (f.storeId) next.delete('facility');
+    else next.delete('store');
+    setSearchParams(next);
+    if (floors.includes(f.floor as MapFloor)) setFloor(f.floor as MapFloor);
+  };
+
+  const clearSelectedFacility = () => {
+    const next = new URLSearchParams(searchParams);
+    next.delete('store');
+    next.delete('facility');
+    setSearchParams(next);
+  };
 
   const FacilityRow = ({ f }: { f: Facility }) => {
     const Icon = typeIcon[f.type];
@@ -165,6 +216,7 @@ export default function Map() {
         </div>
         <button
           type="button"
+          onClick={() => selectFacility(f)}
           className="shrink-0 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted"
         >
           詳細
@@ -176,12 +228,6 @@ export default function Map() {
   return (
     <div className="space-y-4 p-4">
       <h1 className="font-display text-2xl font-bold text-foreground">{campusMap.name}</h1>
-
-      {loading && (
-        <div className="rounded-2xl border border-border bg-card p-6 text-center text-sm text-muted-foreground">
-          校内マップ情報を読み込み中です。
-        </div>
-      )}
 
       {error && (
         <div className="rounded-2xl border border-border bg-card p-6 text-center text-sm text-muted-foreground">
@@ -239,6 +285,11 @@ export default function Map() {
           alt={`${floor === 'すべて' ? '1F' : floor} 校内マップ`}
           className="absolute inset-0 h-full w-full object-contain"
         />
+        {loading && !error && (
+          <div className="absolute inset-0 bg-muted p-4" aria-label="校内マップ情報を読み込み中">
+            <Skeleton className="h-full w-full rounded-xl" />
+          </div>
+        )}
         {!loading && !error && filtered.map((f) => {
           const Icon = typeIcon[f.type];
           return (
@@ -247,13 +298,15 @@ export default function Map() {
               className="absolute -translate-x-1/2 -translate-y-1/2"
               style={{ left: `${f.x}%`, top: `${f.y}%` }}
             >
-              <span
+              <button
+                type="button"
+                onClick={() => selectFacility(f)}
                 className="grid h-8 w-8 place-items-center rounded-full shadow-md ring-2 ring-white/70"
                 style={{ backgroundColor: typeColor[f.type] }}
                 title={f.name}
               >
                 <Icon className="h-4 w-4 text-white" />
-              </span>
+              </button>
             </div>
           );
         })}
@@ -264,7 +317,65 @@ export default function Map() {
         )}
       </div>
 
+      {selectedFacility && (
+        <section className="rounded-2xl border border-border bg-card p-4">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-xs font-bold text-muted-foreground">選択中のブース</p>
+              <h2 className="mt-1 truncate font-display text-lg font-bold text-foreground">
+                {selectedFacility.name}
+              </h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {selectedFacility.floor}・{selectedFacility.type}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={clearSelectedFacility}
+              className="shrink-0 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted"
+            >
+              閉じる
+            </button>
+          </div>
+          <div className="mt-4 grid grid-cols-2 gap-2">
+            {selectedFacility.storeId ? (
+              <Link
+                to={`/attractions?detail=${encodeURIComponent(selectedFacility.storeId)}`}
+                className="rounded-xl border border-border px-3 py-2 text-center text-sm font-bold text-foreground hover:bg-muted"
+              >
+                ブース詳細
+              </Link>
+            ) : (
+              <span className="rounded-xl bg-muted px-3 py-2 text-center text-sm font-bold text-muted-foreground">
+                詳細準備中
+              </span>
+            )}
+            {selectedFacility.type === 'フード' && selectedFacility.storeId ? (
+              <Link
+                to={`/restaurants?store=${encodeURIComponent(selectedFacility.storeId)}`}
+                className="rounded-xl px-3 py-2 text-center text-sm font-bold text-white"
+                style={{ backgroundColor: 'var(--accent)' }}
+              >
+                注文へ進む
+              </Link>
+            ) : (
+              <span className="rounded-xl bg-muted px-3 py-2 text-center text-sm font-bold text-muted-foreground">
+                注文対象外
+              </span>
+            )}
+          </div>
+        </section>
+      )}
+
       {/* 一覧 */}
+      {loading && !error && (
+        <ul className="space-y-2" aria-label="施設一覧を読み込み中">
+          {Array.from({ length: 5 }).map((_, index) => (
+            <FacilityRowSkeleton key={index} />
+          ))}
+        </ul>
+      )}
+
       {!loading && !error && (floor === 'すべて' ? (
         <div className="space-y-4">
           {floors.map((fl) => {

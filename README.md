@@ -93,6 +93,11 @@ docker compose exec backend php artisan migrate:fresh --seed
 - 同名containerがあるか
 - 使うportをすでに使用しているか
 
+## APIが遅いと感じたとき
+タイム計測できるのでやってみてください。
+```
+  docker compose exec frontend node tests/apitest.js
+```
 
 ## チーム内の連絡
 

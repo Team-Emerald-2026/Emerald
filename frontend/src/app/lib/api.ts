@@ -2,6 +2,20 @@ const DEFAULT_API_BASE = '/api';
 
 const apiBase = (import.meta.env.VITE_API_BASE_URL ?? DEFAULT_API_BASE).replace(/\/$/, '');
 
+export interface BoothLoginResponse {
+  token: string;
+  store_id: string;
+}
+
+export interface BoothDashboard {
+  id: string;
+  name: string;
+  description: string | null;
+  is_open: boolean;
+  current_wait_min: number;
+  current_queue_count: number;
+}
+
 export interface BackendStore {
   id: string;
   name: string;
@@ -30,6 +44,25 @@ type JsonApiItem = {
 type JsonApiCollection = {
   data?: JsonApiItem[];
 };
+
+type RequestMethod = 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
+
+interface RequestOptions {
+  method?: RequestMethod;
+  signal?: AbortSignal;
+  token?: string;
+  body?: unknown;
+}
+
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    public readonly status: number,
+  ) {
+    super(message);
+    this.name = 'ApiError';
+  }
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
@@ -67,36 +100,90 @@ function normalizeItem<T extends { id: string }>(payload: unknown): T | null {
   return payload as T;
 }
 
-async function request(path: string, signal?: AbortSignal): Promise<unknown> {
+async function request(path: string, options: RequestOptions = {}): Promise<unknown> {
+  const { method = 'GET', signal, token, body } = options;
+  const headers: Record<string, string> = {
+    Accept: 'application/json',
+  };
+
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+
+  const hasBody = body !== undefined;
+  if (hasBody) {
+    headers['Content-Type'] = 'application/json';
+  }
+
   const response = await fetch(`${apiBase}${path}`, {
-    headers: {
-      Accept: 'application/json',
-    },
+    method,
+    headers,
+    body: hasBody ? JSON.stringify(body) : undefined,
     signal,
   });
 
   if (!response.ok) {
-    throw new Error(`API request failed: ${response.status}`);
+    let message = `API request failed: ${response.status}`;
+    try {
+      const errorBody = (await response.json()) as unknown;
+      if (isRecord(errorBody)) {
+        if (typeof errorBody.message === 'string' && errorBody.message.trim()) {
+          message = errorBody.message;
+        } else if (isRecord(errorBody.error) && typeof errorBody.error.message === 'string') {
+          message = errorBody.error.message;
+        }
+      }
+    } catch {
+      // keep default message
+    }
+    throw new ApiError(message, response.status);
   }
 
+  if (response.status === 204) return null;
   return response.json() as Promise<unknown>;
 }
 
 export function fetchRestaurants(signal?: AbortSignal) {
-  return request('/v1/restaurants', signal).then((payload) =>
+  return request('/v1/restaurants', { signal }).then((payload) =>
     normalizeCollection<BackendStore>(payload),
   );
 }
 
 export function fetchRestaurant(id: string, signal?: AbortSignal) {
-  return request(`/v1/restaurants/${encodeURIComponent(id)}`, signal).then((payload) =>
+  return request(`/v1/restaurants/${encodeURIComponent(id)}`, { signal }).then((payload) =>
     normalizeItem<BackendStore>(payload),
   );
 }
 
 export function fetchMapFacilities(signal?: AbortSignal) {
-  return request('/v1/map/facilities', signal).then((payload) =>
+  return request('/v1/map/facilities', { signal }).then((payload) =>
     normalizeCollection<BackendMapFacility>(payload),
+  );
+}
+
+
+export function loginBooth(loginId: string, password: string, signal?: AbortSignal) {
+  return request('/v1/booth/auth/login', {
+    method: 'POST',
+    signal,
+    body: {
+      login_id: loginId,
+      password,
+    },
+  }) as Promise<BoothLoginResponse>;
+}
+
+export function logoutBooth(token: string, signal?: AbortSignal) {
+  return request('/v1/booth/auth/logout', {
+    method: 'POST',
+    signal,
+    token,
+  });
+}
+
+export function fetchBoothDashboard(token: string, signal?: AbortSignal) {
+  return request('/v1/booth/dashboard', { signal, token }).then((payload) =>
+    normalizeItem<BoothDashboard>(payload),
   );
 }
 
@@ -139,7 +226,10 @@ export function registerStore(input: {
   return postJson('/v1/auth/register', input) as Promise<AuthResponse>;
 }
 
-export function loginStoreAccount(input: { login_id: string; password: string }) {
+export function loginStoreAccount(input: {
+  login_id: string;
+  password: string;
+}) {
   return postJson('/v1/auth/login', input) as Promise<AuthResponse>;
 }
 export interface StoreProfile {

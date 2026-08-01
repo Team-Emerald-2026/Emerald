@@ -1,23 +1,22 @@
 import { useState } from 'react';
-import { Link, Navigate, useNavigate } from 'react-router-dom';
+import { Navigate, useNavigate } from 'react-router-dom';
 import { Store, KeyRound } from 'lucide-react';
-import { loginStoreAccount } from '../../lib/api';
 import { useFestival, loginStore } from '../../lib/festivalStore';
-
-const TOKEN_KEY = 'kt_store_token';
+import { ApiError, loginBooth } from '../../lib/api';
 
 export default function StoreLogin() {
   const session = useFestival((s) => s.session);
   const navigate = useNavigate();
-  const [loginId, setLoginId] = useState('');
+  const [id, setId] = useState('');
   const [pw, setPw] = useState('');
   const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   if (session) return <Navigate to="/store" replace />;
 
   const submit = async () => {
-    if (!loginId.trim()) {
+    if (submitting) return;
+    if (!id.trim()) {
       setError('ログインIDを入力してください。');
       return;
     }
@@ -26,23 +25,20 @@ export default function StoreLogin() {
       return;
     }
 
-    setLoading(true);
+    setSubmitting(true);
     setError('');
-
     try {
-      const result = await loginStoreAccount({
-        login_id: loginId.trim(),
-        password: pw,
-      });
-
-      localStorage.setItem(TOKEN_KEY, result.token);
-      loginStore(result.store_id);
-      navigate('/store');
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'ログインに失敗しました。';
-      setError(message);
+      const result = await loginBooth(id.trim(), pw);
+      loginStore(result.store_id, result.token);
+      navigate('/store/dashboard');
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 401) {
+        setError('ログインIDまたはパスワードが正しくありません。');
+      } else {
+        setError('ログインに失敗しました。時間をおいて再試行してください。');
+      }
     } finally {
-      setLoading(false);
+      setSubmitting(false);
     }
   };
 
@@ -65,9 +61,10 @@ export default function StoreLogin() {
           <div className="flex items-center gap-2 rounded-lg border border-input bg-background px-3">
             <Store className="h-4 w-4 text-muted-foreground" />
             <input
-              value={loginId}
-              onChange={(e) => setLoginId(e.target.value)}
-              placeholder="例: takoyaki01"
+              value={id}
+              onChange={(e) => setId(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && submit()}
+              placeholder="例: cafe_admin"
               className="w-full bg-transparent py-2.5 text-foreground outline-none"
             />
           </div>
@@ -80,7 +77,7 @@ export default function StoreLogin() {
               type="password"
               value={pw}
               onChange={(e) => setPw(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && !loading && submit()}
+              onKeyDown={(e) => e.key === 'Enter' && submit()}
               placeholder="パスワード"
               className="w-full bg-transparent py-2.5 text-foreground outline-none"
             />
@@ -96,19 +93,12 @@ export default function StoreLogin() {
         <button
           type="button"
           onClick={submit}
-          disabled={loading}
-          className="w-full rounded-xl py-3 font-bold text-white disabled:opacity-60"
+          disabled={submitting}
+          className="w-full rounded-xl py-3 font-bold text-white"
           style={{ backgroundColor: 'var(--primary)' }}
         >
-          {loading ? 'ログイン中...' : 'ログイン'}
+          {submitting ? 'ログイン中...' : 'ログイン'}
         </button>
-
-        <p className="text-center text-sm text-muted-foreground">
-          初めての方は{' '}
-          <Link to="/store/register" className="underline" style={{ color: 'var(--primary)' }}>
-            新規登録
-          </Link>
-        </p>
       </div>
     </div>
   );

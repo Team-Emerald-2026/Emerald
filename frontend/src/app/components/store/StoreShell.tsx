@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { Navigate, NavLink, useNavigate } from 'react-router-dom';
 import { LogOut, ShoppingCart, LayoutDashboard, Users, Megaphone, History, Store } from 'lucide-react';
 import { useFestival, logoutStore } from '../../lib/festivalStore';
+import { logoutBooth } from '../../lib/api';
 
 
 const links = [
@@ -29,12 +30,15 @@ export default function StoreShell({
     <div className="mx-auto flex min-h-dvh max-w-2xl flex-col bg-background">
       <header className="sticky top-0 z-20 flex h-14 items-center justify-between border-b border-border bg-card px-4">
         <div className="min-w-0">
-          <p className="text-[11px] text-muted-foreground">店舗 {session}</p>
+          <p className="text-[11px] text-muted-foreground">店舗 {session.storeId}</p>
           <h1 className="truncate font-display text-base font-bold text-foreground">{title}</h1>
         </div>
         <button
           type="button"
           onClick={() => {
+            void logoutBooth(session.token).catch((error) => {
+              console.error('Logout API failed', error);
+            });
             logoutStore();
             navigate('/store/login');
           }}
