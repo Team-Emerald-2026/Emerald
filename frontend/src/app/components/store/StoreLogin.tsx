@@ -99,6 +99,12 @@ export default function StoreLogin() {
         >
           {submitting ? 'ログイン中...' : 'ログイン'}
         </button>
+        <p className="text-center text-sm text-muted-foreground">
+    初めての方は{' '}
+    <Link to="/store/register" className="underline" style={{ color: 'var(--primary)' }}>
+      新規登録
+    </Link>
+  </p>
       </div>
     </div>
   );
