@@ -17,7 +17,7 @@ class AuthController extends Controller
     {
         $validated = $request->validate([
             'store_name' => ['required', 'string', 'max:255'],
-            'description' => ['nullable', 'string'],
+            'description' => ['required', 'string', 'max:1000'],
             'login_id' => ['required', 'string', 'max:255', 'unique:users,login_id'],
             'password' => ['required', 'string', 'min:8'],
         ]);

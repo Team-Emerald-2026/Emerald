@@ -31,8 +31,9 @@ Route::prefix('v1/booth')->group(function () {
     Route::post('auth/login', [AuthController::class, 'login']);
 
     Route::middleware('auth:sanctum')->group(function () {
-        Route::post('auth/logout', [AuthController::class, 'logout']);
-        Route::get('dashboard', [DashboardController::class, 'index']);
-    });
+    Route::post('auth/logout', [AuthController::class, 'logout']);
+    Route::get('dashboard', [DashboardController::class, 'index']);
+    Route::patch('dashboard/{id}', [DashboardController::class, 'update']);
+});
 
 });

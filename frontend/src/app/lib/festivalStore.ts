@@ -96,6 +96,11 @@ function getSnapshot() {
   return cache;
 }
 
+const selectorCache = new Map<
+  (state: FestivalState) => unknown,
+  { state: FestivalState; result: unknown }
+>();
+
 /** コンポーネントから状態を購読する */
 export function useFestival<T>(selector: (s: FestivalState) => T): T {
   const state = useSyncExternalStore(subscribe, getSnapshot, () => initialState);
