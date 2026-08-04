@@ -19,10 +19,7 @@ class Store extends Model
         'current_queue_count',
     ];
 
-    protected function casts(): array
-    {
-        return [
-            'is_open' => 'boolean',
-        ];
-    }
+    protected $casts = [
+        'is_open' => 'boolean',
+    ];
 }

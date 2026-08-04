@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\V1\Auth\AuthController;
 use App\Http\Controllers\Api\V1\Map\FacilityController;
 use App\Http\Controllers\Api\V1\Store\StoreController;
 
+use App\Http\Controllers\Api\V1\Booth\Accounting\AccountingController;
 use App\Http\Controllers\Api\V1\Booth\Dashboard\DashboardController;
 
 use Illuminate\Http\Response;
@@ -33,6 +34,12 @@ Route::prefix('v1/booth')->group(function () {
     Route::middleware('auth:sanctum')->group(function () {
         Route::post('auth/logout', [AuthController::class, 'logout']);
         Route::get('dashboard', [DashboardController::class, 'index']);
+        Route::get('accounting/menu-items', [AccountingController::class, 'menuItems']);
+        Route::get('accounting/orders', [AccountingController::class, 'index']);
+        Route::get('accounting/orders/ticket/{ticketNumber}', [AccountingController::class, 'showByTicket']);
+        Route::get('accounting/orders/{id}', [AccountingController::class, 'show'])->whereNumber('id');
+        Route::post('accounting/orders', [AccountingController::class, 'store']);
+        Route::patch('accounting/orders/{id}/settle', [AccountingController::class, 'settle'])->whereNumber('id');
     });
 
 });

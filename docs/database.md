@@ -105,6 +105,23 @@ store_id → stores.id
 店舗、管理者
 
 #### テーブル名：
+ticket_counters
+
+目的：
+各店舗ごとの受付番号（ticket_number）を原子的に採番するためのカウンタを管理します。高並列でのオーダー作成時にもユニークな受付番号を保証する用途です。
+
+主なカラム：
+- store_id (PK) — stores.id を参照
+- last_number (unsigned big integer) — 最後に割り当てた数値部分（例: 101）
+- created_at
+- updated_at
+
+運用メモ：
+- 初回利用時は A-101 が採番されます（実装で初期値を 101 に設定します）。
+- カウンタは各店舗単位で管理され、DB トランザクションと行ロックで安全に更新されます。
+- 必要に応じて backfill スクリプトで既存 orders の最大値を last_number にセットできます。
+
+#### テーブル名：
 order_items
 
 目的：
