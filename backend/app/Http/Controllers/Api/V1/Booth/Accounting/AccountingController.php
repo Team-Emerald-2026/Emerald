@@ -7,6 +7,7 @@ use App\Http\Resources\Booth\Accounting\MenuItemResource;
 use App\Http\Resources\Booth\Accounting\OrderResource;
 use App\Models\MenuItem;
 use App\Models\Order;
+use App\Models\Store;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -253,8 +254,10 @@ class AccountingController extends Controller
     private function generateNextTicketNumber(string $storeId): string
     {
         // Use a dedicated ticket_counters table to atomically increment per-store counters.
-        // This prevents race conditions when many orders are created concurrently.
+        // Each store owns its own prefix, so ticket numbers stay readable and unique.
         return DB::transaction(function () use ($storeId) {
+            $prefix = $this->ticketPrefixForStoreId($storeId);
+
             $counter = DB::table('ticket_counters')
                 ->where('store_id', $storeId)
                 ->lockForUpdate()
@@ -262,11 +265,11 @@ class AccountingController extends Controller
 
             // First ticket for this store: determine starting point from existing orders to avoid collisions.
             if (!$counter) {
-                // Find max numeric suffix from existing ticket_numbers like 'A-<num>'
+                // Find max numeric suffix from existing ticket_numbers like '<prefix>-<num>'
                 $max = Order::query()
                     ->where('store_id', $storeId)
-                    ->where('ticket_number', 'like', 'A-%')
-                    ->selectRaw("MAX(CAST(SUBSTRING(ticket_number, 3) AS UNSIGNED)) as max")
+                    ->where('ticket_number', 'like', $prefix . '-%')
+                    ->selectRaw('MAX(CAST(SUBSTRING(ticket_number, ?) AS UNSIGNED)) as max', [strlen($prefix) + 2])
                     ->value('max');
 
                 // If no existing tickets, start at 101; otherwise start at max + 1
@@ -279,7 +282,7 @@ class AccountingController extends Controller
                     'updated_at' => now(),
                 ]);
 
-                return 'A-' . $start;
+                return $prefix . '-' . $start;
             }
 
             $nextNumber = (int) $counter->last_number + 1;
@@ -291,7 +294,7 @@ class AccountingController extends Controller
                     'updated_at' => now(),
                 ]);
 
-            return 'A-' . $nextNumber;
+            return $prefix . '-' . $nextNumber;
         });
     }
 

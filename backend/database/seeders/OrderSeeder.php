@@ -13,7 +13,7 @@ class OrderSeeder extends Seeder
     public function run(): void
     {
         DB::table('orders')->updateOrInsert(
-            ['store_id' => 'store-101', 'ticket_number' => 'A-101'],
+            ['store_id' => 'store-101', 'ticket_number' => 'C-101'],
             [
                 'total_price' => 650,
                 'status' => 'issued',
@@ -27,7 +27,7 @@ class OrderSeeder extends Seeder
         );
 
         DB::table('orders')->updateOrInsert(
-            ['store_id' => 'store-102', 'ticket_number' => 'A-101'],
+            ['store_id' => 'store-102', 'ticket_number' => 'Y-101'],
             [
                 'total_price' => 600,
                 'status' => 'settled',
@@ -40,13 +40,13 @@ class OrderSeeder extends Seeder
             ]
         );
 
-        $orderIdA101 = DB::table('orders')
+        $orderIdC101 = DB::table('orders')
             ->where('store_id', 'store-101')
-            ->where('ticket_number', 'A-101')
+            ->where('ticket_number', 'C-101')
             ->value('id');
-        $orderIdA102 = DB::table('orders')
+        $orderIdY101 = DB::table('orders')
             ->where('store_id', 'store-102')
-            ->where('ticket_number', 'A-101')
+            ->where('ticket_number', 'Y-101')
             ->value('id');
 
         $coffeeId = DB::table('menu_items')->where('store_id', 'store-101')->where('name', 'ブレンドコーヒー')->value('id');
@@ -54,9 +54,9 @@ class OrderSeeder extends Seeder
         $yakisobaId = DB::table('menu_items')->where('store_id', 'store-102')->where('name', '焼きそば')->value('id');
         $eggId = DB::table('menu_items')->where('store_id', 'store-102')->where('name', '目玉焼きトッピング')->value('id');
 
-        if ($orderIdA101 && $coffeeId) {
+        if ($orderIdC101 && $coffeeId) {
             DB::table('order_items')->updateOrInsert(
-                ['order_id' => $orderIdA101, 'menu_item_id' => $coffeeId],
+                ['order_id' => $orderIdC101, 'menu_item_id' => $coffeeId],
                 [
                     'quantity' => 1,
                     'unit_price' => 350,
@@ -67,9 +67,9 @@ class OrderSeeder extends Seeder
             );
         }
 
-        if ($orderIdA101 && $muffinId) {
+        if ($orderIdC101 && $muffinId) {
             DB::table('order_items')->updateOrInsert(
-                ['order_id' => $orderIdA101, 'menu_item_id' => $muffinId],
+                ['order_id' => $orderIdC101, 'menu_item_id' => $muffinId],
                 [
                     'quantity' => 1,
                     'unit_price' => 300,
@@ -80,9 +80,9 @@ class OrderSeeder extends Seeder
             );
         }
 
-        if ($orderIdA102 && $yakisobaId) {
+        if ($orderIdY101 && $yakisobaId) {
             DB::table('order_items')->updateOrInsert(
-                ['order_id' => $orderIdA102, 'menu_item_id' => $yakisobaId],
+                ['order_id' => $orderIdY101, 'menu_item_id' => $yakisobaId],
                 [
                     'quantity' => 1,
                     'unit_price' => 500,
@@ -93,9 +93,9 @@ class OrderSeeder extends Seeder
             );
         }
 
-        if ($orderIdA102 && $eggId) {
+        if ($orderIdY101 && $eggId) {
             DB::table('order_items')->updateOrInsert(
-                ['order_id' => $orderIdA102, 'menu_item_id' => $eggId],
+                ['order_id' => $orderIdY101, 'menu_item_id' => $eggId],
                 [
                     'quantity' => 1,
                     'unit_price' => 100,

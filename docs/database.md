@@ -1,6 +1,6 @@
 | データ名 | 目的 | 主な項目 | 関連データ |
 |---|---|---|---|
-| Store | 店舗・ブース情報を管理する | 店舗ID、店舗名、説明、営業状態、待ち時間、待ち人数 | MenuItem, Order, MapFacility |
+| Store | 店舗・ブース情報を管理する | 店舗ID、店舗名、説明、受付番号prefix、営業状態、待ち時間、待ち人数 | MenuItem, Order, MapFacility |
 | MenuItem | 店舗ごとの商品情報を管理する | 商品ID、店舗ID、商品名、説明、価格、販売状態 | Store, OrderItem |
 | Order | モバイルオーダーの注文情報を管理する | 注文ID、店舗ID、受付番号、合計金額、注文状態 | Store, OrderItem |
 | OrderItem | 注文された商品の明細を管理する | 注文明細ID、注文ID、商品ID、数量、単価 | Order, MenuItem |
@@ -19,6 +19,7 @@ stores
 - id
 - name
 - description
+- ticket_prefix
 - is_open
 - current_wait_min
 - current_queue_count
@@ -117,9 +118,9 @@ ticket_counters
 - updated_at
 
 運用メモ：
-- 初回利用時は A-101 が採番されます（実装で初期値を 101 に設定します）。
+- 初回利用時は各店舗の prefix で `PREFIX-101` が採番されます（例: `C-101`）。
 - カウンタは各店舗単位で管理され、DB トランザクションと行ロックで安全に更新されます。
-- 必要に応じて backfill スクリプトで既存 orders の最大値を last_number にセットできます。
+- 既存 orders がある場合は、その prefix の最大値から続けます。
 
 #### テーブル名：
 order_items
@@ -211,4 +212,3 @@ store_id → stores.id
 
 書き込み権限：
 管理者
-

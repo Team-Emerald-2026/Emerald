@@ -14,6 +14,7 @@ class Store extends Model
         'id',
         'name',
         'description',
+        'ticket_prefix',
         'is_open',
         'current_wait_min',
         'current_queue_count',

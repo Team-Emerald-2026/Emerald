@@ -18,6 +18,7 @@ class DashboardController extends Controller
                 'id',
                 'name',
                 'description',
+                'ticket_prefix',
                 'is_open',
                 'current_wait_min',
                 'current_queue_count'])
