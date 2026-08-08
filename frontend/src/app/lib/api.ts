@@ -219,7 +219,7 @@ async function postJson(path: string, body: Record<string, unknown>): Promise<un
 
 export function registerStore(input: {
   store_name: string;
-  description?: string;
+  description: string;
   login_id: string;
   password: string;
 }) {
@@ -231,4 +231,77 @@ export function loginStoreAccount(input: {
   password: string;
 }) {
   return postJson('/v1/auth/login', input) as Promise<AuthResponse>;
+}
+export interface StoreProfile {
+  id: string;
+  name: string;
+  description: string | null;
+  is_open: boolean;
+  current_wait_min: number;
+  current_queue_count: number;
+}
+
+export async function fetchStoreProfile(token: string): Promise<StoreProfile> {
+  const response = await fetch(`${apiBase}/v1/booth/dashboard`, {
+    headers: {
+      Accept: 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`API request failed: ${response.status}`);
+  }
+
+  const payload = await response.json();
+  const item = payload?.data;
+  const attributes = item?.attributes ?? {};
+
+  return {
+    id: String(attributes.id ?? item?.id ?? ''),
+    name: String(attributes.name ?? ''),
+    description: (attributes.description as string | null) ?? null,
+    is_open: Boolean(attributes.is_open),
+    current_wait_min: Number(attributes.current_wait_min ?? 0),
+    current_queue_count: Number(attributes.current_queue_count ?? 0),
+  };
+}
+export async function updateStoreProfile(
+  token: string,
+  storeId: string,
+  input: {
+    name: string;
+    description: string;
+    is_open: boolean;
+  },
+): Promise<StoreProfile> {
+  const response = await fetch(
+    `${apiBase}/v1/booth/dashboard/${encodeURIComponent(storeId)}`,
+    {
+      method: 'PATCH',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(input),
+    },
+  );
+
+  if (!response.ok) {
+    throw new Error(`API request failed: ${response.status}`);
+  }
+
+  const payload = await response.json();
+  const item = payload?.data;
+  const attributes = item?.attributes ?? {};
+
+  return {
+    id: String(attributes.id ?? item?.id ?? storeId),
+    name: String(attributes.name ?? ''),
+    description: (attributes.description as string | null) ?? null,
+    is_open: Boolean(attributes.is_open),
+    current_wait_min: Number(attributes.current_wait_min ?? 0),
+    current_queue_count: Number(attributes.current_queue_count ?? 0),
+  };
 }

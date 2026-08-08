@@ -40,6 +40,9 @@ Route::prefix('v1/booth')->group(function () {
         Route::get('accounting/orders/{id}', [AccountingController::class, 'show'])->whereNumber('id');
         Route::post('accounting/orders', [AccountingController::class, 'store']);
         Route::patch('accounting/orders/{id}/settle', [AccountingController::class, 'settle'])->whereNumber('id');
+        Route::patch('dashboard/{id}', [DashboardController::class, 'update']);
     });
+
+});
 
 });
