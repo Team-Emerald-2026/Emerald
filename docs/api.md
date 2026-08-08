@@ -108,7 +108,7 @@ GET /api/v1/restaurants/{id}
 	"description": "学園祭限定メニューを提供するカフェ",
 	"is_open": true,
 	"wait_time": 10,
-	"ticket_numbers": ["A-120", "A-121", "A-122"]
+	"ticket_numbers": ["C-120", "C-121", "Y-122"]
 }
 ```
 
@@ -307,3 +307,18 @@ GET /api/v1/map/facilities
 - ID指定APIは、存在しないIDの場合に 404 Not Found を返す
 - 店舗向け操作は、JWTの署名検証と認可チェックを必須とする
 - 数値項目は、API側で型チェックと範囲チェックを行う
+
+### 6.1 受付番号（ticket_number）の採番について
+- 受付番号は `PREFIX-<number>` 形式で発行されます。ユーザー向けの受け取り番号（例: `C-101`）。
+- `stores.ticket_prefix` でブースごとの頭文字を管理します。prefix は被らないように運用します。
+- 高並列環境でも一意性を担保するため、`ticket_counters` テーブルを設け、各店舗ごとに数値部分を原子的にインクリメントします。
+- 実装上の注意点:
+  - カウンタは DB トランザクションと行ロックで更新されます（Race 条件を防止）。
+  - 初回は `PREFIX-101` から採番され、既存データがある場合は同じ prefix の最大値から継続します。
+  - 同一店舗内でのユニーク制約（store_id, ticket_number）が維持されます。
+
+運用変更を行った際はマイグレーションを実行してください:
+```
+# backend コンテナ内で
+docker compose exec backend php artisan migrate
+```

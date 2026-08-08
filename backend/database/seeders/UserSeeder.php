@@ -13,14 +13,21 @@ class UserSeeder extends Seeder
      */
     public function run(): void
     {
-        DB::table('users')->insert([
+        DB::table('users')->updateOrInsert(
             [
-                'store_id' => 'store-101',
                 'login_id' => 'testuser',
+                'store_id' => 'store-101',
+                'password' => bcrypt('password'),
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+            [
+                'login_id' => 'testuser2',
+                'store_id' => 'store-102',
                 'password' => bcrypt('password'),
                 'created_at' => now(),
                 'updated_at' => now(),
             ]
-        ]);
+        );
     }
 }

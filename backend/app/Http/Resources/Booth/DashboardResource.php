@@ -13,6 +13,7 @@ class DashboardResource extends JsonApiResource
     public $attributes = [
         'name',
         'description',
+        'ticket_prefix',
         'is_open',
         'current_wait_min',
         'current_queue_count',
@@ -30,6 +31,7 @@ class DashboardResource extends JsonApiResource
         return [
             'name' => $this->resource->name,
             'description' => $this->resource->description,
+            'ticket_prefix' => $this->resource->ticket_prefix,
             'is_open' => $this->resource->is_open,
             'current_wait_min' => $this->resource->current_wait_min,
             'current_queue_count' => $this->resource->current_queue_count,
