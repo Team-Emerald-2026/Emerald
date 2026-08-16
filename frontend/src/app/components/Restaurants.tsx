@@ -31,13 +31,7 @@ function toStore(store: BackendStore): Store {
     description: store.description ?? '店舗説明は未設定です',
     isOpen: store.is_open,
     waitMin: Number(store.current_wait_min) || 0,
-    items: (store.items ?? []).map((it) => ({
-      id: String(it.id),
-      storeId: store.id,
-      name: it.name,
-      desc: it.description ?? '',
-      price: it.price,
-    })),
+    items: [],
   };
 }
 

@@ -1,13 +1,12 @@
 import type { ReactNode } from 'react';
 import { Navigate, NavLink, useNavigate } from 'react-router-dom';
-import { LogOut, ShoppingCart, LayoutDashboard, Users, Megaphone, History, Store, UtensilsCrossed } from 'lucide-react';
+import { LogOut, ShoppingCart, LayoutDashboard, Users, Megaphone, History, Store } from 'lucide-react';
 import { useFestival, logoutStore } from '../../lib/festivalStore';
 import { logoutBooth } from '../../lib/api';
 
 
 const links = [
   { to: '/store', label: 'レジ', icon: ShoppingCart, end: true },
-  { to: '/store/menu', label: '商品', icon: UtensilsCrossed, end: false },
   { to: '/store/dashboard', label: 'ダッシュボード', icon: LayoutDashboard, end: false },
   { to: '/store/waiting', label: '待ち人数', icon: Users, end: false },
   { to: '/store/ticket', label: '受付番号', icon: Megaphone, end: false },
