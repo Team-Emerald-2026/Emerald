@@ -8,7 +8,6 @@ use App\Http\Controllers\Api\V1\Booth\Dashboard\DashboardController;
 
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Route;
-use App\Http\Controllers\Api\V1\Booth\MenuItem\MenuItemController;
 
 Route::get('/test', function () {
     return response()->json(
@@ -35,10 +34,6 @@ Route::prefix('v1/booth')->group(function () {
     Route::post('auth/logout', [AuthController::class, 'logout']);
     Route::get('dashboard', [DashboardController::class, 'index']);
     Route::patch('dashboard/{id}', [DashboardController::class, 'update']);
-    Route::get('menu-items', [MenuItemController::class, 'index']);
-    Route::post('menu-items', [MenuItemController::class, 'store']);
-    Route::patch('menu-items/{id}', [MenuItemController::class, 'update']);
-    Route::delete('menu-items/{id}', [MenuItemController::class, 'destroy']);
 });
 
 });

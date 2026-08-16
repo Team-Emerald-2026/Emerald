@@ -1,44 +1,28 @@
-import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useState } from 'react';
 import { Minus, Receipt } from 'lucide-react';
 import StoreShell from './StoreShell';
-import { issueOrder, adjustWaiting, useFestival } from '../../lib/festivalStore';
-import { fetchMenuItems, type MenuItem } from '../../lib/api';
+import { issueOrder, adjustWaiting } from '../../lib/festivalStore';
+
+interface Product {
+  id: string;
+  name: string;
+  price: number;
+}
+
+const products: Product[] = [
+  { id: 'p1', name: '焼きそば', price: 400 },
+  { id: 'p2', name: 'たこ焼き 6個', price: 350 },
+  { id: 'p3', name: 'フランクフルト', price: 250 },
+  { id: 'p4', name: 'クレープ', price: 500 },
+  { id: 'p5', name: 'ドリンク', price: 200 },
+  { id: 'p6', name: 'かき氷', price: 300 },
+];
 
 const yen = (n: number) => `¥${n.toLocaleString('ja-JP')}`;
 
 export default function StorePos() {
-  const session = useFestival((s) => s.session);
-  const [products, setProducts] = useState<MenuItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
   const [cart, setCart] = useState<Record<string, number>>({});
   const [issued, setIssued] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!session?.token) {
-      setLoading(false);
-      return;
-    }
-
-    const controller = new AbortController();
-    setLoading(true);
-    setError('');
-
-    fetchMenuItems(session.token, controller.signal)
-      .then((items) => {
-        setProducts(items.filter((item) => item.is_available));
-      })
-      .catch((err: unknown) => {
-        if (controller.signal.aborted) return;
-        setError(err instanceof Error ? err.message : '商品の取得に失敗しました。');
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setLoading(false);
-      });
-
-    return () => controller.abort();
-  }, [session?.token]);
 
   const setQty = (id: string, qty: number) =>
     setCart((c) => {
@@ -62,7 +46,7 @@ export default function StorePos() {
       store: 'レジ会計',
     }));
     const number = issueOrder(items, total);
-    adjustWaiting(1);
+    adjustWaiting(1); // 提供待ちを +1
     setIssued(number);
     setCart({});
   };
@@ -80,74 +64,48 @@ export default function StorePos() {
           </div>
         )}
 
-        {error && (
-          <p
-            className="rounded-xl border border-border bg-card p-4 text-sm"
-            style={{ color: 'var(--busy)' }}
-          >
-            {error}
-          </p>
-        )}
-
-        {loading ? (
-          <p className="rounded-xl border border-border bg-card p-6 text-center text-muted-foreground">
-            読み込み中...
-          </p>
-        ) : products.length === 0 ? (
-          <div className="rounded-xl border border-border bg-card p-6 text-center">
-            <p className="text-muted-foreground">販売中の商品がありません</p>
-            <Link
-              to="/store/menu"
-              className="mt-3 inline-block text-sm font-bold"
-              style={{ color: 'var(--primary)' }}
-            >
-              商品管理で登録する
-            </Link>
-          </div>
-        ) : (
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-            {products.map((p) => {
-              const qty = cart[p.id] ?? 0;
-              return (
-                <div
-                  key={p.id}
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => setQty(p.id, qty + 1)}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter' || event.key === ' ') {
-                      event.preventDefault();
-                      setQty(p.id, qty + 1);
-                    }
-                  }}
-                  aria-label={`${p.name}を追加`}
-                  className="relative min-h-28 cursor-pointer rounded-2xl border border-border bg-card p-3 pr-12 transition-colors hover:bg-muted/50 focus:outline-none focus:ring-2 focus:ring-primary"
-                >
-                  <p className="font-bold text-foreground">{p.name}</p>
-                  <p className="text-sm text-muted-foreground">{yen(p.price)}</p>
-                  {qty > 0 ? (
-                    <p className="mt-6 text-sm font-bold text-foreground">×{qty}</p>
-                  ) : (
-                    <p className="mt-6 text-sm text-muted-foreground">カードをタップで追加</p>
-                  )}
-                  {qty > 0 && (
-                    <button
-                      type="button"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        setQty(p.id, qty - 1);
-                      }}
-                      aria-label={`${p.name}を減らす`}
-                      className="absolute right-2 top-2 grid h-10 w-10 place-items-center rounded-full border border-border bg-background text-foreground shadow-sm"
-                    >
-                      <Minus className="h-5 w-5" />
-                    </button>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+          {products.map((p) => {
+            const qty = cart[p.id] ?? 0;
+            return (
+              <div
+                key={p.id}
+                role="button"
+                tabIndex={0}
+                onClick={() => setQty(p.id, qty + 1)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    setQty(p.id, qty + 1);
+                  }
+                }}
+                aria-label={`${p.name}を追加`}
+                className="relative min-h-28 cursor-pointer rounded-2xl border border-border bg-card p-3 pr-12 transition-colors hover:bg-muted/50 focus:outline-none focus:ring-2 focus:ring-primary"
+              >
+                <p className="font-bold text-foreground">{p.name}</p>
+                <p className="text-sm text-muted-foreground">{yen(p.price)}</p>
+                {qty > 0 ? (
+                  <p className="mt-6 text-sm font-bold text-foreground">×{qty}</p>
+                ) : (
+                  <p className="mt-6 text-sm text-muted-foreground">カードをタップで追加</p>
+                )}
+                {qty > 0 && (
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setQty(p.id, qty - 1);
+                    }}
+                    aria-label={`${p.name}を減らす`}
+                    className="absolute right-2 top-2 grid h-10 w-10 place-items-center rounded-full border border-border bg-background text-foreground shadow-sm"
+                  >
+                    <Minus className="h-5 w-5" />
+                  </button>
+                )}
+              </div>
+            );
+          })}
+        </div>
 
         <div className="rounded-2xl border border-border bg-card p-4">
           <div className="flex items-center justify-between">

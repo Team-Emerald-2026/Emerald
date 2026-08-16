@@ -26,21 +26,13 @@ class StoreResource extends JsonApiResource
     ];
 
     public function toAttributes(Request $request): array
-{
-    return [
-        'name' => $this->resource->name,
-        'description' => $this->resource->description,
-        'is_open' => $this->resource->is_open,
-        'current_wait_min' => $this->resource->current_wait_min,
-        'current_queue_count' => $this->resource->current_queue_count,
-        'items' => $this->resource->relationLoaded('menuItems')
-            ? $this->resource->menuItems->map(fn ($item) => [
-                'id' => (string) $item->id,
-                'name' => $item->name,
-                'description' => $item->description,
-                'price' => $item->price,
-            ])->values()->all()
-            : [],
-    ];
-}
+    {
+        return [
+            'name' => $this->resource->name,
+            'description' => $this->resource->description,
+            'is_open' => $this->resource->is_open,
+            'current_wait_min' => $this->resource->current_wait_min,
+            'current_queue_count' => $this->resource->current_queue_count,
+        ];
+    }
 }
