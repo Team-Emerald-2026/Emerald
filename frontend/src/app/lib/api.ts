@@ -16,6 +16,13 @@ export interface BoothDashboard {
   current_queue_count: number;
 }
 
+export interface BackendMenuItem {
+  id: string;
+  name: string;
+  description: string | null;
+  price: number;
+}
+
 export interface BackendStore {
   id: string;
   name: string;
@@ -23,6 +30,7 @@ export interface BackendStore {
   is_open: boolean;
   current_wait_min: number;
   current_queue_count: number;
+  items?: BackendMenuItem[];
 }
 
 export interface BackendMapFacility {
@@ -304,4 +312,58 @@ export async function updateStoreProfile(
     current_wait_min: Number(attributes.current_wait_min ?? 0),
     current_queue_count: Number(attributes.current_queue_count ?? 0),
   };
+}
+
+export interface MenuItem {
+  id: string;
+  name: string;
+  description: string | null;
+  price: number;
+  is_available: boolean;
+}
+
+export function fetchMenuItems(token: string, signal?: AbortSignal) {
+  return request('/v1/booth/menu-items', { signal, token }).then((payload) =>
+    normalizeCollection<MenuItem>(payload),
+  );
+}
+
+export function createMenuItem(
+  token: string,
+  input: {
+    name: string;
+    description?: string | null;
+    price: number;
+    is_available?: boolean;
+  },
+) {
+  return request('/v1/booth/menu-items', {
+    method: 'POST',
+    token,
+    body: input,
+  }).then((payload) => normalizeItem<MenuItem>(payload));
+}
+
+export function updateMenuItem(
+  token: string,
+  id: string,
+  input: {
+    name?: string;
+    description?: string | null;
+    price?: number;
+    is_available?: boolean;
+  },
+) {
+  return request(`/v1/booth/menu-items/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    token,
+    body: input,
+  }).then((payload) => normalizeItem<MenuItem>(payload));
+}
+
+export function deleteMenuItem(token: string, id: string) {
+  return request(`/v1/booth/menu-items/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    token,
+  });
 }
