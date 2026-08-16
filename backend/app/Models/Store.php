@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Store extends Model
 {
@@ -24,5 +25,10 @@ class Store extends Model
         return [
             'is_open' => 'boolean',
         ];
+    }
+
+    public function menuItems(): HasMany
+    {
+        return $this->hasMany(MenuItem::class);
     }
 }
