@@ -14,15 +14,13 @@ class Store extends Model
         'id',
         'name',
         'description',
+        'ticket_prefix',
         'is_open',
         'current_wait_min',
         'current_queue_count',
     ];
 
-    protected function casts(): array
-    {
-        return [
-            'is_open' => 'boolean',
-        ];
-    }
+    protected $casts = [
+        'is_open' => 'boolean',
+    ];
 }
