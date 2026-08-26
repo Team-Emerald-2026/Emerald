@@ -4,7 +4,8 @@ const apiBase = (import.meta.env.VITE_API_BASE_URL ?? DEFAULT_API_BASE).replace(
 
 export interface BoothLoginResponse {
   token: string;
-  store_id: string;
+  store_id: string | null;
+  role?: 'store' | 'admin';
 }
 
 export interface BoothDashboard {
@@ -21,6 +22,64 @@ export interface BackendStore {
   name: string;
   description: string | null;
   is_open: boolean;
+  is_visible?: boolean;
+  current_wait_min: number;
+  current_queue_count: number;
+}
+
+export interface AdminLoginResponse {
+  token: string;
+  role: 'admin';
+  login_id: string;
+}
+
+export interface AdminStore {
+  id: string;
+  name: string;
+  description: string | null;
+  type: string;
+  floor: number;
+  map_x: number;
+  map_y: number;
+  ticket_prefix: string | null;
+  is_open: boolean;
+  is_visible: boolean;
+  current_wait_min: number;
+  current_queue_count: number;
+  login_id: string | null;
+  revenue: number;
+  order_count: number;
+}
+
+export interface AdminAnalyticsStore {
+  store_id: string;
+  store_name: string;
+  is_open: boolean;
+  is_visible: boolean;
+  revenue: number;
+  order_count: number;
+}
+
+export interface AdminAnalytics {
+  total_revenue: number;
+  total_orders: number;
+  settled_orders: number;
+  stores: AdminAnalyticsStore[];
+}
+
+export interface AdminStoreInput {
+  id?: string;
+  name: string;
+  description: string;
+  type: string;
+  floor: number;
+  map_x: number;
+  map_y: number;
+  ticket_prefix?: string;
+  login_id?: string;
+  password?: string;
+  is_open: boolean;
+  is_visible: boolean;
   current_wait_min: number;
   current_queue_count: number;
 }
@@ -173,8 +232,27 @@ export function loginBooth(loginId: string, password: string, signal?: AbortSign
   }) as Promise<BoothLoginResponse>;
 }
 
+export function loginAdmin(loginId: string, password: string, signal?: AbortSignal) {
+  return request('/v1/admin/auth/login', {
+    method: 'POST',
+    signal,
+    body: {
+      login_id: loginId,
+      password,
+    },
+  }) as Promise<AdminLoginResponse>;
+}
+
 export function logoutBooth(token: string, signal?: AbortSignal) {
   return request('/v1/booth/auth/logout', {
+    method: 'POST',
+    signal,
+    token,
+  });
+}
+
+export function logoutAdmin(token: string, signal?: AbortSignal) {
+  return request('/v1/admin/auth/logout', {
     method: 'POST',
     signal,
     token,
@@ -184,6 +262,50 @@ export function logoutBooth(token: string, signal?: AbortSignal) {
 export function fetchBoothDashboard(token: string, signal?: AbortSignal) {
   return request('/v1/booth/dashboard', { signal, token }).then((payload) =>
     normalizeItem<BoothDashboard>(payload),
+  );
+}
+
+export function fetchAdminStores(token: string, signal?: AbortSignal) {
+  return request('/v1/admin/stores', { signal, token }).then((payload) => {
+    if (isRecord(payload) && Array.isArray(payload.data)) return payload.data as AdminStore[];
+    return [];
+  });
+}
+
+export function createAdminStore(token: string, input: AdminStoreInput, signal?: AbortSignal) {
+  return request('/v1/admin/stores', {
+    method: 'POST',
+    signal,
+    token,
+    body: input,
+  }).then((payload) => (isRecord(payload) ? payload.data as AdminStore : null));
+}
+
+export function updateAdminStore(
+  token: string,
+  id: string,
+  input: AdminStoreInput,
+  signal?: AbortSignal,
+) {
+  return request(`/v1/admin/stores/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    signal,
+    token,
+    body: input,
+  }).then((payload) => (isRecord(payload) ? payload.data as AdminStore : null));
+}
+
+export function hideAdminStore(token: string, id: string, signal?: AbortSignal) {
+  return request(`/v1/admin/stores/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    signal,
+    token,
+  }).then((payload) => (isRecord(payload) ? payload.data as AdminStore : null));
+}
+
+export function fetchAdminAnalytics(token: string, signal?: AbortSignal) {
+  return request('/v1/admin/analytics', { signal, token }).then((payload) =>
+    isRecord(payload) ? payload.data as AdminAnalytics : null,
   );
 }
 

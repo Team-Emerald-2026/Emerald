@@ -4,8 +4,6 @@ import { Store, KeyRound, UserRound } from 'lucide-react';
 import { registerStore } from '../../lib/api';
 import { useFestival, loginStore } from '../../lib/festivalStore';
 
-const TOKEN_KEY = 'kt_store_token';
-
 export default function StoreRegister() {
   const session = useFestival((s) => s.session);
   const navigate = useNavigate();
@@ -48,8 +46,7 @@ export default function StoreRegister() {
         password,
       });
 
-      localStorage.setItem(TOKEN_KEY, result.token);
-      loginStore(result.store_id);
+      loginStore(result.store_id, result.token);
       navigate('/store');
     } catch (err) {
       const message = err instanceof Error ? err.message : '登録に失敗しました。';

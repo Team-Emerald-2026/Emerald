@@ -38,6 +38,10 @@ interface FestivalState {
     storeId: string;
     token: string;
   } | null; // ログイン中の店舗セッション
+  adminSession: {
+    loginId: string;
+    token: string;
+  } | null; // ログイン中の管理者セッション
 }
 
 const KEY = 'kt_festival_state_v1';
@@ -48,6 +52,7 @@ const initialState: FestivalState = {
   bigNumber: null,
   waiting: 0,
   session: null,
+  adminSession: null,
 };
 
 function read(): FestivalState {
@@ -155,6 +160,16 @@ export function loginStore(storeId: string, token: string) {
 export function logoutStore() {
   const s = read();
   write({ ...s, session: null });
+}
+
+export function loginAdminSession(loginId: string, token: string) {
+  const s = read();
+  write({ ...s, adminSession: { loginId, token } });
+}
+
+export function logoutAdminSession() {
+  const s = read();
+  write({ ...s, adminSession: null });
 }
 
 /* ---- セレクタ ---- */

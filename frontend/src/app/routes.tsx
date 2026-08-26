@@ -12,6 +12,8 @@ import StoreWaiting from './components/store/StoreWaiting';
 import StoreTicket from './components/store/StoreTicket';
 import StoreServed from './components/store/StoreServed';
 import StoreProfile from './components/store/StoreProfile';
+import AdminDashboard from './components/admin/AdminDashboard';
+import AdminStores from './components/admin/AdminStores';
 import Admin from './components/admin/Admin';
 
 export const router = createBrowserRouter([
@@ -33,6 +35,8 @@ export const router = createBrowserRouter([
   { path: '/store/ticket', element: <StoreTicket /> },
   { path: '/store/served', element: <StoreServed /> },
   { path: '/store/profile', element: <StoreProfile /> },
+  { path: '/admin', element: <AdminDashboard /> },
+  { path: '/admin/stores', element: <AdminStores /> },
   // 管理者画面（店舗作成・一覧。APIは後続で接続）
   { path: '/admin', element: <Admin /> },
   { path: '*', element: <NotFound /> },

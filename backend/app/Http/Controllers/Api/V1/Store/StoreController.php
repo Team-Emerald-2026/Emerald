@@ -11,7 +11,8 @@ class StoreController extends Controller
     public function index()
     {
         $stores = Store::query()
-            ->select(['id', 'name', 'description', 'is_open', 'current_wait_min', 'current_queue_count'])
+            ->select(['id', 'name', 'description', 'is_open', 'is_visible', 'current_wait_min', 'current_queue_count'])
+            ->where('is_visible', true)
             ->orderBy('id')
             ->get();
 
@@ -20,7 +21,9 @@ class StoreController extends Controller
 
     public function show(string $id)
     {
-        $store = Store::find($id);
+        $store = Store::query()
+            ->where('is_visible', true)
+            ->find($id);
 
         if (!$store) {
             return response()->json([
