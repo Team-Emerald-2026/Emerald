@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Navigate, useNavigate, Link } from 'react-router-dom';
+import { Navigate, useNavigate } from 'react-router-dom';
 import { Store, KeyRound } from 'lucide-react';
 import { useFestival, loginStore } from '../../lib/festivalStore';
 import { ApiError, loginBooth } from '../../lib/api';
@@ -99,14 +99,6 @@ export default function StoreLogin() {
         >
           {submitting ? 'ログイン中...' : 'ログイン'}
         </button>
-
-        <p className="text-center text-sm text-muted-foreground">
-          初めての方は{' '}
-          <Link to="/store/register" className="underline" style={{ color: 'var(--primary)' }}>
-            新規登録
-          </Link>
-        </p>
-        
       </div>
     </div>
   );
