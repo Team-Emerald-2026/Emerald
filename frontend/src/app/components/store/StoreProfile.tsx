@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Building2, Clock, Users } from 'lucide-react';
+import { Building2, Clock, Power, Users } from 'lucide-react';
 import StoreShell from './StoreShell';
 import {
   fetchStoreProfile,
@@ -16,6 +16,7 @@ export default function StoreProfile() {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [waitMin, setWaitMin] = useState(DEFAULT_WAIT_MIN_PER_PERSON);
+  const [isOpen, setIsOpen] = useState(true);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(true);
@@ -33,6 +34,7 @@ export default function StoreProfile() {
         setProfile(data);
         setName(data.name);
         setDescription(data.description ?? '');
+        setIsOpen(Boolean(data.is_open));
         const wait = Number(data.current_wait_min);
         setWaitMin(Number.isFinite(wait) && wait > 0 ? wait : DEFAULT_WAIT_MIN_PER_PERSON);
       })
@@ -69,10 +71,12 @@ export default function StoreProfile() {
         name: name.trim(),
         description: description.trim(),
         current_wait_min: waitMin,
+        is_open: isOpen,
       });
       setProfile(updated);
       setName(updated.name);
       setDescription(updated.description ?? '');
+      setIsOpen(Boolean(updated.is_open));
       const wait = Number(updated.current_wait_min);
       setWaitMin(Number.isFinite(wait) && wait > 0 ? wait : DEFAULT_WAIT_MIN_PER_PERSON);
       setMessage('店舗情報を保存しました。');
@@ -144,6 +148,30 @@ export default function StoreProfile() {
               />
             </label>
 
+            <div className="flex items-center justify-between rounded-xl border border-border bg-background px-3 py-3">
+              <div>
+                <p className="text-sm font-medium text-foreground">営業</p>
+                <p className="text-xs text-muted-foreground">
+                  {isOpen ? '来場者画面に営業中と表示します' : '来場者画面に準備中と表示します'}
+                </p>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={isOpen}
+                onClick={() => setIsOpen((current) => !current)}
+                className="relative h-8 w-14 rounded-full transition-colors"
+                style={{ backgroundColor: isOpen ? 'var(--ok)' : 'var(--muted)' }}
+              >
+                <span
+                  className={`absolute top-1 h-6 w-6 rounded-full bg-white shadow transition-transform ${
+                    isOpen ? 'translate-x-7' : 'translate-x-1'
+                  }`}
+                />
+                <span className="sr-only">{isOpen ? '営業中' : '準備中'}</span>
+              </button>
+            </div>
+
             <label className="block text-sm">
               <span className="mb-1 block text-muted-foreground">一人当たりの待ち時間</span>
               <div className="flex items-center gap-2">
@@ -174,7 +202,15 @@ export default function StoreProfile() {
             </button>
           </section>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <section className="rounded-2xl border border-border bg-card p-4">
+              <Power className="h-5 w-5" style={{ color: isOpen ? 'var(--ok)' : 'var(--muted-foreground)' }} />
+              <p className="mt-2 text-sm text-muted-foreground">営業状態</p>
+              <p className="font-display text-2xl font-bold text-foreground">
+                {profile.is_open ? '営業中' : '準備中'}
+              </p>
+            </section>
+
             <section className="rounded-2xl border border-border bg-card p-4">
               <Clock className="h-5 w-5" style={{ color: 'var(--primary)' }} />
               <p className="mt-2 text-sm text-muted-foreground">一人当たり待ち時間</p>

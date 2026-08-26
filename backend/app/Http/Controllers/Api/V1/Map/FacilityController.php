@@ -29,7 +29,13 @@ class FacilityController extends Controller
                 'map_facilities.x',
                 'map_facilities.y',
             ])
-            ->get();
+            ->orderByRaw('map_facilities.store_id is null')
+            ->orderBy('map_facilities.id')
+            ->get()
+            ->unique(function ($facility) {
+                return $facility->floor . ':' . (int) $facility->x . ':' . (int) $facility->y;
+            })
+            ->values();
 
         return MapFacilityResource::collection($facilities)
             ->response()

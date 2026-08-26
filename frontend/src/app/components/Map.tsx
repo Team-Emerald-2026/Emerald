@@ -12,7 +12,6 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { fetchMapFacilities, type BackendMapFacility } from '../lib/api';
-import { mapLocations } from '../lib/mapLocations';
 
 type BoothType = '体験' | 'フード' | '物販' | 'トイレ' | '案内' | '救護室' | 'サポート';
 type Floor = `${number}F`;
@@ -111,18 +110,6 @@ function toFacility(facility: BackendMapFacility): Facility {
   };
 }
 
-function definedFacilities(): Facility[] {
-  return mapLocations.map((location) => ({
-    id: location.key,
-    storeId: '',
-    name: location.name,
-    type: '体験',
-    floor: `${location.floor}F`,
-    x: location.map_x,
-    y: location.map_y,
-  }));
-}
-
 export default function Map() {
   const [searchParams, setSearchParams] = useSearchParams();
   const targetStoreId = searchParams.get('store');
@@ -154,12 +141,15 @@ export default function Map() {
   }, []);
 
   const displayFacilities = useMemo(() => {
-    const defined = definedFacilities();
-    const occupied = new Set(defined.map((f) => `${f.floor}:${f.x}:${f.y}`));
-    const extras = facilities.filter(
-      (f) => !occupied.has(`${f.floor}:${Math.round(f.x)}:${Math.round(f.y)}`),
-    );
-    return [...defined, ...extras];
+    const unique = new Map<string, Facility>();
+    for (const facility of facilities) {
+      const key = `${facility.floor}:${Math.round(facility.x)}:${Math.round(facility.y)}`;
+      const current = unique.get(key);
+      if (!current || (facility.storeId && !current.storeId)) {
+        unique.set(key, facility);
+      }
+    }
+    return Array.from(unique.values());
   }, [facilities]);
 
   useEffect(() => {

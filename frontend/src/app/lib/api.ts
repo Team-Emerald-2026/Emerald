@@ -616,6 +616,7 @@ export function updateStoreProfile(
     name: string;
     description: string;
     current_wait_min: number;
+    is_open: boolean;
   },
   signal?: AbortSignal,
 ) {

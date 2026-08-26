@@ -34,7 +34,7 @@ class DashboardController extends Controller
             'name' => ['required', 'string', 'max:255'],
             'description' => ['required', 'string', 'max:1000'],
             'current_wait_min' => ['required', 'integer', 'min:0', 'max:180'],
-            'is_open' => ['sometimes', 'boolean'],
+            'is_open' => ['required', 'boolean'],
         ];
 
         if (Schema::hasColumn('stores', 'wait_display_mode')) {
