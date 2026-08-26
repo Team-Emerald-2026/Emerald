@@ -9,6 +9,7 @@ use App\Models\SalesEntry;
 use App\Models\Store;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Schema;
 
 class DashboardController extends Controller
 {
@@ -29,16 +30,19 @@ class DashboardController extends Controller
             abort(403, '他店舗の情報は更新できません。');
         }
 
-        $validated = $request->validate([
+        $rules = [
             'name' => ['required', 'string', 'max:255'],
             'description' => ['required', 'string', 'max:1000'],
             'current_wait_min' => ['required', 'integer', 'min:0', 'max:180'],
             'is_open' => ['sometimes', 'boolean'],
-            'wait_display_mode' => ['sometimes', 'string', 'in:minutes,text'],
-            'wait_display_text' => ['nullable', 'string', 'max:255'],
-        ]);
+        ];
 
-        $store->fill($validated);
+        if (Schema::hasColumn('stores', 'wait_display_mode')) {
+            $rules['wait_display_mode'] = ['sometimes', 'string', 'in:minutes,text'];
+            $rules['wait_display_text'] = ['nullable', 'string', 'max:255'];
+        }
+
+        $store->fill($request->validate($rules));
         $store->save();
 
         return DashboardResource::make($this->withRevenue($store->refresh()))
@@ -54,18 +58,33 @@ class DashboardController extends Controller
             abort(404, '店舗情報が見つかりません。');
         }
 
-        return Store::query()->findOrFail($storeId);
+        $columns = ['id', 'name', 'description', 'is_open', 'current_wait_min', 'current_queue_count'];
+        if (Schema::hasColumn('stores', 'wait_display_mode')) {
+            $columns[] = 'wait_display_mode';
+            $columns[] = 'wait_display_text';
+        }
+
+        return Store::query()
+            ->select($columns)
+            ->findOrFail($storeId);
     }
 
     private function withRevenue(Store $store): Store
     {
-        $orderRevenue = (int) Order::query()
-            ->forStore($store->id)
-            ->where('status', 'settled')
-            ->sum('total_price');
-        $salesRevenue = (int) SalesEntry::query()
-            ->forStore($store->id)
-            ->sum('amount');
+        $orderRevenue = 0;
+        if (Schema::hasTable('orders')) {
+            $orderRevenue = (int) Order::query()
+                ->forStore($store->id)
+                ->where('status', 'settled')
+                ->sum('total_price');
+        }
+
+        $salesRevenue = 0;
+        if (Schema::hasTable('sales_entries')) {
+            $salesRevenue = (int) SalesEntry::query()
+                ->forStore($store->id)
+                ->sum('amount');
+        }
 
         $store->setAttribute('revenue', $orderRevenue + $salesRevenue);
 

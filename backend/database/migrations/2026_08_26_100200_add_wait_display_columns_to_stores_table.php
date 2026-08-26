@@ -10,10 +10,10 @@ return new class extends Migration
     {
         Schema::table('stores', function (Blueprint $table) {
             if (! Schema::hasColumn('stores', 'wait_display_mode')) {
-                $table->string('wait_display_mode', 16)->default('minutes')->after('current_queue_count');
+                $table->string('wait_display_mode', 16)->default('minutes');
             }
             if (! Schema::hasColumn('stores', 'wait_display_text')) {
-                $table->string('wait_display_text')->nullable()->after('wait_display_mode');
+                $table->string('wait_display_text')->nullable();
             }
         });
     }

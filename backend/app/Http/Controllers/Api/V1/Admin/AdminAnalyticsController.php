@@ -7,6 +7,7 @@ use App\Models\Order;
 use App\Models\SalesEntry;
 use App\Models\Store;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Schema;
 
 class AdminAnalyticsController extends Controller
 {
@@ -29,9 +30,14 @@ class AdminAnalyticsController extends Controller
             ->get()
             ->keyBy('store_id');
 
+        $storeColumns = ['id', 'name', 'is_open'];
+        if (Schema::hasColumn('stores', 'is_visible')) {
+            $storeColumns[] = 'is_visible';
+        }
+
         $stores = Store::query()
             ->orderBy('id')
-            ->get(['id', 'name', 'is_open', 'is_visible'])
+            ->get($storeColumns)
             ->map(function (Store $store) use ($revenueRows) {
                 $row = $revenueRows->get($store->id);
 
@@ -39,7 +45,7 @@ class AdminAnalyticsController extends Controller
                     'store_id' => $store->id,
                     'store_name' => $store->name,
                     'is_open' => (bool) $store->is_open,
-                    'is_visible' => (bool) $store->is_visible,
+                    'is_visible' => (bool) ($store->is_visible ?? true),
                     'revenue' => (int) ($row?->revenue ?? 0),
                     'order_count' => (int) ($row?->order_count ?? 0),
                 ];
@@ -66,11 +72,14 @@ class AdminAnalyticsController extends Controller
             ->groupBy('store_id')
             ->pluck('revenue', 'store_id');
 
-        $salesRevenueByStore = SalesEntry::query()
-            ->select('store_id')
-            ->selectRaw('SUM(amount) as revenue')
-            ->groupBy('store_id')
-            ->pluck('revenue', 'store_id');
+        $salesRevenueByStore = collect();
+        if (Schema::hasTable('sales_entries')) {
+            $salesRevenueByStore = SalesEntry::query()
+                ->select('store_id')
+                ->selectRaw('SUM(amount) as revenue')
+                ->groupBy('store_id')
+                ->pluck('revenue', 'store_id');
+        }
 
         $stores = Store::query()
             ->orderBy('id')

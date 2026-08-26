@@ -10,6 +10,7 @@ use App\Models\Store;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Schema;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
@@ -306,5 +307,31 @@ class MissingApisTest extends TestCase
         $this->getJson('/api/v1/booth/dashboard')
             ->assertOk()
             ->assertJsonPath('data.revenue', 1200);
+    }
+
+    public function test_dashboard_succeeds_without_sales_entries_table(): void
+    {
+        $store = Store::query()->create([
+            'id' => 'store-no-sales',
+            'name' => '売上テーブルなし',
+            'description' => 'Render相当',
+            'is_open' => true,
+            'current_wait_min' => 5,
+            'current_queue_count' => 0,
+        ]);
+        $user = User::query()->create([
+            'login_id' => 'no-sales-user',
+            'password' => Hash::make('password'),
+            'store_id' => $store->id,
+            'role' => 'store',
+        ]);
+        Sanctum::actingAs($user);
+
+        Schema::dropIfExists('sales_entries');
+
+        $this->getJson('/api/v1/booth/dashboard')
+            ->assertOk()
+            ->assertJsonPath('data.id', 'store-no-sales')
+            ->assertJsonPath('data.revenue', 0);
     }
 }
