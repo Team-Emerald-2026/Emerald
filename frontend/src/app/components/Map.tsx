@@ -1,8 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import {
-  SlidersHorizontal,
-  X,
   FlaskConical,
   UtensilsCrossed,
   ShoppingBag,
@@ -14,7 +12,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { fetchMapFacilities, type BackendMapFacility } from '../lib/api';
-import { Skeleton, SkeletonText } from './Skeleton';
+import { mapLocations } from '../lib/mapLocations';
 
 type BoothType = '体験' | 'フード' | '物販' | 'トイレ' | '案内' | '救護室' | 'サポート';
 type Floor = `${number}F`;
@@ -113,35 +111,34 @@ function toFacility(facility: BackendMapFacility): Facility {
   };
 }
 
-function FacilityRowSkeleton() {
-  return (
-    <li className="flex items-center gap-3 rounded-xl border border-border bg-card px-3 py-2.5">
-      <Skeleton className="h-9 w-9 shrink-0 rounded-lg" />
-      <div className="min-w-0 flex-1 space-y-2">
-        <SkeletonText className="w-3/5" />
-        <SkeletonText className="w-1/3" />
-      </div>
-      <Skeleton className="h-8 w-14 shrink-0 rounded-lg" />
-    </li>
-  );
+function definedFacilities(): Facility[] {
+  return mapLocations.map((location) => ({
+    id: location.key,
+    storeId: '',
+    name: location.name,
+    type: '体験',
+    floor: `${location.floor}F`,
+    x: location.map_x,
+    y: location.map_y,
+  }));
 }
 
 export default function Map() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const [showFilter, setShowFilter] = useState(false);
-  const [floor, setFloor] = useState<'すべて' | MapFloor>('1F');
-  const [type, setType] = useState<'すべて' | BoothType>('すべて');
-  const [facilities, setFacilities] = useState<Facility[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const targetStoreId = searchParams.get('store');
   const targetFacilityId = searchParams.get('facility');
+  const floorParam = searchParams.get('floor');
+  const initialFloor: 'すべて' | MapFloor =
+    floorParam && (floors as readonly string[]).includes(floorParam)
+      ? (floorParam as MapFloor)
+      : '1F';
+  const [floor, setFloor] = useState<'すべて' | MapFloor>(initialFloor);
+  const [type, setType] = useState<'すべて' | BoothType>('すべて');
+  const [facilities, setFacilities] = useState<Facility[]>([]);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
-
-    setLoading(true);
-    setError(null);
 
     fetchMapFacilities(controller.signal)
       .then((backendFacilities) => {
@@ -150,33 +147,39 @@ export default function Map() {
       .catch((err: unknown) => {
         if (err instanceof DOMException && err.name === 'AbortError') return;
         setError('バックエンドから校内マップ情報を取得できませんでした。');
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setLoading(false);
       });
 
     return () => controller.abort();
   }, []);
 
+  const displayFacilities = useMemo(() => {
+    const defined = definedFacilities();
+    const occupied = new Set(defined.map((f) => `${f.floor}:${f.x}:${f.y}`));
+    const extras = facilities.filter(
+      (f) => !occupied.has(`${f.floor}:${Math.round(f.x)}:${Math.round(f.y)}`),
+    );
+    return [...defined, ...extras];
+  }, [facilities]);
+
   useEffect(() => {
-    const target = facilities.find(
+    const target = displayFacilities.find(
       (f) => f.storeId === targetStoreId || f.id === targetFacilityId,
     );
     if (target && floors.includes(target.floor as MapFloor)) {
       setFloor(target.floor as MapFloor);
     }
-  }, [facilities, targetStoreId, targetFacilityId]);
+  }, [displayFacilities, targetStoreId, targetFacilityId]);
 
   const boothTypes = useMemo(
-    () => Array.from(new Set(facilities.map((f) => f.type))),
-    [facilities],
+    () => Array.from(new Set(displayFacilities.map((f) => f.type))),
+    [displayFacilities],
   );
 
   const match = (f: Facility) =>
     (floor === 'すべて' || f.floor === floor) && (type === 'すべて' || f.type === type);
-  const filtered = facilities.filter(match);
+  const filtered = displayFacilities.filter(match);
   const selectedFacility =
-    facilities.find(
+    displayFacilities.find(
       (f) =>
         f.storeId === targetStoreId ||
         f.id === targetFacilityId,
@@ -235,62 +238,45 @@ export default function Map() {
         </div>
       )}
 
-      {/* フィルタトグル */}
-      <button
-        type="button"
-        onClick={() => setShowFilter((v) => !v)}
-        className="flex w-full items-center justify-center gap-2 rounded-xl border border-border bg-card py-2.5 text-sm font-medium text-foreground hover:bg-muted"
-      >
-        {showFilter ? <X className="h-4 w-4" /> : <SlidersHorizontal className="h-4 w-4" />}
-        {showFilter ? 'フィルタを閉じる' : '階層・ブースタイプを表示'}
-      </button>
-
-      {showFilter && (
-        <div className="grid grid-cols-2 gap-3 rounded-xl border border-border bg-card p-3">
-          <label className="text-sm">
-            <span className="mb-1 block text-muted-foreground">階層</span>
-            <select
-              value={floor}
-              onChange={(e) => setFloor(e.target.value as typeof floor)}
-              className="w-full rounded-lg border border-input bg-background px-2 py-2 text-foreground"
-            >
-              {(['すべて', ...floors] as const).map((f) => (
-                <option key={f} value={f}>
-                  {f}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="text-sm">
-            <span className="mb-1 block text-muted-foreground">ブースタイプ</span>
-            <select
-              value={type}
-              onChange={(e) => setType(e.target.value as typeof type)}
-              className="w-full rounded-lg border border-input bg-background px-2 py-2 text-foreground"
-            >
-              {(['すべて', ...boothTypes] as const).map((t) => (
-                <option key={t} value={t}>
-                  {t}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
-      )}
+      <div className="grid grid-cols-2 gap-3 rounded-xl border border-border bg-card p-3">
+        <label className="text-sm">
+          <span className="mb-1 block text-muted-foreground">階層</span>
+          <select
+            value={floor}
+            onChange={(e) => setFloor(e.target.value as typeof floor)}
+            className="w-full rounded-lg border border-input bg-background px-2 py-2 text-foreground"
+          >
+            {(['すべて', ...floors] as const).map((f) => (
+              <option key={f} value={f}>
+                {f}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="text-sm">
+          <span className="mb-1 block text-muted-foreground">ブースタイプ</span>
+          <select
+            value={type}
+            onChange={(e) => setType(e.target.value as typeof type)}
+            className="w-full rounded-lg border border-input bg-background px-2 py-2 text-foreground"
+          >
+            {(['すべて', ...boothTypes] as const).map((t) => (
+              <option key={t} value={t}>
+                {t}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
 
       {/* 校内マップ */}
-      <div className="relative aspect-[4/3] w-full overflow-hidden rounded-2xl border border-border bg-muted">
+      <div className="relative aspect-[825/466] w-full overflow-hidden rounded-2xl border border-border bg-muted">
         <img
           src={floor === 'すべて' ? mapImageByFloor['1F'] : mapImageByFloor[floor]}
           alt={`${floor === 'すべて' ? '1F' : floor} 校内マップ`}
-          className="absolute inset-0 h-full w-full object-contain"
+          className="absolute inset-0 h-full w-full object-fill"
         />
-        {loading && !error && (
-          <div className="absolute inset-0 bg-muted p-4" aria-label="校内マップ情報を読み込み中">
-            <Skeleton className="h-full w-full rounded-xl" />
-          </div>
-        )}
-        {!loading && !error && filtered.map((f) => {
+        {filtered.map((f) => {
           const Icon = typeIcon[f.type];
           return (
             <div
@@ -310,7 +296,7 @@ export default function Map() {
             </div>
           );
         })}
-        {!loading && !error && filtered.length === 0 && (
+        {filtered.length === 0 && (
           <p className="absolute inset-0 grid place-items-center text-sm text-muted-foreground">
             該当するブースがありません
           </p>
@@ -368,15 +354,8 @@ export default function Map() {
       )}
 
       {/* 一覧 */}
-      {loading && !error && (
-        <ul className="space-y-2" aria-label="施設一覧を読み込み中">
-          {Array.from({ length: 5 }).map((_, index) => (
-            <FacilityRowSkeleton key={index} />
-          ))}
-        </ul>
-      )}
 
-      {!loading && !error && (floor === 'すべて' ? (
+      {floor === 'すべて' ? (
         <div className="space-y-4">
           {floors.map((fl) => {
             const rows = filtered.filter((f) => f.floor === fl);
@@ -402,7 +381,7 @@ export default function Map() {
             <FacilityRow key={f.id} f={f} />
           ))}
         </ul>
-      ))}
+      )}
 
       {/* 案内ボックス */}
       <div

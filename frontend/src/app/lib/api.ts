@@ -37,6 +37,10 @@ export interface AdminStore {
   id: string;
   name: string;
   description: string | null;
+  type: string;
+  floor: number;
+  map_x: number;
+  map_y: number;
   ticket_prefix: string | null;
   is_open: boolean;
   is_visible: boolean;
@@ -64,8 +68,13 @@ export interface AdminAnalytics {
 }
 
 export interface AdminStoreInput {
+  id?: string;
   name: string;
   description: string;
+  type: string;
+  floor: number;
+  map_x: number;
+  map_y: number;
   ticket_prefix?: string;
   login_id?: string;
   password?: string;

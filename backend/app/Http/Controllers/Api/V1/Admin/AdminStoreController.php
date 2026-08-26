@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\V1\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\MapFacilities;
 use App\Models\Order;
 use App\Models\Store;
 use App\Models\User;
@@ -31,6 +32,9 @@ class AdminStoreController extends Controller
             ->groupBy('store_id')
             ->get()
             ->keyBy('store_id');
+        $facilitiesByStoreId = MapFacilities::query()
+            ->get(['id', 'store_id', 'type', 'floor', 'x', 'y'])
+            ->keyBy('store_id');
 
         $stores = Store::query()
             ->orderBy('id')
@@ -39,6 +43,7 @@ class AdminStoreController extends Controller
                 $store,
                 $usersByStoreId->get($store->id),
                 $revenueByStoreId->get($store->id),
+                $facilitiesByStoreId->get($store->id),
             ))
             ->values();
 
@@ -50,8 +55,13 @@ class AdminStoreController extends Controller
         $this->authorizeAdmin($request);
 
         $validated = $request->validate([
+            'id' => ['required', 'string', 'max:64', 'unique:stores,id'],
             'name' => ['required', 'string', 'max:255'],
             'description' => ['required', 'string', 'max:1000'],
+            'type' => ['required', 'string', 'max:64'],
+            'floor' => ['required', 'integer', 'min:1', 'max:8'],
+            'map_x' => ['required', 'integer', 'min:0', 'max:100'],
+            'map_y' => ['required', 'integer', 'min:0', 'max:100'],
             'ticket_prefix' => ['nullable', 'string', 'max:16', 'unique:stores,ticket_prefix'],
             'login_id' => ['required', 'string', 'max:255', 'unique:users,login_id'],
             'password' => ['required', 'string', 'min:8'],
@@ -62,7 +72,7 @@ class AdminStoreController extends Controller
 
         $result = DB::transaction(function () use ($validated) {
             $store = Store::query()->create([
-                'id' => $this->makeStoreId(),
+                'id' => $validated['id'],
                 'name' => $validated['name'],
                 'description' => $validated['description'],
                 'ticket_prefix' => $this->makeTicketPrefix($validated['ticket_prefix'] ?? $validated['name']),
@@ -79,7 +89,16 @@ class AdminStoreController extends Controller
                 'role' => 'store',
             ]);
 
-            return $this->serializeStore($store, $user);
+            $facility = MapFacilities::query()->create([
+                'store_id' => $store->id,
+                'name' => $store->name,
+                'type' => $validated['type'],
+                'floor' => $validated['floor'],
+                'x' => $validated['map_x'],
+                'y' => $validated['map_y'],
+            ]);
+
+            return $this->serializeStore($store, $user, null, $facility);
         });
 
         return response()->json(['data' => $result], 201, [], JSON_UNESCAPED_UNICODE);
@@ -98,6 +117,10 @@ class AdminStoreController extends Controller
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'description' => ['required', 'string', 'max:1000'],
+            'type' => ['required', 'string', 'max:64'],
+            'floor' => ['required', 'integer', 'min:1', 'max:8'],
+            'map_x' => ['required', 'integer', 'min:0', 'max:100'],
+            'map_y' => ['required', 'integer', 'min:0', 'max:100'],
             'ticket_prefix' => [
                 'nullable',
                 'string',
@@ -139,7 +162,18 @@ class AdminStoreController extends Controller
                 $storeUser->save();
             }
 
-            return $this->serializeStore($store->refresh(), $storeUser?->refresh());
+            $facility = MapFacilities::query()->updateOrCreate(
+                ['store_id' => $store->id],
+                [
+                    'name' => $store->name,
+                    'type' => $validated['type'],
+                    'floor' => $validated['floor'],
+                    'x' => $validated['map_x'],
+                    'y' => $validated['map_y'],
+                ],
+            );
+
+            return $this->serializeStore($store->refresh(), $storeUser?->refresh(), null, $facility);
         });
 
         return response()->json(['data' => $result], 200, [], JSON_UNESCAPED_UNICODE);
@@ -156,7 +190,9 @@ class AdminStoreController extends Controller
         ]);
         $store->save();
 
-        return response()->json(['data' => $this->serializeStore($store->refresh())], 200, [], JSON_UNESCAPED_UNICODE);
+        $facility = MapFacilities::query()->where('store_id', $store->id)->first();
+
+        return response()->json(['data' => $this->serializeStore($store->refresh(), null, null, $facility)], 200, [], JSON_UNESCAPED_UNICODE);
     }
 
     private function authorizeAdmin(Request $request): void
@@ -164,12 +200,21 @@ class AdminStoreController extends Controller
         abort_unless($request->user()?->role === 'admin', 403, '管理者権限が必要です。');
     }
 
-    private function serializeStore(Store $store, ?User $user = null, mixed $revenue = null): array
+    private function serializeStore(
+        Store $store,
+        ?User $user = null,
+        mixed $revenue = null,
+        ?MapFacilities $facility = null,
+    ): array
     {
         return [
             'id' => $store->id,
             'name' => $store->name,
             'description' => $store->description,
+            'type' => $facility?->type ?? 'booth',
+            'floor' => (int) ($facility?->floor ?? 1),
+            'map_x' => (int) ($facility?->x ?? 50),
+            'map_y' => (int) ($facility?->y ?? 50),
             'ticket_prefix' => $store->ticket_prefix,
             'is_open' => (bool) $store->is_open,
             'is_visible' => (bool) $store->is_visible,
@@ -179,15 +224,6 @@ class AdminStoreController extends Controller
             'revenue' => (int) ($revenue?->revenue ?? 0),
             'order_count' => (int) ($revenue?->order_count ?? 0),
         ];
-    }
-
-    private function makeStoreId(): string
-    {
-        do {
-            $storeId = 'store-' . Str::lower(Str::random(8));
-        } while (Store::query()->whereKey($storeId)->exists());
-
-        return $storeId;
     }
 
     private function makeTicketPrefix(string $source): string

@@ -12,8 +12,28 @@ import {
   type AdminStoreInput,
 } from '../../lib/api';
 import { logoutAdminSession, useFestival } from '../../lib/festivalStore';
+import { findMapLocation } from '../../lib/mapLocations';
 
 const yen = (value: number) => `¥${value.toLocaleString('ja-JP')}`;
+
+const typeLabel = (type: string) => {
+  switch (type) {
+    case 'food':
+      return 'フード';
+    case 'shop':
+      return '物販';
+    case 'information':
+      return '案内';
+    case 'toilet':
+      return 'トイレ';
+    case 'first_aid':
+      return '救護室';
+    case 'support':
+      return 'サポート';
+    default:
+      return '体験';
+  }
+};
 
 export default function AdminStores() {
   const adminSession = useFestival((s) => s.adminSession);
@@ -177,6 +197,9 @@ export default function AdminStores() {
                   <p className="mt-1 text-sm text-muted-foreground">{store.description}</p>
                   <p className="mt-1 text-xs text-muted-foreground">
                     ID: {store.id} / ログインID: {store.login_id ?? '未設定'} / Prefix: {store.ticket_prefix ?? '未設定'}
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    種類: {typeLabel(store.type)} / 位置: {findMapLocation(store.floor, store.map_x, store.map_y)?.name ?? `${store.floor}F`}
                   </p>
                 </div>
                 <div className="shrink-0 text-left sm:text-right">

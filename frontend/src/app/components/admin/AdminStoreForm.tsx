@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { AdminStore, AdminStoreInput } from '../../lib/api';
+import { findMapLocation, mapLocations } from '../../lib/mapLocations';
 
 interface Props {
   store: AdminStore | null;
@@ -9,8 +10,13 @@ interface Props {
 }
 
 const emptyInput: AdminStoreInput = {
+  id: '',
   name: '',
   description: '',
+  type: 'booth',
+  floor: 1,
+  map_x: 46,
+  map_y: 15,
   ticket_prefix: '',
   login_id: '',
   password: '',
@@ -19,6 +25,16 @@ const emptyInput: AdminStoreInput = {
   current_wait_min: 0,
   current_queue_count: 0,
 };
+
+const storeTypes = [
+  { value: 'booth', label: '体験' },
+  { value: 'food', label: 'フード' },
+  { value: 'shop', label: '物販' },
+  { value: 'information', label: '案内' },
+  { value: 'toilet', label: 'トイレ' },
+  { value: 'first_aid', label: '救護室' },
+  { value: 'support', label: 'サポート' },
+] as const;
 
 export default function AdminStoreForm({ store, saving, onCancel, onSubmit }: Props) {
   const [input, setInput] = useState<AdminStoreInput>(emptyInput);
@@ -30,8 +46,13 @@ export default function AdminStoreForm({ store, saving, onCancel, onSubmit }: Pr
     }
 
     setInput({
+      id: store.id,
       name: store.name,
       description: store.description ?? '',
+      type: store.type ?? 'booth',
+      floor: store.floor ?? 1,
+      map_x: store.map_x ?? 50,
+      map_y: store.map_y ?? 50,
       ticket_prefix: store.ticket_prefix ?? '',
       login_id: store.login_id ?? '',
       password: '',
@@ -44,6 +65,19 @@ export default function AdminStoreForm({ store, saving, onCancel, onSubmit }: Pr
 
   const update = <K extends keyof AdminStoreInput>(key: K, value: AdminStoreInput[K]) => {
     setInput((current) => ({ ...current, [key]: value }));
+  };
+
+  const selectedLocation = findMapLocation(input.floor, input.map_x, input.map_y);
+
+  const selectLocation = (key: string) => {
+    const location = mapLocations.find((item) => item.key === key);
+    if (!location) return;
+    setInput((current) => ({
+      ...current,
+      floor: location.floor,
+      map_x: location.map_x,
+      map_y: location.map_y,
+    }));
   };
 
   return (
@@ -63,12 +97,36 @@ export default function AdminStoreForm({ store, saving, onCancel, onSubmit }: Pr
 
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="text-sm">
+          <span className="mb-1 block text-muted-foreground">ID</span>
+          <input
+            value={input.id ?? ''}
+            onChange={(event) => update('id', event.target.value)}
+            disabled={Boolean(store)}
+            placeholder="store-101"
+            className="w-full rounded-lg border border-input bg-background px-3 py-2.5 text-foreground outline-none disabled:opacity-60"
+          />
+        </label>
+        <label className="text-sm">
           <span className="mb-1 block text-muted-foreground">店舗名</span>
           <input
             value={input.name}
             onChange={(event) => update('name', event.target.value)}
             className="w-full rounded-lg border border-input bg-background px-3 py-2.5 text-foreground outline-none"
           />
+        </label>
+        <label className="text-sm">
+          <span className="mb-1 block text-muted-foreground">種類</span>
+          <select
+            value={input.type}
+            onChange={(event) => update('type', event.target.value)}
+            className="w-full rounded-lg border border-input bg-background px-3 py-2.5 text-foreground outline-none"
+          >
+            {storeTypes.map((type) => (
+              <option key={type.value} value={type.value}>
+                {type.label}
+              </option>
+            ))}
+          </select>
         </label>
         <label className="text-sm">
           <span className="mb-1 block text-muted-foreground">受付番号 prefix</span>
@@ -125,6 +183,26 @@ export default function AdminStoreForm({ store, saving, onCancel, onSubmit }: Pr
             onChange={(event) => update('current_queue_count', Number(event.target.value))}
             className="w-full rounded-lg border border-input bg-background px-3 py-2.5 text-foreground outline-none"
           />
+        </label>
+        <label className="sm:col-span-2 text-sm">
+          <span className="mb-1 block text-muted-foreground">店舗位置</span>
+          <select
+            value={selectedLocation?.key ?? ''}
+            onChange={(event) => selectLocation(event.target.value)}
+            className="w-full rounded-lg border border-input bg-background px-3 py-2.5 text-foreground outline-none"
+          >
+            <option value="" disabled>
+              場所を選択してください
+            </option>
+            {mapLocations.map((location) => (
+              <option key={location.key} value={location.key}>
+                {location.name}
+              </option>
+            ))}
+          </select>
+          <span className="mt-1 block text-xs text-muted-foreground">
+            選択位置: {input.floor}F / X:{input.map_x}% / Y:{input.map_y}%
+          </span>
         </label>
       </div>
 
