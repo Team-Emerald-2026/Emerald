@@ -21,10 +21,7 @@ export const router = createBrowserRouter([
     children: [
       { path: '/', element: <Home /> },
       { path: '/attractions', element: <Attractions /> },
-      // モバイルオーダーは同一コンポーネントを子パスでマウントし表示モードを切替
       { path: '/restaurants', element: <Restaurants /> },
-      { path: '/restaurants/cart', element: <Restaurants /> },
-      { path: '/restaurants/status', element: <Restaurants /> },
       { path: '/map', element: <Map /> },
     ],
   },
