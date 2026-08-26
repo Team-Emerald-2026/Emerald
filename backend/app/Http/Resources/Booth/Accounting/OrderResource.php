@@ -3,36 +3,23 @@
 namespace App\Http\Resources\Booth\Accounting;
 
 use Illuminate\Http\Request;
-use Illuminate\Http\Resources\JsonApi\JsonApiResource;
+use Illuminate\Http\Resources\Json\JsonResource;
 
-class OrderResource extends JsonApiResource
+class OrderResource extends JsonResource
 {
-    /**
-     * The resource's attributes.
-     */
-    public $attributes = [
-        'ticket_number',
-        'total_price',
-        'status',
-        'ordered_at',
-        'called_at',
-        'served_at',
-        'settled_at',
-        'items',
-    ];
-
-    public function toAttributes(Request $request): array
+    public function toArray(Request $request): array
     {
-        return [
-            'ticket_number' => $this->resource->ticket_number,
-            'total_price' => $this->resource->total_price,
-            'status' => $this->resource->status,
-            'ordered_at' => optional($this->resource->ordered_at)->toISOString(),
-            'called_at' => optional($this->resource->called_at)->toISOString(),
-            'served_at' => optional($this->resource->served_at)->toISOString(),
-            'settled_at' => optional($this->resource->settled_at)->toISOString(),
-            'items' => $this->resource->relationLoaded('items')
-                ? $this->resource->items->map(function ($item) {
+        $data = [
+            'id' => $this->id,
+            'ticket_number' => $this->ticket_number,
+            'total_price' => $this->total_price,
+            'status' => $this->status,
+            'ordered_at' => optional($this->ordered_at)->toISOString(),
+            'called_at' => optional($this->called_at)->toISOString(),
+            'served_at' => optional($this->served_at)->toISOString(),
+            'settled_at' => optional($this->settled_at)->toISOString(),
+            'items' => $this->relationLoaded('items')
+                ? $this->items->map(function ($item) {
                     return [
                         'id' => $item->id,
                         'menu_item_id' => $item->menu_item_id,
@@ -42,6 +29,12 @@ class OrderResource extends JsonApiResource
                     ];
                 })->values()
                 : [],
+        ];
+
+        return [
+            ...$data,
+            'type' => 'orders',
+            'attributes' => $data,
         ];
     }
 }

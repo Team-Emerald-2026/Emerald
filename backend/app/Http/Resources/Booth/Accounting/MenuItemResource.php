@@ -3,27 +3,24 @@
 namespace App\Http\Resources\Booth\Accounting;
 
 use Illuminate\Http\Request;
-use Illuminate\Http\Resources\JsonApi\JsonApiResource;
+use Illuminate\Http\Resources\Json\JsonResource;
 
-class MenuItemResource extends JsonApiResource
+class MenuItemResource extends JsonResource
 {
-    /**
-     * The resource's attributes.
-     */
-    public $attributes = [
-        'name',
-        'description',
-        'price',
-        'is_available',
-    ];
-
-    public function toAttributes(Request $request): array
+    public function toArray(Request $request): array
     {
+        $data = [
+            'id' => $this->id,
+            'name' => $this->name,
+            'description' => $this->description,
+            'price' => $this->price,
+            'is_available' => (bool) $this->is_available,
+        ];
+
         return [
-            'name' => $this->resource->name,
-            'description' => $this->resource->description,
-            'price' => $this->resource->price,
-            'is_available' => $this->resource->is_available,
+            ...$data,
+            'type' => 'menu-items',
+            'attributes' => $data,
         ];
     }
 }

@@ -3,38 +3,26 @@
 namespace App\Http\Resources;
 
 use Illuminate\Http\Request;
-use Illuminate\Http\Resources\JsonApi\JsonApiResource;
+use Illuminate\Http\Resources\Json\JsonResource;
 
-class StoreResource extends JsonApiResource
+class StoreResource extends JsonResource
 {
-    /**
-     * The resource's attributes.
-     */
-    public $attributes = [
-        'name',
-        'description',
-        'is_open',
-        'is_visible',
-        'current_wait_min',
-        'current_queue_count',
-    ];
-
-    /**
-     * The resource's relationships.
-     */
-    public $relationships = [
-        // ...
-    ];
-
-    public function toAttributes(Request $request): array
+    public function toArray(Request $request): array
     {
+        $data = [
+            'id' => $this->id,
+            'name' => $this->name,
+            'description' => $this->description,
+            'is_open' => (bool) $this->is_open,
+            'is_visible' => (bool) ($this->is_visible ?? true),
+            'current_wait_min' => (int) $this->current_wait_min,
+            'current_queue_count' => (int) $this->current_queue_count,
+        ];
+
         return [
-            'name' => $this->resource->name,
-            'description' => $this->resource->description,
-            'is_open' => $this->resource->is_open,
-            'is_visible' => $this->resource->is_visible,
-            'current_wait_min' => $this->resource->current_wait_min,
-            'current_queue_count' => $this->resource->current_queue_count,
+            ...$data,
+            'type' => 'stores',
+            'attributes' => $data,
         ];
     }
 }

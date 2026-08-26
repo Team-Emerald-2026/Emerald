@@ -3,38 +3,25 @@
 namespace App\Http\Resources\Booth;
 
 use Illuminate\Http\Request;
-use Illuminate\Http\Resources\JsonApi\JsonApiResource;
+use Illuminate\Http\Resources\Json\JsonResource;
 
-class DashboardResource extends JsonApiResource
+class DashboardResource extends JsonResource
 {
-    /**
-     * The resource's attributes.
-     */
-    public $attributes = [
-        'name',
-        'description',
-        'ticket_prefix',
-        'is_open',
-        'current_wait_min',
-        'current_queue_count',
-    ];
-
-    /**
-     * The resource's relationships.
-     */
-    public $relationships = [
-        // ...
-    ];
-
-    public function toAttributes(Request $request): array
+    public function toArray(Request $request): array
     {
+        $data = [
+            'id' => $this->id,
+            'name' => $this->name,
+            'description' => $this->description,
+            'is_open' => (bool) $this->is_open,
+            'current_wait_min' => (int) $this->current_wait_min,
+            'current_queue_count' => (int) $this->current_queue_count,
+        ];
+
         return [
-            'name' => $this->resource->name,
-            'description' => $this->resource->description,
-            'ticket_prefix' => $this->resource->ticket_prefix,
-            'is_open' => $this->resource->is_open,
-            'current_wait_min' => $this->resource->current_wait_min,
-            'current_queue_count' => $this->resource->current_queue_count,
+            ...$data,
+            'type' => 'stores',
+            'attributes' => $data,
         ];
     }
 }

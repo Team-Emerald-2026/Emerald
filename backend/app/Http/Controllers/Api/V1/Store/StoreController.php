@@ -5,14 +5,20 @@ namespace App\Http\Controllers\Api\V1\Store;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\StoreResource;
 use App\Models\Store;
+use Illuminate\Support\Facades\Schema;
 
 class StoreController extends Controller
 {
     public function index()
     {
+        $columns = ['id', 'name', 'description', 'is_open', 'current_wait_min', 'current_queue_count'];
+        if (Schema::hasColumn('stores', 'is_visible')) {
+            $columns[] = 'is_visible';
+        }
+
         $stores = Store::query()
-            ->select(['id', 'name', 'description', 'is_open', 'is_visible', 'current_wait_min', 'current_queue_count'])
-            ->where('is_visible', true)
+            ->select($columns)
+            ->when(Schema::hasColumn('stores', 'is_visible'), fn ($query) => $query->where('is_visible', true))
             ->orderBy('id')
             ->get();
 
@@ -22,7 +28,7 @@ class StoreController extends Controller
     public function show(string $id)
     {
         $store = Store::query()
-            ->where('is_visible', true)
+            ->when(Schema::hasColumn('stores', 'is_visible'), fn ($query) => $query->where('is_visible', true))
             ->find($id);
 
         if (!$store) {

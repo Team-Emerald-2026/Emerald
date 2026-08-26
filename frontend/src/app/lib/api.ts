@@ -128,17 +128,21 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
 
+function flattenResource<T extends { id: string }>(item: Record<string, unknown>): T {
+  const attributes = isRecord(item.attributes) ? item.attributes : item;
+  return {
+    ...attributes,
+    id: String(attributes.id ?? item.id ?? ''),
+  } as T;
+}
+
 function normalizeCollection<T extends { id: string }>(payload: unknown): T[] {
   if (Array.isArray(payload)) return payload as T[];
 
   if (isRecord(payload) && Array.isArray((payload as JsonApiCollection).data)) {
-    return (payload as JsonApiCollection).data!.map((item) => {
-      const attributes = item.attributes ?? {};
-      return {
-        ...attributes,
-        id: String(attributes.id ?? item.id ?? ''),
-      } as T;
-    });
+    return (payload as JsonApiCollection).data!.flatMap((item) =>
+      isRecord(item) ? [flattenResource<T>(item)] : [],
+    );
   }
 
   return [];
@@ -149,12 +153,7 @@ function normalizeItem<T extends { id: string }>(payload: unknown): T | null {
 
   const data = payload.data;
   if (isRecord(data)) {
-    const item = data as JsonApiItem;
-    const attributes = item.attributes ?? {};
-    return {
-      ...attributes,
-      id: String(attributes.id ?? item.id ?? ''),
-    } as T;
+    return flattenResource<T>(data);
   }
 
   return payload as T;
@@ -364,32 +363,16 @@ export interface StoreProfile {
   current_queue_count: number;
 }
 
-export async function fetchStoreProfile(token: string): Promise<StoreProfile> {
-  const response = await fetch(`${apiBase}/v1/booth/dashboard`, {
-    headers: {
-      Accept: 'application/json',
-      Authorization: `Bearer ${token}`,
-    },
+export function fetchStoreProfile(token: string, signal?: AbortSignal): Promise<StoreProfile> {
+  return fetchBoothDashboard(token, signal).then((payload) => {
+    if (!payload) {
+      throw new Error('店舗情報を取得できませんでした。');
+    }
+    return payload;
   });
-
-  if (!response.ok) {
-    throw new Error(`API request failed: ${response.status}`);
-  }
-
-  const payload = await response.json();
-  const item = payload?.data;
-  const attributes = item?.attributes ?? {};
-
-  return {
-    id: String(attributes.id ?? item?.id ?? ''),
-    name: String(attributes.name ?? ''),
-    description: (attributes.description as string | null) ?? null,
-    is_open: Boolean(attributes.is_open),
-    current_wait_min: Number(attributes.current_wait_min ?? 0),
-    current_queue_count: Number(attributes.current_queue_count ?? 0),
-  };
 }
-export async function updateStoreProfile(
+
+export function updateStoreProfile(
   token: string,
   storeId: string,
   input: {
@@ -397,34 +380,18 @@ export async function updateStoreProfile(
     description: string;
     is_open: boolean;
   },
-): Promise<StoreProfile> {
-  const response = await fetch(
-    `${apiBase}/v1/booth/dashboard/${encodeURIComponent(storeId)}`,
-    {
-      method: 'PATCH',
-      headers: {
-        Accept: 'application/json',
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify(input),
-    },
-  );
-
-  if (!response.ok) {
-    throw new Error(`API request failed: ${response.status}`);
-  }
-
-  const payload = await response.json();
-  const item = payload?.data;
-  const attributes = item?.attributes ?? {};
-
-  return {
-    id: String(attributes.id ?? item?.id ?? storeId),
-    name: String(attributes.name ?? ''),
-    description: (attributes.description as string | null) ?? null,
-    is_open: Boolean(attributes.is_open),
-    current_wait_min: Number(attributes.current_wait_min ?? 0),
-    current_queue_count: Number(attributes.current_queue_count ?? 0),
-  };
+  signal?: AbortSignal,
+) {
+  return request(`/v1/booth/dashboard/${encodeURIComponent(storeId)}`, {
+    method: 'PATCH',
+    token,
+    body: input,
+    signal,
+  }).then((payload) => {
+    const updated = normalizeItem<StoreProfile>(payload);
+    if (!updated) {
+      throw new Error('店舗情報を保存できませんでした。');
+    }
+    return updated;
+  });
 }

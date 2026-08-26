@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Resources\MapFacilityResource;
 use App\Models\MapFacilities;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\Schema;
 
 class FacilityController extends Controller
 {
@@ -13,9 +14,11 @@ class FacilityController extends Controller
     {
         $facilities = MapFacilities::query()
             ->leftJoin('stores', 'map_facilities.store_id', '=', 'stores.id')
-            ->where(function ($query) {
-                $query->whereNull('map_facilities.store_id')
-                    ->orWhere('stores.is_visible', true);
+            ->when(Schema::hasColumn('stores', 'is_visible'), function ($query) {
+                $query->where(function ($inner) {
+                    $inner->whereNull('map_facilities.store_id')
+                        ->orWhere('stores.is_visible', true);
+                });
             })
             ->select([
                 'map_facilities.id',

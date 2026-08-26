@@ -3,26 +3,25 @@
 namespace App\Http\Resources;
 
 use Illuminate\Http\Request;
-use Illuminate\Http\Resources\JsonApi\JsonApiResource;
+use Illuminate\Http\Resources\Json\JsonResource;
 
-class MapFacilityResource extends JsonApiResource
+class MapFacilityResource extends JsonResource
 {
-    /**
-     * The resource's attributes.
-     */
-    public $attributes = [
-        'store_id',
-        'name',
-        'type',
-        'floor',
-        'x',
-        'y'
-    ];
+    public function toArray(Request $request): array
+    {
+        $data = [
+            'id' => $this->id,
+            'store_id' => $this->store_id,
+            'name' => $this->name,
+            'type' => $this->type,
+            'floor' => (int) $this->floor,
+            'x' => (int) $this->x,
+            'y' => (int) $this->y,
+        ];
 
-    /**
-     * The resource's relationships.
-     */
-    public $relationships = [
-        //mapからブース詳細が見たい場合は記述する
-    ];
+        return [
+            ...$data,
+            'attributes' => $data,
+        ];
+    }
 }

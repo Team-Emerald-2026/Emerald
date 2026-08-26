@@ -5,65 +5,59 @@ namespace App\Http\Controllers\Api\V1\Booth\Dashboard;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\Booth\DashboardResource;
 use App\Models\Store;
-use Illuminate\Http\JsonResponse;
-use Illuminate\Support\Facades\Auth;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 
 class DashboardController extends Controller
 {
     public function index()
     {
-        $stores = Store::query()
-            ->select([
-                'id',
-                'name',
-                'description',
-                'ticket_prefix',
-                'is_open',
-                'current_wait_min',
-                'current_queue_count'])
-            ->findOrFail(Auth::user()->store_id);
+        $store = $this->currentStore();
 
-        return DashboardResource::make($stores)
+        return DashboardResource::make($store)
             ->response()
             ->setEncodingOptions(JSON_UNESCAPED_UNICODE);
     }
 
-    public function store(Request $request)
-    {
-        //
-    }
-
-    public function show(string $id)
-    {
-        //
-    }
-
     public function update(Request $request, string $id)
-{
-    $user = Auth::user();
+    {
+        $store = $this->currentStore();
 
-    if ((string) $user->store_id !== (string) $id) {
-        abort(403, '他店舗の情報は更新できません。');
+        if ((string) $store->id !== (string) $id) {
+            abort(403, '他店舗の情報は更新できません。');
+        }
+
+        $validated = $request->validate([
+            'name' => ['required', 'string', 'max:255'],
+            'description' => ['required', 'string', 'max:1000'],
+            'is_open' => ['required', 'boolean'],
+        ]);
+
+        $store->fill($validated);
+        $store->save();
+
+        return DashboardResource::make($store->refresh())
+            ->response()
+            ->setEncodingOptions(JSON_UNESCAPED_UNICODE);
     }
 
-    $validated = $request->validate([
-        'name' => ['required', 'string', 'max:255'],
-        'description' => ['required', 'string', 'max:1000'],
-        'is_open' => ['required', 'boolean'],
-    ]);
-
-    $store = Store::query()->findOrFail($user->store_id);
-    $store->fill($validated);
-    $store->save();
-
-    return DashboardResource::make($store)
-        ->response()
-        ->setEncodingOptions(JSON_UNESCAPED_UNICODE);
-}
-
-    public function destroy(string $id)
+    private function currentStore(): Store
     {
-        //
+        $storeId = Auth::user()?->store_id;
+
+        if (! $storeId) {
+            abort(404, '店舗情報が見つかりません。');
+        }
+
+        return Store::query()
+            ->select([
+                'id',
+                'name',
+                'description',
+                'is_open',
+                'current_wait_min',
+                'current_queue_count',
+            ])
+            ->findOrFail($storeId);
     }
 }
