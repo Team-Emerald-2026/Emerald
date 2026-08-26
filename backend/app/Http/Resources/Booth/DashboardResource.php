@@ -16,6 +16,9 @@ class DashboardResource extends JsonResource
             'is_open' => (bool) $this->is_open,
             'current_wait_min' => (int) $this->current_wait_min,
             'current_queue_count' => (int) $this->current_queue_count,
+            'wait_display_mode' => $this->wait_display_mode ?? 'minutes',
+            'wait_display_text' => $this->wait_display_text,
+            'revenue' => (int) ($this->revenue ?? 0),
         ];
 
         return [

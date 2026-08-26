@@ -35,7 +35,7 @@ class AuthController extends Controller
                 'name' => $validated['store_name'],
                 'description' => $validated['description'] ?? null,
                 'is_open' => true,
-                'current_wait_min' => 0,
+                'current_wait_min' => 5,
                 'current_queue_count' => 0,
             ]);
 

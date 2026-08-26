@@ -25,8 +25,14 @@
 | /restaurants | GET | なし | ブース・店舗一覧取得 |
 | /restaurants/{id} | GET | なし | ブース・店舗詳細取得 |
 | /map/facilities | GET | なし | マップ表示データ取得 |
+| /call-numbers | GET | なし | 来場者向け呼び出し番号一覧 |
+| /monitor/call-numbers | GET | なし | 校内モニター向け呼び出し番号一覧 |
+| /events | GET | なし | イベント・お知らせ一覧取得 |
+| /events/{id} | GET | なし | イベント・お知らせ詳細取得 |
 | /auth/login | POST | なし | 店舗ログイン |
+| /auth/logout | POST | Bearer Token | 店舗ログアウト |
 | /auth/register | POST | なし | 店舗登録（今後は管理画面へ移行予定） |
+| /store/{id}/wait-time | PATCH | Bearer Token | 待ち時間・待ち人数更新 |
 | /booth/auth/login | POST | なし | 店舗ログイン |
 | /booth/auth/logout | POST | Bearer Token | 店舗ログアウト |
 | /booth/dashboard | GET | Bearer Token | 店舗ダッシュボード取得 |
@@ -36,6 +42,26 @@
 | /booth/accounting/orders/{id} | GET | Bearer Token | 会計詳細取得 |
 | /booth/accounting/orders/ticket/{ticketNumber} | GET | Bearer Token | 受付番号で会計取得 |
 | /booth/accounting/orders/{id}/settle | PATCH | Bearer Token | 会計清算 |
+| /booth/accounting/orders/{id}/call | PATCH | Bearer Token | 会計を呼び出し中にする |
+| /booth/accounting/orders/{id}/serve | PATCH | Bearer Token | 会計を提供完了にする |
+| /booth/sales | GET | Bearer Token | 当日売上記録一覧 |
+| /booth/sales | POST | Bearer Token | 当日売上入力 |
+| /booth/sales/{id} | PATCH | Bearer Token | 当日売上記録の編集 |
+| /booth/sales/{id} | DELETE | Bearer Token | 当日売上記録の削除 |
+| /admin/auth/login | POST | なし | 管理者ログイン |
+| /admin/auth/logout | POST | Bearer Token | 管理者ログアウト |
+| /admin/stores | GET | Bearer Token | 店舗一覧取得 |
+| /admin/stores | POST | Bearer Token | 新規店舗作成 |
+| /admin/stores/{id} | GET | Bearer Token | 店舗詳細取得 |
+| /admin/stores/{id} | PATCH | Bearer Token | 店舗編集 |
+| /admin/stores/{id} | DELETE | Bearer Token | 店舗削除（非表示化） |
+| /admin/revenue | GET | Bearer Token | 総収益取得 |
+| /admin/analytics | GET | Bearer Token | 集計・分析・可視化用データ取得 |
+| /admin/events | GET | Bearer Token | イベント・お知らせ一覧（管理者） |
+| /admin/events | POST | Bearer Token | イベント・お知らせ作成 |
+| /admin/events/{id} | GET | Bearer Token | イベント・お知らせ詳細（管理者） |
+| /admin/events/{id} | PATCH | Bearer Token | イベント・お知らせ編集 |
+| /admin/events/{id} | DELETE | Bearer Token | イベント・お知らせ削除 |
 
 ## 4. 各API詳細
 
@@ -125,7 +151,21 @@ GET /api/v1/restaurants/{id}
 	"description": "学園祭限定メニューを提供するカフェ",
 	"is_open": true,
 	"wait_time": 10,
-	"ticket_numbers": ["C-120", "C-121", "Y-122"]
+	"current_wait_min": 10,
+	"current_queue_count": 5,
+	"wait_display_mode": "minutes",
+	"wait_display_text": null,
+	"map_facility_id": "1",
+	"menu_items": [
+		{
+			"id": 1,
+			"name": "ブレンドコーヒー",
+			"description": "ホット",
+			"price": 350,
+			"is_available": true
+		}
+	],
+	"ticket_numbers": ["C-120"]
 }
 ```
 
@@ -220,6 +260,7 @@ PATCH /api/v1/store/{id}/wait-time
 - 404 Not Found: 指定した店舗IDが存在しない場合
 
 今後、時間で開始するブース向けに、数値の待ち時間ではなくテキスト表示を返せる項目を追加する。
+`wait_display_mode` を `text` にし、`wait_display_text` に表示文言を入れる。
 
 ### 4.5 マップ表示データ取得
 ```javascript
@@ -302,8 +343,22 @@ GET /api/v1/booth/dashboard
 ```
 
 #### 説明
-ログイン中店舗の店舗名、説明、営業状態、待ち時間、待ち人数を取得する。
-今後、総収益もレスポンスへ追加する。
+ログイン中店舗の店舗名、説明、営業状態、待ち時間、待ち人数、総収益を取得する。
+
+#### 成功レスポンス (200)
+```json
+{
+  "id": "store-101",
+  "name": "KTCカフェ",
+  "description": "学園祭限定メニューを提供するカフェ",
+  "is_open": true,
+  "current_wait_min": 10,
+  "current_queue_count": 5,
+  "wait_display_mode": "minutes",
+  "wait_display_text": null,
+  "revenue": 12000
+}
+```
 
 ### 4.7 店舗会計 API
 
@@ -332,26 +387,69 @@ PATCH /api/v1/booth/accounting/orders/{id}/settle
 ```
 
 紙媒体の決済合計と照合するため、店舗側で清算済みとして記録する。
-今後、当日アプリ内で売上を直接入力できる API を追加する。
 
-### 4.8 今後追加予定 API
+#### 呼び出し
+```javascript
+PATCH /api/v1/booth/accounting/orders/{id}/call
+```
 
-#### 管理画面
+受付番号を呼び出し中にする。`called_at` を記録する。
+
+#### 提供完了
+```javascript
+PATCH /api/v1/booth/accounting/orders/{id}/serve
+```
+
+提供完了として記録し、待ち人数を 1 減らす。
+
+### 4.8 当日売上入力
+
+```javascript
+GET /api/v1/booth/sales
+POST /api/v1/booth/sales
+PATCH /api/v1/booth/sales/{id}
+DELETE /api/v1/booth/sales/{id}
+```
+
+店舗が当日アプリ内で売上を入力し、紙媒体の決済合計と突き合わせる。
+
+#### 作成リクエスト
+```json
+{
+  "amount": 15000,
+  "memo": "午前レジ締め"
+}
+```
+
+### 4.9 呼び出し番号
+
+```javascript
+GET /api/v1/call-numbers
+GET /api/v1/monitor/call-numbers
+```
+
+- 来場者向けは、現在呼び出し中の番号一覧を返す
+- 校内モニター向けは、店舗ごとに呼び出し中番号と提供待ち番号を返す
+
+### 4.10 イベント・お知らせ
+
+```javascript
+GET /api/v1/events
+GET /api/v1/events/{id}
+```
+
+公開中かつ表示期間内のイベント・お知らせを返す。管理者は `/admin/events` で作成・編集・削除できる。
+
+### 4.11 管理画面
+
 - `GET /api/v1/admin/stores`: 店舗一覧取得
 - `POST /api/v1/admin/stores`: 新規店舗作成
 - `GET /api/v1/admin/stores/{id}`: 店舗詳細取得
 - `PATCH /api/v1/admin/stores/{id}`: 店舗編集
-- `DELETE /api/v1/admin/stores/{id}`: 店舗削除
-- `GET /api/v1/admin/revenue`: 総収益取得
+- `DELETE /api/v1/admin/stores/{id}`: 店舗削除（非表示化）
+- `GET /api/v1/admin/revenue`: 総収益取得（会計清算 + 当日売上入力）
 - `GET /api/v1/admin/analytics`: 集計・分析・可視化用データ取得
-
-#### 呼び出し番号・モニター
-- `GET /api/v1/call-numbers`: 来場者向け呼び出し番号一覧
-- `GET /api/v1/monitor/call-numbers`: 校内モニター向け呼び出し番号一覧
-
-#### イベント・お知らせ
-- `GET /api/v1/events`: イベント・お知らせ一覧取得
-- `GET /api/v1/events/{id}`: イベント・お知らせ詳細取得
+- `GET|POST|PATCH|DELETE /api/v1/admin/events`: イベント・お知らせ管理
 
 ## 5. エラー仕様
 

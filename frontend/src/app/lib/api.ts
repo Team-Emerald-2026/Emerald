@@ -15,6 +15,9 @@ export interface BoothDashboard {
   is_open: boolean;
   current_wait_min: number;
   current_queue_count: number;
+  wait_display_mode?: 'minutes' | 'text';
+  wait_display_text?: string | null;
+  revenue?: number;
 }
 
 export interface BackendStore {
@@ -26,6 +29,20 @@ export interface BackendStore {
   type?: string;
   current_wait_min: number;
   current_queue_count: number;
+  wait_time?: number;
+  wait_display_mode?: 'minutes' | 'text';
+  wait_display_text?: string | null;
+  map_facility_id?: string | null;
+  menu_items?: BackendMenuItem[];
+  ticket_numbers?: string[];
+}
+
+export interface BackendMenuItem {
+  id: number;
+  name: string;
+  description: string | null;
+  price: number;
+  is_available: boolean;
 }
 
 export interface AdminLoginResponse {
@@ -309,6 +326,226 @@ export function fetchAdminAnalytics(token: string, signal?: AbortSignal) {
   );
 }
 
+export function fetchAdminStore(token: string, id: string, signal?: AbortSignal) {
+  return request(`/v1/admin/stores/${encodeURIComponent(id)}`, { signal, token }).then((payload) =>
+    isRecord(payload) ? (payload.data as AdminStore) : null,
+  );
+}
+
+export function fetchAdminRevenue(token: string, signal?: AbortSignal) {
+  return request('/v1/admin/revenue', { signal, token }).then((payload) =>
+    isRecord(payload) ? (payload.data as AdminRevenue) : null,
+  );
+}
+
+export interface AdminRevenueStore {
+  store_id: string;
+  store_name: string;
+  order_revenue: number;
+  sales_entry_revenue: number;
+  revenue: number;
+}
+
+export interface AdminRevenue {
+  total_revenue: number;
+  order_revenue: number;
+  sales_entry_revenue: number;
+  stores: AdminRevenueStore[];
+}
+
+export interface EventNotice {
+  id: string;
+  title: string;
+  body: string;
+  type: 'event' | 'notice';
+  starts_at: string | null;
+  ends_at: string | null;
+  is_published?: boolean;
+}
+
+export interface EventNoticeInput {
+  title: string;
+  body: string;
+  type: 'event' | 'notice';
+  starts_at?: string | null;
+  ends_at?: string | null;
+  is_published?: boolean;
+}
+
+export function fetchEvents(signal?: AbortSignal) {
+  return request('/v1/events', { signal }).then((payload) =>
+    normalizeCollection<EventNotice>(payload),
+  );
+}
+
+export function fetchEvent(id: string, signal?: AbortSignal) {
+  return request(`/v1/events/${encodeURIComponent(id)}`, { signal }).then((payload) =>
+    normalizeItem<EventNotice>(payload),
+  );
+}
+
+export function fetchAdminEvents(token: string, signal?: AbortSignal) {
+  return request('/v1/admin/events', { signal, token }).then((payload) =>
+    normalizeCollection<EventNotice>(payload),
+  );
+}
+
+export function createAdminEvent(token: string, input: EventNoticeInput, signal?: AbortSignal) {
+  return request('/v1/admin/events', {
+    method: 'POST',
+    token,
+    body: input,
+    signal,
+  }).then((payload) => normalizeItem<EventNotice>(payload));
+}
+
+export function updateAdminEvent(
+  token: string,
+  id: string,
+  input: EventNoticeInput,
+  signal?: AbortSignal,
+) {
+  return request(`/v1/admin/events/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    token,
+    body: input,
+    signal,
+  }).then((payload) => normalizeItem<EventNotice>(payload));
+}
+
+export function deleteAdminEvent(token: string, id: string, signal?: AbortSignal) {
+  return request(`/v1/admin/events/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    token,
+    signal,
+  });
+}
+
+export interface CallNumber {
+  id: string;
+  store_id: string;
+  store_name: string | null;
+  ticket_number: string;
+  called_at: string | null;
+}
+
+export interface MonitorCallNumber {
+  store_id: string;
+  store_name: string;
+  current_call_number: string | null;
+  called_numbers: string[];
+  waiting_numbers: string[];
+  waiting_count: number;
+}
+
+export function fetchCallNumbers(storeId?: string, signal?: AbortSignal) {
+  const query = storeId ? `?store_id=${encodeURIComponent(storeId)}` : '';
+  return request(`/v1/call-numbers${query}`, { signal }).then((payload) => {
+    if (isRecord(payload) && Array.isArray(payload.data)) return payload.data as CallNumber[];
+    return [];
+  });
+}
+
+export function fetchMonitorCallNumbers(signal?: AbortSignal) {
+  return request('/v1/monitor/call-numbers', { signal }).then((payload) => {
+    if (isRecord(payload) && Array.isArray(payload.data)) return payload.data as MonitorCallNumber[];
+    return [];
+  });
+}
+
+export interface SalesEntry {
+  id: string;
+  store_id: string;
+  amount: number;
+  memo: string | null;
+  recorded_at: string | null;
+}
+
+export interface SalesEntryInput {
+  amount: number;
+  memo?: string;
+  recorded_at?: string;
+}
+
+export function fetchBoothSales(token: string, signal?: AbortSignal) {
+  return request('/v1/booth/sales', { signal, token }).then((payload) =>
+    normalizeCollection<SalesEntry>(payload),
+  );
+}
+
+export function createBoothSale(token: string, input: SalesEntryInput, signal?: AbortSignal) {
+  return request('/v1/booth/sales', {
+    method: 'POST',
+    token,
+    body: input,
+    signal,
+  }).then((payload) => normalizeItem<SalesEntry>(payload));
+}
+
+export function updateBoothSale(
+  token: string,
+  id: string,
+  input: SalesEntryInput,
+  signal?: AbortSignal,
+) {
+  return request(`/v1/booth/sales/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    token,
+    body: input,
+    signal,
+  }).then((payload) => normalizeItem<SalesEntry>(payload));
+}
+
+export function deleteBoothSale(token: string, id: string, signal?: AbortSignal) {
+  return request(`/v1/booth/sales/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    token,
+    signal,
+  });
+}
+
+export function updateWaitTime(
+  token: string,
+  storeId: string,
+  input: {
+    current_wait_min: number;
+    current_queue_count: number;
+    wait_display_mode?: 'minutes' | 'text';
+    wait_display_text?: string | null;
+  },
+  signal?: AbortSignal,
+) {
+  return request(`/v1/store/${encodeURIComponent(storeId)}/wait-time`, {
+    method: 'PATCH',
+    token,
+    body: input,
+    signal,
+  }) as Promise<{
+    id: string;
+    current_wait_min: number;
+    current_queue_count: number;
+    wait_display_mode: 'minutes' | 'text';
+    wait_display_text: string | null;
+    updated_at: string | null;
+  }>;
+}
+
+export function callBoothOrder(token: string, orderId: number, signal?: AbortSignal) {
+  return request(`/v1/booth/accounting/orders/${orderId}/call`, {
+    method: 'PATCH',
+    token,
+    signal,
+  });
+}
+
+export function serveBoothOrder(token: string, orderId: number, signal?: AbortSignal) {
+  return request(`/v1/booth/accounting/orders/${orderId}/serve`, {
+    method: 'PATCH',
+    token,
+    signal,
+  });
+}
+
 export interface AuthResponse {
   token: string;
   store_id: string;
@@ -378,7 +615,7 @@ export function updateStoreProfile(
   input: {
     name: string;
     description: string;
-    is_open: boolean;
+    current_wait_min: number;
   },
   signal?: AbortSignal,
 ) {

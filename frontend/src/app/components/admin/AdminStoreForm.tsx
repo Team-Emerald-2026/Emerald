@@ -22,7 +22,7 @@ const emptyInput: AdminStoreInput = {
   password: '',
   is_open: true,
   is_visible: true,
-  current_wait_min: 0,
+  current_wait_min: 5,
   current_queue_count: 0,
 };
 
@@ -165,7 +165,7 @@ export default function AdminStoreForm({ store, saving, onCancel, onSubmit }: Pr
           />
         </label>
         <label className="text-sm">
-          <span className="mb-1 block text-muted-foreground">待ち時間（分）</span>
+          <span className="mb-1 block text-muted-foreground">一人当たりの待ち時間（分）</span>
           <input
             type="number"
             min={0}

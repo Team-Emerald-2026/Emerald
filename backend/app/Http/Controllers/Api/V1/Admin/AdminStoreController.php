@@ -15,6 +15,29 @@ use Illuminate\Validation\Rule;
 
 class AdminStoreController extends Controller
 {
+    public function show(Request $request, string $id)
+    {
+        $this->authorizeAdmin($request);
+
+        $store = Store::query()->findOrFail($id);
+        $user = User::query()
+            ->where('role', 'store')
+            ->where('store_id', $store->id)
+            ->first();
+        $revenue = Order::query()
+            ->select('store_id')
+            ->selectRaw('SUM(CASE WHEN status = ? THEN total_price ELSE 0 END) as revenue', ['settled'])
+            ->selectRaw('COUNT(*) as order_count')
+            ->where('store_id', $store->id)
+            ->groupBy('store_id')
+            ->first();
+        $facility = MapFacilities::query()->where('store_id', $store->id)->first();
+
+        return response()->json([
+            'data' => $this->serializeStore($store, $user, $revenue, $facility),
+        ], 200, [], JSON_UNESCAPED_UNICODE);
+    }
+
     public function index(Request $request)
     {
         $this->authorizeAdmin($request);
@@ -78,7 +101,7 @@ class AdminStoreController extends Controller
                 'ticket_prefix' => $this->makeTicketPrefix($validated['ticket_prefix'] ?? $validated['name']),
                 'is_open' => $validated['is_open'] ?? true,
                 'is_visible' => true,
-                'current_wait_min' => $validated['current_wait_min'] ?? 0,
+                'current_wait_min' => $validated['current_wait_min'] ?? 5,
                 'current_queue_count' => $validated['current_queue_count'] ?? 0,
             ]);
 

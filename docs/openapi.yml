@@ -20,7 +20,11 @@ tags:
   - name: auth
     description: 店舗認証
   - name: store
-    description: 店舗向け操作（一部未実装）
+    description: 店舗向け操作
+  - name: call-numbers
+    description: 呼び出し番号
+  - name: events
+    description: イベント・お知らせ
 
 paths:
   /restaurants:
@@ -129,8 +133,8 @@ paths:
   /store/{id}/wait-time:
     patch:
       tags: [store]
-      summary: 待ち時間更新（未実装・予定）
-      description: api.md に定義あり。現状 routes 未実装。
+      summary: 待ち時間更新
+      description: 店舗側が待ち時間や待ち人数を更新する。時間開始型ブースは wait_display_mode=text を利用できる。
       operationId: updateWaitTime
       security:
         - BearerAuth: []
@@ -157,6 +161,124 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+
+  /call-numbers:
+    get:
+      tags: [call-numbers]
+      summary: 来場者向け呼び出し番号一覧
+      operationId: listCallNumbers
+      security: []
+      parameters:
+        - name: store_id
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: 成功
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /monitor/call-numbers:
+    get:
+      tags: [call-numbers]
+      summary: 校内モニター向け呼び出し番号一覧
+      operationId: listMonitorCallNumbers
+      security: []
+      responses:
+        "200":
+          description: 成功
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /events:
+    get:
+      tags: [events]
+      summary: イベント・お知らせ一覧
+      operationId: listEvents
+      security: []
+      responses:
+        "200":
+          description: 成功
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /events/{id}:
+    get:
+      tags: [events]
+      summary: イベント・お知らせ詳細
+      operationId: getEvent
+      security: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: 成功
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /booth/sales:
+    get:
+      tags: [store]
+      summary: 当日売上記録一覧
+      operationId: listBoothSales
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: 成功
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      tags: [store]
+      summary: 当日売上入力
+      operationId: createBoothSale
+      security:
+        - BearerAuth: []
+      responses:
+        "201":
+          description: 作成成功
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /admin/stores/{id}:
+    get:
+      tags: [store]
+      summary: 管理者向け店舗詳細
+      operationId: getAdminStore
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/StoreId"
+      responses:
+        "200":
+          description: 成功
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /admin/revenue:
+    get:
+      tags: [store]
+      summary: 総収益取得
+      operationId: getAdminRevenue
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: 成功
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
 
 components:
   securitySchemes:
@@ -304,6 +426,12 @@ components:
           type: integer
           minimum: 0
           example: 10
+        wait_display_mode:
+          type: string
+          enum: [minutes, text]
+        wait_display_text:
+          type: string
+          nullable: true
 
     WaitTimeUpdateResponse:
       type: object

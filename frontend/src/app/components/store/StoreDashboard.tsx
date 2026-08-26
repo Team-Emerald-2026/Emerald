@@ -59,7 +59,7 @@ export default function StoreDashboard() {
       color: 'var(--primary)',
     },
     {
-      label: '現在待ち時間',
+      label: '一人当たり待ち時間',
       value: dashboard ? `${dashboard.current_wait_min}` : '---',
       unit: '分',
       icon: Megaphone,

@@ -66,12 +66,12 @@ class BoothDashboardTest extends TestCase
         $this->patchJson('/api/v1/booth/dashboard/store-profile-edit', [
             'name' => '新店舗名',
             'description' => '新説明',
-            'is_open' => true,
+            'current_wait_min' => 5,
         ])
             ->assertOk()
             ->assertJsonPath('data.id', 'store-profile-edit')
             ->assertJsonPath('data.name', '新店舗名')
             ->assertJsonPath('data.description', '新説明')
-            ->assertJsonPath('data.is_open', true);
+            ->assertJsonPath('data.current_wait_min', 5);
     }
 }

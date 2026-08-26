@@ -8,6 +8,7 @@ use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
+use Symfony\Component\HttpKernel\Exception\HttpException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 return Application::configure(basePath: dirname(__DIR__))
@@ -101,6 +102,35 @@ return Application::configure(basePath: dirname(__DIR__))
                 'FORBIDDEN',
                 __('errors.forbidden'),
                 403,
+            );
+        });
+
+        $exceptions->render(function (HttpException $e, Request $request) use ($renderApiError, $isApiRequest) {
+            if (! $isApiRequest($request)) {
+                return null;
+            }
+
+            $status = $e->getStatusCode();
+            $code = match ($status) {
+                400 => 'INVALID_PARAMS',
+                401 => 'UNAUTHORIZED',
+                403 => 'FORBIDDEN',
+                404 => 'NOT_FOUND',
+                409 => 'CONFLICT',
+                default => $status >= 500 ? 'INTERNAL_ERROR' : 'HTTP_ERROR',
+            };
+            $fallback = match ($status) {
+                400 => __('errors.invalid_params'),
+                401 => __('errors.unauthorized'),
+                403 => __('errors.forbidden'),
+                404 => __('errors.not_found'),
+                default => __('errors.internal_error'),
+            };
+
+            return $renderApiError(
+                $code,
+                $e->getMessage() !== '' ? $e->getMessage() : $fallback,
+                $status,
             );
         });
 

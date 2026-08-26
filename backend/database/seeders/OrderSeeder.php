@@ -17,8 +17,8 @@ class OrderSeeder extends Seeder
             [
                 'total_price' => 650,
                 'status' => 'issued',
-                'ordered_at' => now(),
-                'called_at' => null,
+                'ordered_at' => now()->subMinutes(8),
+                'called_at' => now()->subMinutes(1),
                 'served_at' => null,
                 'settled_at' => null,
                 'created_at' => now(),

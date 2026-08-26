@@ -8,12 +8,14 @@ import {
 } from '../../lib/api';
 import { useFestival } from '../../lib/festivalStore';
 
+const DEFAULT_WAIT_MIN_PER_PERSON = 5;
+
 export default function StoreProfile() {
   const session = useFestival((s) => s.session);
   const [profile, setProfile] = useState<StoreProfileData | null>(null);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
-  const [isOpen, setIsOpen] = useState(true);
+  const [waitMin, setWaitMin] = useState(DEFAULT_WAIT_MIN_PER_PERSON);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(true);
@@ -31,7 +33,8 @@ export default function StoreProfile() {
         setProfile(data);
         setName(data.name);
         setDescription(data.description ?? '');
-        setIsOpen(data.is_open);
+        const wait = Number(data.current_wait_min);
+        setWaitMin(Number.isFinite(wait) && wait > 0 ? wait : DEFAULT_WAIT_MIN_PER_PERSON);
       })
       .catch((err: unknown) => {
         setError(err instanceof Error ? err.message : '店舗情報を取得できませんでした。');
@@ -52,6 +55,10 @@ export default function StoreProfile() {
       setError('説明を入力してください。');
       return;
     }
+    if (!Number.isInteger(waitMin) || waitMin < 0) {
+      setError('一人当たりの待ち時間は0以上の整数で入力してください。');
+      return;
+    }
 
     setSaving(true);
     setError('');
@@ -61,12 +68,13 @@ export default function StoreProfile() {
       const updated = await updateStoreProfile(session.token, profile.id, {
         name: name.trim(),
         description: description.trim(),
-        is_open: isOpen,
+        current_wait_min: waitMin,
       });
       setProfile(updated);
       setName(updated.name);
       setDescription(updated.description ?? '');
-      setIsOpen(updated.is_open);
+      const wait = Number(updated.current_wait_min);
+      setWaitMin(Number.isFinite(wait) && wait > 0 ? wait : DEFAULT_WAIT_MIN_PER_PERSON);
       setMessage('店舗情報を保存しました。');
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : '保存に失敗しました。');
@@ -136,13 +144,23 @@ export default function StoreProfile() {
               />
             </label>
 
-            <label className="flex items-center gap-2 text-sm text-foreground">
-              <input
-                type="checkbox"
-                checked={isOpen}
-                onChange={(e) => setIsOpen(e.target.checked)}
-              />
-              営業中にする
+            <label className="block text-sm">
+              <span className="mb-1 block text-muted-foreground">一人当たりの待ち時間</span>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  min={0}
+                  max={180}
+                  step={1}
+                  value={waitMin}
+                  onChange={(e) => setWaitMin(Number(e.target.value))}
+                  className="w-full rounded-lg border border-input bg-background px-3 py-2.5 text-foreground outline-none"
+                />
+                <span className="shrink-0 text-sm text-muted-foreground">分</span>
+              </div>
+              <span className="mt-1 block text-xs text-muted-foreground">
+                未設定の場合の初期値は{DEFAULT_WAIT_MIN_PER_PERSON}分です。
+              </span>
             </label>
 
             <button
@@ -159,9 +177,9 @@ export default function StoreProfile() {
           <div className="grid grid-cols-2 gap-3">
             <section className="rounded-2xl border border-border bg-card p-4">
               <Clock className="h-5 w-5" style={{ color: 'var(--primary)' }} />
-              <p className="mt-2 text-sm text-muted-foreground">待ち時間</p>
+              <p className="mt-2 text-sm text-muted-foreground">一人当たり待ち時間</p>
               <p className="font-display text-2xl font-bold text-foreground">
-                {profile.current_wait_min}
+                {profile.current_wait_min > 0 ? profile.current_wait_min : DEFAULT_WAIT_MIN_PER_PERSON}
                 <span className="ml-1 text-sm font-medium">分</span>
               </p>
             </section>

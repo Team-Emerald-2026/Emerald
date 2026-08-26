@@ -196,6 +196,8 @@ class AccountingController extends Controller
                 $order->items()->create($normalizedItem);
             }
 
+            Store::query()->whereKey($storeId)->increment('current_queue_count');
+
             return $order->load(['items' => function ($query) {
                 $query->select([
                     'id',
@@ -249,6 +251,95 @@ class AccountingController extends Controller
         return OrderResource::make($order)
             ->response()
             ->setEncodingOptions(JSON_UNESCAPED_UNICODE);
+    }
+
+    public function call(int $id)
+    {
+        $order = $this->findStoreOrder($id);
+
+        if (! $order) {
+            return $this->orderNotFound();
+        }
+
+        if ($order->served_at !== null || $order->status === 'canceled') {
+            return response()->json([
+                'error' => [
+                    'code' => 'CONFLICT',
+                    'message' => 'この会計は呼び出しできません',
+                    'details' => ['status' => $order->status],
+                ],
+            ], 409, [], JSON_UNESCAPED_UNICODE);
+        }
+
+        $order->called_at = now();
+        $order->save();
+
+        return OrderResource::make($order)
+            ->response()
+            ->setEncodingOptions(JSON_UNESCAPED_UNICODE);
+    }
+
+    public function serve(int $id)
+    {
+        $order = $this->findStoreOrder($id);
+
+        if (! $order) {
+            return $this->orderNotFound();
+        }
+
+        if ($order->served_at !== null || $order->status === 'canceled') {
+            return response()->json([
+                'error' => [
+                    'code' => 'CONFLICT',
+                    'message' => 'この会計はすでに提供済みです',
+                    'details' => ['status' => $order->status],
+                ],
+            ], 409, [], JSON_UNESCAPED_UNICODE);
+        }
+
+        $wasWaiting = $order->served_at === null;
+        $order->called_at = $order->called_at ?? now();
+        $order->served_at = now();
+        $order->save();
+
+        if ($wasWaiting) {
+            Store::query()
+                ->whereKey($this->currentStoreId())
+                ->where('current_queue_count', '>', 0)
+                ->decrement('current_queue_count');
+        }
+
+        return OrderResource::make($order)
+            ->response()
+            ->setEncodingOptions(JSON_UNESCAPED_UNICODE);
+    }
+
+    private function findStoreOrder(int $id): ?Order
+    {
+        return Order::query()
+            ->forStore($this->currentStoreId())
+            ->with(['items' => function ($query) {
+                $query->select([
+                    'id',
+                    'order_id',
+                    'menu_item_id',
+                    'quantity',
+                    'unit_price',
+                    'subtotal',
+                ]);
+            }])
+            ->find($id);
+    }
+
+    private function orderNotFound()
+    {
+        return response()->json([
+            'error' => [
+                'code' => 'NOT_FOUND',
+                'message' => '指定した会計が見つかりません',
+                'details' => ['field' => 'id'],
+            ],
+        ], 404, [], JSON_UNESCAPED_UNICODE);
     }
 
     private function generateNextTicketNumber(string $storeId): string
