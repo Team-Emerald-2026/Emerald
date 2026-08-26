@@ -102,7 +102,7 @@ function toFacility(facility: BackendMapFacility): Facility {
 
   return {
     id: facility.id,
-    storeId: facility.store_id,
+    storeId: facility.store_id ?? '',
     name: facility.name,
     type: toBoothType(facility.type),
     floor: `${Number.isFinite(floor) ? floor : 1}F`,
@@ -137,8 +137,6 @@ export default function Map() {
   const [facilities, setFacilities] = useState<Facility[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [clickPos, setClickPos] = useState<{ x: number; y: number } | null>(null);
-  const targetStoreId = searchParams.get('store');
-  const targetFacilityId = searchParams.get('facility');
 
   useEffect(() => {
     const controller = new AbortController();
@@ -166,8 +164,6 @@ export default function Map() {
 
   useEffect(() => {
     const target = displayFacilities.find(
-      (f) => f.storeId === targetStoreId || f.id === targetFacilityId,
-    const target = facilities.find(
       (f) =>
         (targetStoreId != null && f.storeId === targetStoreId) ||
         (targetFacilityId != null && f.id === targetFacilityId),
@@ -283,11 +279,9 @@ export default function Map() {
         </label>
       </div>
 
-      {/* 校内マップ */}
-      <div className="relative aspect-[825/466] w-full overflow-hidden rounded-2xl border border-border bg-muted">
       {/* 校内マップ（クリックで座標を計測・開発用） */}
       <div
-        className="relative aspect-[4/3] w-full cursor-crosshair overflow-hidden rounded-2xl border border-border bg-muted"
+        className="relative aspect-[825/466] w-full cursor-crosshair overflow-hidden rounded-2xl border border-border bg-muted"
         onClick={(e) => {
           const rect = e.currentTarget.getBoundingClientRect();
           const x = Math.round(((e.clientX - rect.left) / rect.width) * 100);

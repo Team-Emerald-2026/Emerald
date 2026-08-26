@@ -12,8 +12,11 @@ class FacilityController extends Controller
     public function index(): JsonResponse
     {
         $facilities = MapFacilities::query()
-            ->join('stores', 'map_facilities.store_id', '=', 'stores.id')
-            ->where('stores.is_visible', true)
+            ->leftJoin('stores', 'map_facilities.store_id', '=', 'stores.id')
+            ->where(function ($query) {
+                $query->whereNull('map_facilities.store_id')
+                    ->orWhere('stores.is_visible', true);
+            })
             ->select([
                 'map_facilities.id',
                 'map_facilities.store_id',

@@ -23,6 +23,7 @@ export interface BackendStore {
   description: string | null;
   is_open: boolean;
   is_visible?: boolean;
+  type?: string;
   current_wait_min: number;
   current_queue_count: number;
 }
