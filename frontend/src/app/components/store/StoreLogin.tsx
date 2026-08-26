@@ -1,11 +1,12 @@
 import { useState } from 'react';
-import { Navigate, useNavigate, Link } from 'react-router-dom';
+import { Navigate, useNavigate } from 'react-router-dom';
 import { Store, KeyRound } from 'lucide-react';
-import { useFestival, loginStore } from '../../lib/festivalStore';
+import { useFestival, loginAdminSession, loginStore } from '../../lib/festivalStore';
 import { ApiError, loginBooth } from '../../lib/api';
 
 export default function StoreLogin() {
   const session = useFestival((s) => s.session);
+  const adminSession = useFestival((s) => s.adminSession);
   const navigate = useNavigate();
   const [id, setId] = useState('');
   const [pw, setPw] = useState('');
@@ -13,6 +14,7 @@ export default function StoreLogin() {
   const [submitting, setSubmitting] = useState(false);
 
   if (session) return <Navigate to="/store" replace />;
+  if (adminSession) return <Navigate to="/admin" replace />;
 
   const submit = async () => {
     if (submitting) return;
@@ -29,6 +31,15 @@ export default function StoreLogin() {
     setError('');
     try {
       const result = await loginBooth(id.trim(), pw);
+      if (result.role === 'admin') {
+        loginAdminSession(id.trim(), result.token);
+        navigate('/admin');
+        return;
+      }
+      if (!result.store_id) {
+        setError('店舗情報がないアカウントです。');
+        return;
+      }
       loginStore(result.store_id, result.token);
       navigate('/store/dashboard');
     } catch (e) {
@@ -100,11 +111,8 @@ export default function StoreLogin() {
           {submitting ? 'ログイン中...' : 'ログイン'}
         </button>
 
-        <p className="text-center text-sm text-muted-foreground">
-          初めての方は{' '}
-          <Link to="/store/register" className="underline" style={{ color: 'var(--primary)' }}>
-            新規登録
-          </Link>
+        <p className="text-center text-xs text-muted-foreground">
+          管理者IDでログインすると管理画面に移動します。
         </p>
         
       </div>

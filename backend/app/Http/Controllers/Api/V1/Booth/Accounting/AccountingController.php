@@ -302,4 +302,13 @@ class AccountingController extends Controller
     {
         return Auth::user()->store_id;
     }
+
+    private function ticketPrefixForStoreId(string $storeId): string
+    {
+        $prefix = Store::query()
+            ->whereKey($storeId)
+            ->value('ticket_prefix');
+
+        return $prefix ?: strtoupper(substr($storeId, -1));
+    }
 }

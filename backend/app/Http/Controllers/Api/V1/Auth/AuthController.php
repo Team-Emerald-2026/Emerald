@@ -43,6 +43,7 @@ class AuthController extends Controller
                 'store_id' => $store->id,
                 'login_id' => $validated['login_id'],
                 'password' => Hash::make($validated['password']),
+                'role' => 'store',
             ]);
 
             $token = $user->createToken('api-token')->plainTextToken;
@@ -52,6 +53,7 @@ class AuthController extends Controller
                 'store_id' => $store->id,
                 'store_name' => $store->name,
                 'login_id' => $user->login_id,
+                'role' => $user->role,
             ];
         });
 
@@ -76,6 +78,7 @@ class AuthController extends Controller
         return response()->json([
             'token' => $token,
             'store_id' => $user->store_id,
+            'role' => $user->role,
         ]);
     }
 

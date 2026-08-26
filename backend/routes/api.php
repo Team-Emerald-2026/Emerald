@@ -1,6 +1,9 @@
 <?php
 
 use App\Http\Controllers\Api\V1\Auth\AuthController;
+use App\Http\Controllers\Api\V1\Admin\AdminAuthController;
+use App\Http\Controllers\Api\V1\Admin\AdminAnalyticsController;
+use App\Http\Controllers\Api\V1\Admin\AdminStoreController;
 use App\Http\Controllers\Api\V1\Map\FacilityController;
 use App\Http\Controllers\Api\V1\Store\StoreController;
 
@@ -40,7 +43,20 @@ Route::prefix('v1/booth')->group(function () {
         Route::get('accounting/orders/{id}', [AccountingController::class, 'show'])->whereNumber('id');
         Route::post('accounting/orders', [AccountingController::class, 'store']);
         Route::patch('accounting/orders/{id}/settle', [AccountingController::class, 'settle'])->whereNumber('id');
-        //Route::patch('dashboard/{id}', [DashboardController::class, 'update']);
+        Route::patch('dashboard/{id}', [DashboardController::class, 'update']);
     });
 
+});
+
+Route::prefix('v1/admin')->group(function () {
+    Route::post('auth/login', [AdminAuthController::class, 'login']);
+
+    Route::middleware('auth:sanctum')->group(function () {
+        Route::post('auth/logout', [AdminAuthController::class, 'logout']);
+        Route::get('analytics', [AdminAnalyticsController::class, 'index']);
+        Route::get('stores', [AdminStoreController::class, 'index']);
+        Route::post('stores', [AdminStoreController::class, 'store']);
+        Route::patch('stores/{id}', [AdminStoreController::class, 'update']);
+        Route::delete('stores/{id}', [AdminStoreController::class, 'destroy']);
+    });
 });

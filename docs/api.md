@@ -22,11 +22,20 @@
 ## 3. エンドポイント一覧
 | エンドポイント | メソッド | 認証 | 説明 |
 | --- | ---: | --- | --- |
-| /restaurants | GET | なし | 飲食店一覧取得 |
-| /restaurants/{id} | GET | なし | 飲食店詳細取得 |
-| /store/login | POST | なし | 店舗ログイン（JWT発行） |
-| /store/{id}/wait-time | PATCH | Bearer JWT | 待ち時間更新 |
+| /restaurants | GET | なし | ブース・店舗一覧取得 |
+| /restaurants/{id} | GET | なし | ブース・店舗詳細取得 |
 | /map/facilities | GET | なし | マップ表示データ取得 |
+| /auth/login | POST | なし | 店舗ログイン |
+| /auth/register | POST | なし | 店舗登録（今後は管理画面へ移行予定） |
+| /booth/auth/login | POST | なし | 店舗ログイン |
+| /booth/auth/logout | POST | Bearer Token | 店舗ログアウト |
+| /booth/dashboard | GET | Bearer Token | 店舗ダッシュボード取得 |
+| /booth/accounting/menu-items | GET | Bearer Token | 店舗メニュー取得 |
+| /booth/accounting/orders | GET | Bearer Token | 会計一覧取得 |
+| /booth/accounting/orders | POST | Bearer Token | 会計作成・受付番号発行 |
+| /booth/accounting/orders/{id} | GET | Bearer Token | 会計詳細取得 |
+| /booth/accounting/orders/ticket/{ticketNumber} | GET | Bearer Token | 受付番号で会計取得 |
+| /booth/accounting/orders/{id}/settle | PATCH | Bearer Token | 会計清算 |
 
 ## 4. 各API詳細
 
@@ -42,7 +51,7 @@ GET /api/v1/restaurants
 ```
 
 #### 説明
-来場者向けに、注文可能な飲食店一覧を取得する。
+来場者向けに、表示対象のブース・店舗一覧を取得する。モバイルオーダーと予約システムは今後なくす方針のため、このAPIはブース一覧・ブース詳細・呼び出し番号導線の基礎データとして扱う。
 
 #### パラメータ
 | 項目 | 型 | 必須 | 説明 |
@@ -93,7 +102,15 @@ GET /api/v1/restaurants/{id}
 ```
 
 #### 説明
-来場者向けに、飲食店の詳細、待ち時間、受け取り番号一覧を取得する。
+来場者向けに、ブース・店舗の詳細、待ち時間、受付番号情報を取得する。
+
+今後、レスポンスには以下を含める。
+- 店舗名
+- 説明
+- メニュー一覧
+- 場所（マップリンクに利用できる `map_facility_id` または `store_id`）
+- 電子呼び出し番号
+- 一人あたりの待ち時間
 
 #### パラメータ
 | 項目 | 型 | 必須 | 説明 |
@@ -202,6 +219,8 @@ PATCH /api/v1/store/{id}/wait-time
 - 403 Forbidden: 自店舗以外の待ち時間を更新しようとした場合
 - 404 Not Found: 指定した店舗IDが存在しない場合
 
+今後、時間で開始するブース向けに、数値の待ち時間ではなくテキスト表示を返せる項目を追加する。
+
 ### 4.5 マップ表示データ取得
 ```javascript
 GET /api/v1/map/facilities
@@ -274,6 +293,65 @@ GET /api/v1/map/facilities
 
 #### エラー例
 - 500 Internal Server Error: マップ表示データの取得に失敗した場合
+
+今後、フロント側ではマップフィルタを削除する予定。API は引き続き施設種別や階層を返すが、主用途はフロア画像上のピン描画とブース詳細へのリンクにする。
+
+### 4.6 店舗ダッシュボード取得
+```javascript
+GET /api/v1/booth/dashboard
+```
+
+#### 説明
+ログイン中店舗の店舗名、説明、営業状態、待ち時間、待ち人数を取得する。
+今後、総収益もレスポンスへ追加する。
+
+### 4.7 店舗会計 API
+
+#### メニュー取得
+```javascript
+GET /api/v1/booth/accounting/menu-items
+```
+
+ログイン中店舗の商品メニューを取得する。
+
+#### 会計作成・受付番号発行
+```javascript
+POST /api/v1/booth/accounting/orders
+{
+  "items": [
+    { "menu_item_id": 1, "quantity": 2 }
+  ]
+}
+```
+
+会計を作成し、店舗ごとの `ticket_prefix` を使って `C-101` のような電子呼び出し番号を発行する。
+
+#### 会計清算
+```javascript
+PATCH /api/v1/booth/accounting/orders/{id}/settle
+```
+
+紙媒体の決済合計と照合するため、店舗側で清算済みとして記録する。
+今後、当日アプリ内で売上を直接入力できる API を追加する。
+
+### 4.8 今後追加予定 API
+
+#### 管理画面
+- `GET /api/v1/admin/stores`: 店舗一覧取得
+- `POST /api/v1/admin/stores`: 新規店舗作成
+- `GET /api/v1/admin/stores/{id}`: 店舗詳細取得
+- `PATCH /api/v1/admin/stores/{id}`: 店舗編集
+- `DELETE /api/v1/admin/stores/{id}`: 店舗削除
+- `GET /api/v1/admin/revenue`: 総収益取得
+- `GET /api/v1/admin/analytics`: 集計・分析・可視化用データ取得
+
+#### 呼び出し番号・モニター
+- `GET /api/v1/call-numbers`: 来場者向け呼び出し番号一覧
+- `GET /api/v1/monitor/call-numbers`: 校内モニター向け呼び出し番号一覧
+
+#### イベント・お知らせ
+- `GET /api/v1/events`: イベント・お知らせ一覧取得
+- `GET /api/v1/events/{id}`: イベント・お知らせ詳細取得
 
 ## 5. エラー仕様
 

@@ -6,10 +6,10 @@ import {
   updateStoreProfile,
   type StoreProfile as StoreProfileData,
 } from '../../lib/api';
-
-const TOKEN_KEY = 'kt_store_token';
+import { useFestival } from '../../lib/festivalStore';
 
 export default function StoreProfile() {
+  const session = useFestival((s) => s.session);
   const [profile, setProfile] = useState<StoreProfileData | null>(null);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -20,15 +20,13 @@ export default function StoreProfile() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    const token = localStorage.getItem(TOKEN_KEY);
-
-    if (!token) {
+    if (!session?.token) {
       setError('ログイン情報がありません。再度ログインしてください。');
       setLoading(false);
       return;
     }
 
-    fetchStoreProfile(token)
+    fetchStoreProfile(session.token)
       .then((data) => {
         setProfile(data);
         setName(data.name);
@@ -39,12 +37,10 @@ export default function StoreProfile() {
         setError(err instanceof Error ? err.message : '店舗情報を取得できませんでした。');
       })
       .finally(() => setLoading(false));
-  }, []);
+  }, [session?.token]);
 
   const save = async () => {
-    const token = localStorage.getItem(TOKEN_KEY);
-
-    if (!token || !profile) {
+    if (!session?.token || !profile) {
       setError('ログイン情報がありません。再度ログインしてください。');
       return;
     }
@@ -62,7 +58,7 @@ export default function StoreProfile() {
     setMessage('');
 
     try {
-      const updated = await updateStoreProfile(token, profile.id, {
+      const updated = await updateStoreProfile(session.token, profile.id, {
         name: name.trim(),
         description: description.trim(),
         is_open: isOpen,

@@ -14,6 +14,7 @@ class StoreResource extends JsonApiResource
         'name',
         'description',
         'is_open',
+        'is_visible',
         'current_wait_min',
         'current_queue_count',
     ];
@@ -31,6 +32,7 @@ class StoreResource extends JsonApiResource
             'name' => $this->resource->name,
             'description' => $this->resource->description,
             'is_open' => $this->resource->is_open,
+            'is_visible' => $this->resource->is_visible,
             'current_wait_min' => $this->resource->current_wait_min,
             'current_queue_count' => $this->resource->current_queue_count,
         ];

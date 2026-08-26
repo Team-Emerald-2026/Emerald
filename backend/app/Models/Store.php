@@ -16,11 +16,13 @@ class Store extends Model
         'description',
         'ticket_prefix',
         'is_open',
+        'is_visible',
         'current_wait_min',
         'current_queue_count',
     ];
 
     protected $casts = [
         'is_open' => 'boolean',
+        'is_visible' => 'boolean',
     ];
 }
