@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
-import { Home, Tent, ShoppingBag, MapPin, Sun, Moon } from 'lucide-react';
+import { Home, Tent, Hash, MapPin, Sun, Moon } from 'lucide-react';
 
 /** ライト/ダークの切替ボタン。選択は localStorage('theme') に保存。 */
 function ThemeToggle() {
@@ -28,14 +28,14 @@ function ThemeToggle() {
 const tabs = [
   { to: '/', label: 'ホーム', icon: Home, end: true },
   { to: '/attractions', label: 'ブース', icon: Tent, end: false },
-  { to: '/restaurants', label: '注文', icon: ShoppingBag, end: false },
+  { to: '/restaurants', label: '呼び出し', icon: Hash, end: false },
   { to: '/map', label: 'マップ', icon: MapPin, end: false },
 ];
 
 export default function Layout() {
   const { pathname } = useLocation();
 
-  // 注文タブは /restaurants/* の子パスでもアクティブにする
+  // 呼び出しタブは /restaurants 配下でもアクティブにする
   const isActive = (to: string, end: boolean) => {
     if (end) return pathname === to;
     return pathname === to || pathname.startsWith(to + '/');

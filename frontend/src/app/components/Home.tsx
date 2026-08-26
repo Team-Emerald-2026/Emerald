@@ -23,8 +23,8 @@ const quickMenu = [
   {
     to: '/restaurants',
     icon: ShoppingBag,
-    title: 'モバイルオーダー',
-    desc: '並ばずに注文して受け取り',
+    title: '受取番号',
+    desc: '店舗の呼び出し番号を確認',
     color: 'var(--accent)',
   },
   {

@@ -393,11 +393,11 @@ export default function Map() {
                 className="rounded-xl px-3 py-2 text-center text-sm font-bold text-white"
                 style={{ backgroundColor: 'var(--accent)' }}
               >
-                注文へ進む
+                呼び出しを見る
               </Link>
             ) : (
               <span className="rounded-xl bg-muted px-3 py-2 text-center text-sm font-bold text-muted-foreground">
-                注文対象外
+                対象外
               </span>
             )}
           </div>
