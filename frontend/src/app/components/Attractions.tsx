@@ -260,11 +260,11 @@ export default function Attractions() {
                       style={{ backgroundColor: 'var(--accent)' }}
                     >
                       <ShoppingBag className="h-3.5 w-3.5" />
-                      注文
+                      呼び出し
                     </Link>
                   ) : (
                     <span className="inline-flex items-center justify-center rounded-xl bg-muted px-3 py-2 text-xs font-bold text-muted-foreground">
-                      注文対象外
+                      対象外
                     </span>
                   )}
                 </div>

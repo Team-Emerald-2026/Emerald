@@ -86,7 +86,7 @@ export interface AdminStoreInput {
 
 export interface BackendMapFacility {
   id: string;
-  store_id: string;
+  store_id: string | null;
   name: string;
   type: string;
   floor: number;

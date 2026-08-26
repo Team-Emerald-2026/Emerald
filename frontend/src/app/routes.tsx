@@ -11,10 +11,10 @@ import StoreDashboard from './components/store/StoreDashboard';
 import StoreWaiting from './components/store/StoreWaiting';
 import StoreTicket from './components/store/StoreTicket';
 import StoreServed from './components/store/StoreServed';
-import StoreRegister from './components/store/StoreRegister';
 import StoreProfile from './components/store/StoreProfile';
 import AdminDashboard from './components/admin/AdminDashboard';
 import AdminStores from './components/admin/AdminStores';
+import Admin from './components/admin/Admin';
 
 export const router = createBrowserRouter([
   {
@@ -23,16 +23,12 @@ export const router = createBrowserRouter([
     children: [
       { path: '/', element: <Home /> },
       { path: '/attractions', element: <Attractions /> },
-      // モバイルオーダーは同一コンポーネントを子パスでマウントし表示モードを切替
       { path: '/restaurants', element: <Restaurants /> },
-      { path: '/restaurants/cart', element: <Restaurants /> },
-      { path: '/restaurants/status', element: <Restaurants /> },
       { path: '/map', element: <Map /> },
     ],
   },
   // 店舗向け画面（来場者ナビとは独立）
   { path: '/store/login', element: <StoreLogin /> },
-  { path: '/store/register', element: <StoreRegister /> },
   { path: '/store', element: <StorePos /> },
   { path: '/store/dashboard', element: <StoreDashboard /> },
   { path: '/store/waiting', element: <StoreWaiting /> },
@@ -41,5 +37,7 @@ export const router = createBrowserRouter([
   { path: '/store/profile', element: <StoreProfile /> },
   { path: '/admin', element: <AdminDashboard /> },
   { path: '/admin/stores', element: <AdminStores /> },
+  // 管理者画面（店舗作成・一覧。APIは後続で接続）
+  { path: '/admin', element: <Admin /> },
   { path: '*', element: <NotFound /> },
 ]);

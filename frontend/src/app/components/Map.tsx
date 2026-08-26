@@ -19,7 +19,7 @@ type Floor = `${number}F`;
 
 interface Facility {
   id: string;
-  storeId: string;
+  storeId: string | null;
   name: string;
   type: BoothType;
   floor: Floor;
@@ -136,6 +136,9 @@ export default function Map() {
   const [type, setType] = useState<'すべて' | BoothType>('すべて');
   const [facilities, setFacilities] = useState<Facility[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [clickPos, setClickPos] = useState<{ x: number; y: number } | null>(null);
+  const targetStoreId = searchParams.get('store');
+  const targetFacilityId = searchParams.get('facility');
 
   useEffect(() => {
     const controller = new AbortController();
@@ -164,6 +167,10 @@ export default function Map() {
   useEffect(() => {
     const target = displayFacilities.find(
       (f) => f.storeId === targetStoreId || f.id === targetFacilityId,
+    const target = facilities.find(
+      (f) =>
+        (targetStoreId != null && f.storeId === targetStoreId) ||
+        (targetFacilityId != null && f.id === targetFacilityId),
     );
     if (target && floors.includes(target.floor as MapFloor)) {
       setFloor(target.floor as MapFloor);
@@ -181,8 +188,8 @@ export default function Map() {
   const selectedFacility =
     displayFacilities.find(
       (f) =>
-        f.storeId === targetStoreId ||
-        f.id === targetFacilityId,
+        (targetStoreId != null && f.storeId === targetStoreId) ||
+        (targetFacilityId != null && f.id === targetFacilityId),
     ) ?? null;
 
   const selectFacility = (f: Facility) => {
@@ -203,8 +210,15 @@ export default function Map() {
 
   const FacilityRow = ({ f }: { f: Facility }) => {
     const Icon = typeIcon[f.type];
+    const isSelected = selectedFacility?.id === f.id;
     return (
-      <li className="flex items-center gap-3 rounded-xl border border-border bg-card px-3 py-2.5">
+      <li
+        className={`flex items-center gap-3 rounded-xl border px-3 py-2.5 ${
+          isSelected
+            ? 'border-[color:var(--primary)] bg-[color:var(--primary)]/10'
+            : 'border-border bg-card'
+        }`}
+      >
         <span
           className="grid h-9 w-9 shrink-0 place-items-center rounded-lg"
           style={{ backgroundColor: typeColor[f.type] }}
@@ -271,6 +285,16 @@ export default function Map() {
 
       {/* 校内マップ */}
       <div className="relative aspect-[825/466] w-full overflow-hidden rounded-2xl border border-border bg-muted">
+      {/* 校内マップ（クリックで座標を計測・開発用） */}
+      <div
+        className="relative aspect-[4/3] w-full cursor-crosshair overflow-hidden rounded-2xl border border-border bg-muted"
+        onClick={(e) => {
+          const rect = e.currentTarget.getBoundingClientRect();
+          const x = Math.round(((e.clientX - rect.left) / rect.width) * 100);
+          const y = Math.round(((e.clientY - rect.top) / rect.height) * 100);
+          setClickPos({ x, y });
+        }}
+      >
         <img
           src={floor === 'すべて' ? mapImageByFloor['1F'] : mapImageByFloor[floor]}
           alt={`${floor === 'すべて' ? '1F' : floor} 校内マップ`}
@@ -278,20 +302,32 @@ export default function Map() {
         />
         {filtered.map((f) => {
           const Icon = typeIcon[f.type];
+          const isSelected = selectedFacility?.id === f.id;
+          const hasSelection = selectedFacility != null;
           return (
             <div
               key={f.id}
-              className="absolute -translate-x-1/2 -translate-y-1/2"
+              className={`absolute -translate-x-1/2 -translate-y-1/2 ${isSelected ? 'z-10' : 'z-0'}`}
               style={{ left: `${f.x}%`, top: `${f.y}%` }}
             >
               <button
                 type="button"
-                onClick={() => selectFacility(f)}
-                className="grid h-8 w-8 place-items-center rounded-full shadow-md ring-2 ring-white/70"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  selectFacility(f);
+                }}
+                className={`grid place-items-center rounded-full shadow-md transition ${
+                  isSelected
+                    ? 'h-10 w-10 scale-110 ring-4 ring-white'
+                    : hasSelection
+                      ? 'h-8 w-8 ring-2 ring-white/70 opacity-45'
+                      : 'h-8 w-8 ring-2 ring-white/70'
+                }`}
                 style={{ backgroundColor: typeColor[f.type] }}
                 title={f.name}
+                aria-pressed={isSelected}
               >
-                <Icon className="h-4 w-4 text-white" />
+                <Icon className={`${isSelected ? 'h-5 w-5' : 'h-4 w-4'} text-white`} />
               </button>
             </div>
           );
@@ -302,6 +338,13 @@ export default function Map() {
           </p>
         )}
       </div>
+
+      {clickPos && (
+        <p className="text-sm text-muted-foreground">
+          クリック位置: x={clickPos.x}, y={clickPos.y}
+          （この数字を seeder にコピー）
+        </p>
+      )}
 
       {selectedFacility && (
         <section className="rounded-2xl border border-border bg-card p-4">
@@ -342,11 +385,11 @@ export default function Map() {
                 className="rounded-xl px-3 py-2 text-center text-sm font-bold text-white"
                 style={{ backgroundColor: 'var(--accent)' }}
               >
-                注文へ進む
+                呼び出しを見る
               </Link>
             ) : (
               <span className="rounded-xl bg-muted px-3 py-2 text-center text-sm font-bold text-muted-foreground">
-                注文対象外
+                対象外
               </span>
             )}
           </div>

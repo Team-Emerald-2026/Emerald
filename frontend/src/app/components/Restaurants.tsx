@@ -1,28 +1,36 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { Plus, Minus, ShoppingCart, Info, CheckCircle2, ArrowLeft } from 'lucide-react';
-import { issueOrder, useFestival } from '../lib/festivalStore';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { ArrowLeft, Hash, Info, Megaphone } from 'lucide-react';
 import { fetchRestaurants, type BackendStore } from '../lib/api';
 import { Skeleton, SkeletonText } from './Skeleton';
 
-interface MenuItem {
-  id: string;
-  storeId: string;
-  name: string;
-  desc: string;
-  price: number | null;
-}
-interface Store {
+type TicketStatus = 'waiting' | 'called' | 'served';
+
+type Store = {
   id: string;
   name: string;
   description: string;
   isOpen: boolean;
   waitMin: number;
-  items: MenuItem[];
-}
+};
 
-const yen = (n: number) => `¥${n.toLocaleString('ja-JP')}`;
-const priceLabel = (price: number) => yen(price);
+type Ticket = {
+  number: string;
+  status: TicketStatus;
+};
+
+// TODO(API): 店舗レジで発行した受取番号一覧に差し替え
+const MOCK_TICKETS: Record<string, Ticket[]> = {
+  'store-101': [
+    { number: 'C-12', status: 'called' },
+    { number: 'C-13', status: 'waiting' },
+    { number: 'C-14', status: 'waiting' },
+  ],
+  'store-102': [
+    { number: 'Y-03', status: 'called' },
+    { number: 'Y-04', status: 'waiting' },
+  ],
+};
 
 function toStore(store: BackendStore): Store {
   return {
@@ -31,50 +39,53 @@ function toStore(store: BackendStore): Store {
     description: store.description ?? '店舗説明は未設定です',
     isOpen: store.is_open,
     waitMin: Number(store.current_wait_min) || 0,
-    items: [],
   };
+}
+
+function statusLabel(status: TicketStatus) {
+  switch (status) {
+    case 'called':
+      return '呼び出し中';
+    case 'served':
+      return '受取済';
+    default:
+      return '待ち';
+  }
+}
+
+function statusStyle(status: TicketStatus) {
+  switch (status) {
+    case 'called':
+      return { backgroundColor: 'var(--accent-soft, var(--ok-soft))', color: 'var(--accent, var(--ok))' };
+    case 'served':
+      return { backgroundColor: 'var(--muted)', color: 'var(--muted-foreground)' };
+    default:
+      return { backgroundColor: 'var(--ok-soft)', color: 'var(--ok)' };
+  }
 }
 
 function StoreCardSkeleton() {
   return (
     <section className="overflow-hidden rounded-2xl border border-border bg-card">
-      <div className="flex items-center justify-between gap-2 border-b border-border bg-muted/50 px-4 py-3">
+      <div className="flex items-center justify-between gap-2 px-4 py-3">
         <div className="min-w-0 flex-1 space-y-2">
           <SkeletonText className="w-1/2" />
           <SkeletonText className="w-4/5" />
-          <SkeletonText className="w-1/3" />
         </div>
         <Skeleton className="h-6 w-14 shrink-0 rounded-md" />
-      </div>
-      <div className="px-4 py-5">
-        <SkeletonText className="w-3/5" />
-        <SkeletonText className="mt-2 w-full" />
-        <SkeletonText className="mt-2 w-2/3" />
       </div>
     </section>
   );
 }
 
 export default function Restaurants() {
-  const { pathname } = useLocation();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const selectedStoreId = searchParams.get('store');
-  const mode = pathname.endsWith('/cart')
-    ? 'cart'
-    : pathname.endsWith('/status')
-      ? 'status'
-      : 'order';
 
-  // カート状態は同一コンポーネント内に保持され、サブパス遷移でも維持される
   const [stores, setStores] = useState<Store[]>([]);
-  const [cart, setCart] = useState<Record<string, number>>({});
-  const [orderNumber, setOrderNumber] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const confirmedOrder = useFestival((s) =>
-    orderNumber ? s.orders.find((order) => order.number === orderNumber) ?? null : null,
-  );
 
   useEffect(() => {
     const controller = new AbortController();
@@ -84,7 +95,11 @@ export default function Restaurants() {
 
     fetchRestaurants(controller.signal)
       .then((backendStores) => {
-        setStores(backendStores.map(toStore));
+        setStores(
+          backendStores
+            .filter((store) => (store.type ?? 'food') === 'food')
+            .map(toStore),
+        );
       })
       .catch((err: unknown) => {
         if (err instanceof DOMException && err.name === 'AbortError') return;
@@ -97,383 +112,163 @@ export default function Restaurants() {
     return () => controller.abort();
   }, []);
 
-  const itemIndex = useMemo(() => {
-    const index = new Map<string, { item: MenuItem; store: Store }>();
-    for (const store of stores) {
-      for (const item of store.items) index.set(item.id, { item, store });
-    }
-    return index;
-  }, [stores]);
-
-  const orderedStores = useMemo(() => {
-    if (!selectedStoreId) return stores;
-    return [...stores].sort((a, b) => {
-      if (a.id === selectedStoreId) return -1;
-      if (b.id === selectedStoreId) return 1;
-      return 0;
-    });
-  }, [stores, selectedStoreId]);
-
-  const setQty = (id: string, qty: number) =>
-    setCart((c) => {
-      const ref = itemIndex.get(id);
-      if (!ref || ref.item.price === null) return c;
-      const next = { ...c };
-      if (qty <= 0) delete next[id];
-      else next[id] = qty;
-      return next;
-    });
-
-  const cartEntries = Object.entries(cart);
-  const count = cartEntries.reduce((a, [, q]) => a + q, 0);
-  const total = cartEntries.reduce((a, [id, q]) => a + (itemIndex.get(id)?.item.price ?? 0) * q, 0);
-
-  const confirmOrder = () => {
-    const items = cartEntries.flatMap(([id, q]) => {
-      const ref = itemIndex.get(id);
-      return ref && ref.item.price !== null ? [{ name: ref.item.name, qty: q, store: ref.store.name }] : [];
-    });
-    if (items.length === 0) return;
-    const number = issueOrder(items, total);
-    setOrderNumber(number);
-    setCart({});
-    navigate('/restaurants/status');
-  };
-
-  /* ---------- 共通ヘッダー ---------- */
-  const header = (
-    <div className="space-y-3">
-      <h1 className="font-display text-2xl font-bold text-foreground">モバイルオーダー</h1>
-      <nav className="flex gap-1 rounded-xl bg-muted p-1 text-sm">
-        {[
-          { to: '/restaurants', label: '選ぶ', active: mode === 'order' },
-          { to: '/restaurants/cart', label: '確認', active: mode === 'cart' },
-          { to: '/restaurants/status', label: '番号', active: mode === 'status' },
-        ].map((t) => (
-          <Link
-            key={t.to}
-            to={t.to}
-            className="flex-1 rounded-lg py-1.5 text-center font-medium transition-colors"
-            style={{
-              backgroundColor: t.active ? 'var(--card)' : 'transparent',
-              color: t.active ? 'var(--primary)' : 'var(--muted-foreground)',
-              boxShadow: t.active ? '0 1px 2px rgba(0,0,0,0.08)' : 'none',
-            }}
-          >
-            {t.label}
-          </Link>
-        ))}
-      </nav>
-    </div>
+  const selectedStore = useMemo(
+    () => stores.find((s) => s.id === selectedStoreId) ?? null,
+    [stores, selectedStoreId],
   );
 
-  /* ---------- 注文画面 ---------- */
-  if (mode === 'order') {
+  const tickets = selectedStoreId ? (MOCK_TICKETS[selectedStoreId] ?? []) : [];
+
+  /* ---------- 店舗の受取番号一覧 ---------- */
+  if (selectedStoreId) {
     return (
       <div className="space-y-5 p-4">
-        {header}
-
-        {error && (
-          <div className="rounded-2xl border border-border bg-card p-6 text-center text-sm text-muted-foreground">
-            {error}
-          </div>
-        )}
-
-        <div
-          className="flex gap-2 rounded-xl p-3 text-sm"
-          style={{ backgroundColor: 'var(--info-soft)', color: 'var(--info)' }}
-        >
-          <Info className="mt-0.5 h-4 w-4 shrink-0" />
-          <p>商品が登録されている店舗だけ注文できます。未登録の店舗は準備中として表示されます。</p>
-        </div>
-
-        {loading && !error && (
-          <div className="space-y-3" aria-label="店舗情報を読み込み中">
-            {Array.from({ length: 3 }).map((_, index) => (
-              <StoreCardSkeleton key={index} />
-            ))}
-          </div>
-        )}
-
-        {!loading && !error && stores.length === 0 && (
-          <div className="rounded-2xl border border-border bg-card p-6 text-center text-sm text-muted-foreground">
-            注文可能な店舗がありません。
-          </div>
-        )}
-
-        {!loading && !error && orderedStores.map((s) => {
-          const hasOrderableItems = s.items.some((item) => item.price !== null);
-          const canOrder = s.isOpen && hasOrderableItems;
-
-          return (
-          <section
-            key={s.id}
-            className="overflow-hidden rounded-2xl border border-border bg-card"
-            style={{
-              boxShadow: selectedStoreId === s.id ? '0 0 0 2px var(--accent)' : 'none',
-            }}
+        <div className="flex items-start gap-3">
+          <button
+            type="button"
+            onClick={() => navigate('/restaurants')}
+            className="mt-1 grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-border hover:bg-muted"
+            aria-label="店舗一覧へ戻る"
           >
-            <div className="flex items-center justify-between gap-2 border-b border-border bg-muted/50 px-4 py-3">
-              <div className="min-w-0">
-                <h2 className="truncate font-bold text-foreground">{s.name}</h2>
-                <p className="text-xs text-muted-foreground">{s.description}</p>
-                <p className="mt-0.5 text-xs text-muted-foreground">待ち時間目安: {s.waitMin}分</p>
-              </div>
-              <span
-                className="shrink-0 rounded-md px-2 py-0.5 text-xs font-medium"
-                style={{
-                  backgroundColor: canOrder ? 'var(--ok-soft)' : 'var(--busy-soft)',
-                  color: canOrder ? 'var(--ok)' : 'var(--busy)',
-                }}
-              >
-                {canOrder ? '注文可能' : s.isOpen ? '準備中' : '受付停止'}
-              </span>
-            </div>
-
-            {s.items.length === 0 ? (
-              <div className="px-4 py-5 text-sm text-muted-foreground">
-                <p className="font-medium text-foreground">この店舗は現在モバイル注文準備中です。</p>
-                <p className="mt-1">商品が登録されるまで、アプリからの注文はできません。店頭で案内をご確認ください。</p>
-              </div>
-            ) : (
-              <ul className="divide-y divide-border">
-              {s.items.map((it) => {
-                const qty = cart[it.id] ?? 0;
-                const itemCanOrder = canOrder && it.price !== null;
-                return (
-                  <li key={it.id} className="flex items-center gap-3 px-4 py-3">
-                    <div className="min-w-0 flex-1">
-                      <p className="font-medium text-foreground">{it.name}</p>
-                      <p className="truncate text-xs text-muted-foreground">{it.desc}</p>
-                      <p className="mt-0.5 text-sm font-bold text-foreground">
-                        {it.price === null ? '価格未設定' : priceLabel(it.price)}
-                      </p>
-                    </div>
-                    {qty === 0 ? (
-                      <button
-                        type="button"
-                        onClick={() => setQty(it.id, 1)}
-                        disabled={!itemCanOrder}
-                        className="shrink-0 rounded-lg px-3 py-1.5 text-sm font-bold text-white"
-                        style={{ backgroundColor: 'var(--primary)', opacity: itemCanOrder ? 1 : 0.4 }}
-                      >
-                        追加
-                      </button>
-                    ) : (
-                      <div className="flex shrink-0 items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setQty(it.id, qty - 1)}
-                          aria-label="数量を減らす"
-                          className="grid h-8 w-8 place-items-center rounded-full border border-border text-foreground"
-                        >
-                          <Minus className="h-4 w-4" />
-                        </button>
-                        <span className="w-5 text-center font-bold text-foreground">{qty}</span>
-                        <button
-                          type="button"
-                          onClick={() => setQty(it.id, qty + 1)}
-                          aria-label="数量を増やす"
-                          className="grid h-8 w-8 place-items-center rounded-full text-white"
-                          style={{ backgroundColor: 'var(--primary)' }}
-                        >
-                          <Plus className="h-4 w-4" />
-                        </button>
-                      </div>
-                    )}
-                  </li>
-                );
-              })}
-              </ul>
-            )}
-          </section>
-          );
-        })}
+            <ArrowLeft className="h-4 w-4" />
+          </button>
+          <div className="min-w-0">
+            <h1 className="font-display text-2xl font-bold text-foreground">受取番号</h1>
+            <p className="mt-1 truncate text-sm text-muted-foreground">
+              {selectedStore?.name ?? '店舗'}
+            </p>
+          </div>
+        </div>
 
         <div
           className="flex gap-2 rounded-xl p-3 text-sm"
           style={{ backgroundColor: 'var(--info-soft)', color: 'var(--info)' }}
         >
           <Info className="mt-0.5 h-4 w-4 shrink-0" />
-          <p>受け取りは各屋台のカウンターで。番号が呼ばれたら受付番号を見せてください。</p>
+          <p>店頭で購入後、店舗タブレットで発行された番号をここで確認できます。</p>
         </div>
 
-        {/* カートサマリー（固定バー） */}
-        {count > 0 && (
-          <div className="fixed inset-x-0 bottom-[68px] z-20 mx-auto max-w-md px-4">
-            <button
-              type="button"
-              onClick={() => navigate('/restaurants/cart')}
-              className="flex w-full items-center justify-between rounded-2xl px-5 py-3 text-white shadow-lg"
-              style={{ backgroundColor: 'var(--primary)' }}
-            >
-              <span className="flex items-center gap-2 font-bold">
-                <ShoppingCart className="h-5 w-5" />
-                カートの中を確認
-              </span>
-              <span className="text-sm font-medium">
-                {count}点・{yen(total)}
-              </span>
-            </button>
-          </div>
-        )}
-      </div>
-    );
-  }
-
-  /* ---------- カート確認 ---------- */
-  if (mode === 'cart') {
-    return (
-      <div className="space-y-5 p-4">
-        {header}
-        <h2 className="font-display text-lg font-bold text-foreground">カートの中を確認</h2>
-
-        {cartEntries.length === 0 ? (
-          <div className="rounded-2xl border border-border bg-card p-8 text-center">
-            <p className="text-muted-foreground">カートは空です。</p>
+        {!selectedStore && !loading && (
+          <div className="rounded-2xl border border-border bg-card p-6 text-center text-sm text-muted-foreground">
+            店舗が見つかりませんでした。
             <Link
               to="/restaurants"
-              className="mt-4 inline-block rounded-lg px-4 py-2 text-sm font-bold text-white"
-              style={{ backgroundColor: 'var(--primary)' }}
+              className="mt-3 inline-block font-bold underline"
+              style={{ color: 'var(--primary)' }}
             >
-              注文画面に戻る
+              店舗一覧へ
             </Link>
           </div>
-        ) : (
-          <>
-            <ul className="space-y-3">
-              {cartEntries.map(([id, q]) => {
-                const ref = itemIndex.get(id)!;
-                return (
-                  <li
-                    key={id}
-                    className="rounded-2xl border border-border bg-card p-4"
+        )}
+
+        {selectedStore && tickets.length === 0 && (
+          <div className="rounded-2xl border border-border bg-card p-8 text-center">
+            <Megaphone className="mx-auto h-8 w-8 text-muted-foreground" />
+            <p className="mt-3 text-muted-foreground">現在表示できる受取番号はありません。</p>
+            <p className="mt-1 text-xs text-muted-foreground">※ 仮データ未設定（API接続後に更新）</p>
+          </div>
+        )}
+
+        {selectedStore && tickets.length > 0 && (
+          <ul className="space-y-3">
+            {tickets.map((ticket) => (
+              <li
+                key={ticket.number}
+                className="flex items-center justify-between gap-3 rounded-2xl border border-border bg-card px-4 py-4"
+              >
+                <div className="flex items-center gap-3">
+                  <span
+                    className="grid h-10 w-10 place-items-center rounded-xl"
+                    style={{ backgroundColor: 'var(--primary)', color: 'white' }}
                   >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="font-bold text-foreground">{ref.item.name}</p>
-                        <p className="text-xs text-muted-foreground">{ref.store.name}</p>
-                      </div>
-                      <p className="shrink-0 font-bold text-foreground">
-                        {ref.item.price === null ? '価格未設定' : yen(ref.item.price * q)}
-                      </p>
-                    </div>
-                    <div className="mt-3 flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setQty(id, q - 1)}
-                          aria-label="数量を減らす"
-                          className="grid h-8 w-8 place-items-center rounded-full border border-border text-foreground"
-                        >
-                          <Minus className="h-4 w-4" />
-                        </button>
-                        <span className="w-5 text-center font-bold text-foreground">{q}</span>
-                        <button
-                          type="button"
-                          onClick={() => setQty(id, q + 1)}
-                          aria-label="数量を増やす"
-                          className="grid h-8 w-8 place-items-center rounded-full text-white"
-                          style={{ backgroundColor: 'var(--primary)' }}
-                        >
-                          <Plus className="h-4 w-4" />
-                        </button>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setQty(id, 0)}
-                        className="rounded-lg border border-border px-3 py-1.5 text-sm font-medium text-foreground hover:bg-muted"
-                      >
-                        削除
-                      </button>
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-
-            <div className="flex items-center justify-between rounded-2xl border border-border bg-card px-4 py-3">
-              <span className="font-bold text-foreground">合計</span>
-              <span className="font-display text-xl font-bold text-foreground">{yen(total)}</span>
-            </div>
-
-            <div className="flex gap-3">
-              <Link
-                to="/restaurants"
-                className="flex flex-1 items-center justify-center gap-1 rounded-xl border border-border py-3 font-bold text-foreground hover:bg-muted"
-              >
-                <ArrowLeft className="h-4 w-4" />
-                戻る
-              </Link>
-              <button
-                type="button"
-                onClick={confirmOrder}
-                className="flex-1 rounded-xl py-3 font-bold text-white"
-                style={{ backgroundColor: 'var(--accent)' }}
-              >
-                注文を決定
-              </button>
-            </div>
-          </>
+                    <Hash className="h-5 w-5" />
+                  </span>
+                  <div>
+                    <p className="font-display text-2xl font-bold text-foreground">{ticket.number}</p>
+                    <p className="text-xs text-muted-foreground">受取番号</p>
+                  </div>
+                </div>
+                <span
+                  className="shrink-0 rounded-lg px-2.5 py-1 text-xs font-bold"
+                  style={statusStyle(ticket.status)}
+                >
+                  {statusLabel(ticket.status)}
+                </span>
+              </li>
+            ))}
+          </ul>
         )}
       </div>
     );
   }
 
-  /* ---------- 注文番号 ---------- */
+  /* ---------- 店舗一覧 ---------- */
   return (
     <div className="space-y-5 p-4">
-      {header}
-      {orderNumber ? (
-        <div className="rounded-3xl border border-border bg-card p-8 text-center">
-          <CheckCircle2 className="mx-auto h-10 w-10" style={{ color: 'var(--primary)' }} />
-          <p className="mt-3 text-sm text-muted-foreground">あなたのモバイルオーダー番号</p>
-          <p
-            className="my-2 font-display text-6xl font-bold"
-            style={{ color: 'var(--primary)' }}
-          >
-            {orderNumber}
-          </p>
-          <p className="text-sm text-muted-foreground">
-            番号が呼ばれたら、受け取り場所でこの画面を見せてください。
-          </p>
-          {confirmedOrder && (
-            <div className="mt-5 space-y-3 rounded-2xl bg-muted p-4 text-left text-sm">
-              <div>
-                <p className="font-bold text-foreground">受け取り場所</p>
-                <p className="text-muted-foreground">
-                  {Array.from(new Set(confirmedOrder.items.map((item) => item.store))).join('、')}
-                  のカウンター
-                </p>
-              </div>
-              <div>
-                <p className="font-bold text-foreground">支払い方法</p>
-                <p className="text-muted-foreground">支払いは店頭で行ってください。</p>
-              </div>
-              <div>
-                <p className="font-bold text-foreground">呼び出し状況</p>
-                <p className="text-muted-foreground">
-                  {confirmedOrder.status === 'called'
-                    ? '呼び出し済みです。受け取りカウンターへ向かってください。'
-                    : confirmedOrder.status === 'served'
-                      ? '受け渡し済みです。'
-                      : 'まだ呼び出し前です。番号が表示・呼び出しされるまでお待ちください。'}
-                </p>
-              </div>
-            </div>
-          )}
+      <div>
+        <h1 className="font-display text-2xl font-bold text-foreground">受取番号</h1>
+        <p className="mt-1 text-sm text-muted-foreground">店舗を選んで呼び出し状況を確認</p>
+      </div>
+
+      <div
+        className="flex gap-2 rounded-xl p-3 text-sm"
+        style={{ backgroundColor: 'var(--info-soft)', color: 'var(--info)' }}
+      >
+        <Info className="mt-0.5 h-4 w-4 shrink-0" />
+        <p>アプリからの注文は行いません。店頭で購入し、発行された番号を確認してください。</p>
+      </div>
+
+      {error && (
+        <div className="rounded-2xl border border-border bg-card p-6 text-center text-sm text-muted-foreground">
+          {error}
         </div>
-      ) : (
-        <div className="rounded-2xl border border-border bg-card p-8 text-center">
-          <p className="text-muted-foreground">まだ注文がありません。</p>
-          <Link
-            to="/restaurants"
-            className="mt-4 inline-block rounded-lg px-4 py-2 text-sm font-bold text-white"
-            style={{ backgroundColor: 'var(--primary)' }}
-          >
-            注文画面へ
-          </Link>
+      )}
+
+      {loading && !error && (
+        <div className="space-y-3" aria-label="店舗情報を読み込み中">
+          {Array.from({ length: 3 }).map((_, index) => (
+            <StoreCardSkeleton key={index} />
+          ))}
         </div>
+      )}
+
+      {!loading && !error && stores.length === 0 && (
+        <div className="rounded-2xl border border-border bg-card p-6 text-center text-sm text-muted-foreground">
+          表示できる店舗がありません。
+        </div>
+      )}
+
+      {!loading && !error && (
+        <ul className="space-y-3">
+          {stores.map((store) => (
+            <li key={store.id}>
+              <button
+                type="button"
+                onClick={() => navigate(`/restaurants?store=${encodeURIComponent(store.id)}`)}
+                className="w-full overflow-hidden rounded-2xl border border-border bg-card text-left transition-colors hover:bg-muted/40"
+              >
+                <div className="flex items-center justify-between gap-2 px-4 py-3">
+                  <div className="min-w-0">
+                    <h2 className="truncate font-bold text-foreground">{store.name}</h2>
+                    <p className="text-xs text-muted-foreground">{store.description}</p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      待ち時間目安: {store.waitMin}分
+                    </p>
+                  </div>
+                  <span
+                    className="shrink-0 rounded-md px-2 py-0.5 text-xs font-medium"
+                    style={{
+                      backgroundColor: store.isOpen ? 'var(--ok-soft)' : 'var(--busy-soft)',
+                      color: store.isOpen ? 'var(--ok)' : 'var(--busy)',
+                    }}
+                  >
+                    {store.isOpen ? '受付中' : '準備中'}
+                  </span>
+                </div>
+              </button>
+            </li>
+          ))}
+        </ul>
       )}
     </div>
   );
