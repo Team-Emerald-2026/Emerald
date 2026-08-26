@@ -3,7 +3,7 @@ import Layout from './components/Layout';
 import Home from './components/Home';
 import Attractions from './components/Attractions';
 import Restaurants from './components/Restaurants';
-import Map from './components/Map';
+import CampusMap from './components/Map';
 import NotFound from './components/NotFound';
 import StoreLogin from './components/store/StoreLogin';
 import StorePos from './components/store/StorePos';
@@ -23,7 +23,7 @@ export const router = createBrowserRouter([
       { path: '/', element: <Home /> },
       { path: '/attractions', element: <Attractions /> },
       { path: '/restaurants', element: <Restaurants /> },
-      { path: '/map', element: <Map /> },
+      { path: '/map', element: <CampusMap /> },
     ],
   },
   // 店舗向け画面（来場者ナビとは独立）

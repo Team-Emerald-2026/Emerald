@@ -110,7 +110,7 @@ function toFacility(facility: BackendMapFacility): Facility {
   };
 }
 
-export default function Map() {
+export default function CampusMap() {
   const [searchParams, setSearchParams] = useSearchParams();
   const targetStoreId = searchParams.get('store');
   const targetFacilityId = searchParams.get('facility');
@@ -141,15 +141,15 @@ export default function Map() {
   }, []);
 
   const displayFacilities = useMemo(() => {
-    const unique = new Map<string, Facility>();
+    const unique: Record<string, Facility> = Object.create(null);
     for (const facility of facilities) {
       const key = `${facility.floor}:${Math.round(facility.x)}:${Math.round(facility.y)}`;
-      const current = unique.get(key);
+      const current = unique[key];
       if (!current || (facility.storeId && !current.storeId)) {
-        unique.set(key, facility);
+        unique[key] = facility;
       }
     }
-    return Array.from(unique.values());
+    return Object.values(unique);
   }, [facilities]);
 
   useEffect(() => {
