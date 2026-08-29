@@ -110,6 +110,10 @@ class AdminAnalyticsController extends Controller
 
     private function authorizeAdmin(Request $request): void
     {
+        if (config('admin.public_access')) {
+            return;
+        }
+
         abort_unless($request->user()?->role === 'admin', 403, '管理者権限が必要です。');
     }
 }

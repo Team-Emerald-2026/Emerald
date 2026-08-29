@@ -72,20 +72,17 @@ Route::prefix('v1/booth')->group(function () {
 
 Route::prefix('v1/admin')->group(function () {
     Route::post('auth/login', [AdminAuthController::class, 'login']);
-
-    Route::middleware('auth:sanctum')->group(function () {
-        Route::post('auth/logout', [AdminAuthController::class, 'logout']);
-        Route::get('analytics', [AdminAnalyticsController::class, 'index']);
-        Route::get('revenue', [AdminAnalyticsController::class, 'revenue']);
-        Route::get('stores', [AdminStoreController::class, 'index']);
-        Route::post('stores', [AdminStoreController::class, 'store']);
-        Route::get('stores/{id}', [AdminStoreController::class, 'show']);
-        Route::patch('stores/{id}', [AdminStoreController::class, 'update']);
-        Route::delete('stores/{id}', [AdminStoreController::class, 'destroy']);
-        Route::get('events', [AdminEventController::class, 'index']);
-        Route::post('events', [AdminEventController::class, 'store']);
-        Route::get('events/{id}', [AdminEventController::class, 'show']);
-        Route::patch('events/{id}', [AdminEventController::class, 'update']);
-        Route::delete('events/{id}', [AdminEventController::class, 'destroy']);
-    });
+    Route::post('auth/logout', [AdminAuthController::class, 'logout'])->middleware('auth:sanctum');
+    Route::get('analytics', [AdminAnalyticsController::class, 'index']);
+    Route::get('revenue', [AdminAnalyticsController::class, 'revenue']);
+    Route::get('stores', [AdminStoreController::class, 'index']);
+    Route::post('stores', [AdminStoreController::class, 'store']);
+    Route::get('stores/{id}', [AdminStoreController::class, 'show']);
+    Route::patch('stores/{id}', [AdminStoreController::class, 'update']);
+    Route::delete('stores/{id}', [AdminStoreController::class, 'destroy']);
+    Route::get('events', [AdminEventController::class, 'index']);
+    Route::post('events', [AdminEventController::class, 'store']);
+    Route::get('events/{id}', [AdminEventController::class, 'show']);
+    Route::patch('events/{id}', [AdminEventController::class, 'update']);
+    Route::delete('events/{id}', [AdminEventController::class, 'destroy']);
 });

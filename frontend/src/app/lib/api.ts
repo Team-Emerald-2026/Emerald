@@ -338,14 +338,14 @@ export function deleteBoothMenuItem(token: string, id: string, signal?: AbortSig
   });
 }
 
-export function fetchAdminStores(token: string, signal?: AbortSignal) {
+export function fetchAdminStores(token?: string, signal?: AbortSignal) {
   return request('/v1/admin/stores', { signal, token }).then((payload) => {
     if (isRecord(payload) && Array.isArray(payload.data)) return payload.data as AdminStore[];
     return [];
   });
 }
 
-export function createAdminStore(token: string, input: AdminStoreInput, signal?: AbortSignal) {
+export function createAdminStore(token: string | undefined, input: AdminStoreInput, signal?: AbortSignal) {
   return request('/v1/admin/stores', {
     method: 'POST',
     signal,
@@ -355,7 +355,7 @@ export function createAdminStore(token: string, input: AdminStoreInput, signal?:
 }
 
 export function updateAdminStore(
-  token: string,
+  token: string | undefined,
   id: string,
   input: AdminStoreInput,
   signal?: AbortSignal,
@@ -368,7 +368,7 @@ export function updateAdminStore(
   }).then((payload) => (isRecord(payload) ? payload.data as AdminStore : null));
 }
 
-export function hideAdminStore(token: string, id: string, signal?: AbortSignal) {
+export function hideAdminStore(token: string | undefined, id: string, signal?: AbortSignal) {
   return request(`/v1/admin/stores/${encodeURIComponent(id)}`, {
     method: 'DELETE',
     signal,
@@ -376,7 +376,7 @@ export function hideAdminStore(token: string, id: string, signal?: AbortSignal) 
   }).then((payload) => (isRecord(payload) ? payload.data as AdminStore : null));
 }
 
-export function fetchAdminAnalytics(token: string, signal?: AbortSignal) {
+export function fetchAdminAnalytics(token?: string, signal?: AbortSignal) {
   return request('/v1/admin/analytics', { signal, token }).then((payload) =>
     isRecord(payload) ? payload.data as AdminAnalytics : null,
   );

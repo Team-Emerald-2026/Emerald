@@ -12,6 +12,7 @@ import {
   type AdminStoreInput,
 } from '../../lib/api';
 import { logoutAdminSession, useFestival } from '../../lib/festivalStore';
+import { ADMIN_PUBLIC_ACCESS } from '../../lib/adminAccess';
 import { findMapLocation } from '../../lib/mapLocations';
 
 const yen = (value: number) => `¥${value.toLocaleString('ja-JP')}`;
@@ -48,10 +49,10 @@ export default function AdminStores() {
   const [message, setMessage] = useState('');
 
   const loadStores = (signal?: AbortSignal) => {
-    if (!adminSession) return Promise.resolve();
+    if (!adminSession && !ADMIN_PUBLIC_ACCESS) return Promise.resolve();
     setLoading(true);
     setError('');
-    return fetchAdminStores(adminSession.token, signal)
+    return fetchAdminStores(adminSession?.token, signal)
       .then((data) => setStores(data))
       .catch((err: unknown) => {
         if (signal?.aborted) return;
@@ -87,17 +88,17 @@ export default function AdminStores() {
   };
 
   const submit = async (input: AdminStoreInput) => {
-    if (!adminSession || saving) return;
+    if ((!adminSession && !ADMIN_PUBLIC_ACCESS) || saving) return;
     setSaving(true);
     setError('');
     setMessage('');
 
     try {
       if (editing) {
-        await updateAdminStore(adminSession.token, editing.id, input);
+        await updateAdminStore(adminSession?.token, editing.id, input);
         setMessage('店舗情報を更新しました。');
       } else {
-        await createAdminStore(adminSession.token, input);
+        await createAdminStore(adminSession?.token, input);
         setMessage('店舗を作成しました。');
       }
       setShowForm(false);
@@ -111,7 +112,7 @@ export default function AdminStores() {
   };
 
   const hideStore = async (store: AdminStore) => {
-    if (!adminSession || saving) return;
+    if ((!adminSession && !ADMIN_PUBLIC_ACCESS) || saving) return;
     const confirmed = window.confirm(`${store.name} を営業停止・非表示にしますか？`);
     if (!confirmed) return;
 
@@ -119,7 +120,7 @@ export default function AdminStores() {
     setError('');
     setMessage('');
     try {
-      await hideAdminStore(adminSession.token, store.id);
+      await hideAdminStore(adminSession?.token, store.id);
       setMessage('店舗を営業停止・非表示にしました。');
       await loadStores();
     } catch (err: unknown) {

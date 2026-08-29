@@ -3,6 +3,7 @@ import { Navigate, NavLink, useNavigate } from 'react-router-dom';
 import { BarChart3, LogOut, Store } from 'lucide-react';
 import { logoutAdmin, ApiError } from '../../lib/api';
 import { logoutAdminSession, useFestival } from '../../lib/festivalStore';
+import { ADMIN_PUBLIC_ACCESS } from '../../lib/adminAccess';
 
 const links = [
   { to: '/admin', label: 'ダッシュボード', icon: BarChart3, end: true },
@@ -19,23 +20,29 @@ export default function AdminShell({
   const adminSession = useFestival((s) => s.adminSession);
   const navigate = useNavigate();
 
-  if (!adminSession) return <Navigate to="/store/login" replace />;
+  if (!adminSession && !ADMIN_PUBLIC_ACCESS) {
+    return <Navigate to="/store/login" replace />;
+  }
 
   const logout = () => {
-    void logoutAdmin(adminSession.token).catch((error) => {
-      if (!(error instanceof ApiError && error.status === 401)) {
-        console.error('Admin logout failed', error);
-      }
-    });
+    if (adminSession?.token) {
+      void logoutAdmin(adminSession.token).catch((error) => {
+        if (!(error instanceof ApiError && error.status === 401)) {
+          console.error('Admin logout failed', error);
+        }
+      });
+    }
     logoutAdminSession();
-    navigate('/store/login');
+    navigate(ADMIN_PUBLIC_ACCESS ? '/' : '/store/login');
   };
 
   return (
     <div className="mx-auto flex min-h-dvh max-w-4xl flex-col bg-background">
       <header className="sticky top-0 z-20 flex h-14 items-center justify-between border-b border-border bg-card px-4">
         <div className="min-w-0">
-          <p className="text-[11px] text-muted-foreground">Admin {adminSession.loginId}</p>
+          <p className="text-[11px] text-muted-foreground">
+            Admin {adminSession?.loginId ?? (ADMIN_PUBLIC_ACCESS ? '公開アクセス' : '')}
+          </p>
           <h1 className="truncate font-display text-base font-bold text-foreground">{title}</h1>
         </div>
         <button
@@ -44,7 +51,7 @@ export default function AdminShell({
           className="flex items-center gap-1 rounded-lg border border-border px-3 py-1.5 text-sm text-foreground hover:bg-muted"
         >
           <LogOut className="h-4 w-4" />
-          ログアウト
+          {ADMIN_PUBLIC_ACCESS && !adminSession ? '閉じる' : 'ログアウト'}
         </button>
       </header>
 

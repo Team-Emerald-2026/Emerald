@@ -450,4 +450,13 @@ class MissingApisTest extends TestCase
             ->assertOk()
             ->assertJsonCount(0, 'data');
     }
+
+    public function test_admin_stores_are_readable_without_login_when_public(): void
+    {
+        $this->createStore();
+
+        $this->getJson('/api/v1/admin/stores')
+            ->assertOk()
+            ->assertJsonPath('data.0.id', 'store-101');
+    }
 }

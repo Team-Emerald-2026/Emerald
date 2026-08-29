@@ -3,6 +3,7 @@ import { BarChart3, Receipt, Store } from 'lucide-react';
 import AdminShell from './AdminShell';
 import { ApiError, fetchAdminAnalytics, type AdminAnalytics } from '../../lib/api';
 import { logoutAdminSession, useFestival } from '../../lib/festivalStore';
+import { ADMIN_PUBLIC_ACCESS } from '../../lib/adminAccess';
 
 const yen = (value: number) => `¥${value.toLocaleString('ja-JP')}`;
 
@@ -13,12 +14,12 @@ export default function AdminDashboard() {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    if (!adminSession) return;
+    if (!adminSession && !ADMIN_PUBLIC_ACCESS) return;
     const controller = new AbortController();
 
     setLoading(true);
     setError('');
-    fetchAdminAnalytics(adminSession.token, controller.signal)
+    fetchAdminAnalytics(adminSession?.token, controller.signal)
       .then((data) => setAnalytics(data))
       .catch((err: unknown) => {
         if (controller.signal.aborted) return;
