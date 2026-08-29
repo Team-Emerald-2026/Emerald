@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Minus, Receipt } from 'lucide-react';
+import { Minus, Plus, Receipt } from 'lucide-react';
 import StoreShell from './StoreShell';
 import { issueOrder, adjustWaiting } from '../../lib/festivalStore';
 
@@ -33,20 +33,21 @@ export default function StorePos() {
     });
 
   const entries = Object.entries(cart);
-  const total = entries.reduce(
-    (a, [id, q]) => a + (products.find((p) => p.id === id)?.price ?? 0) * q,
-    0,
-  );
+  const lineItems = entries.map(([id, qty]) => {
+    const product = products.find((p) => p.id === id)!;
+    return { ...product, qty, subtotal: product.price * qty };
+  });
+  const total = lineItems.reduce((sum, item) => sum + item.subtotal, 0);
 
   const checkout = () => {
-    if (entries.length === 0) return;
-    const items = entries.map(([id, q]) => ({
-      name: products.find((p) => p.id === id)!.name,
-      qty: q,
+    if (lineItems.length === 0) return;
+    const items = lineItems.map((item) => ({
+      name: item.name,
+      qty: item.qty,
       store: 'レジ会計',
     }));
     const number = issueOrder(items, total);
-    adjustWaiting(1); // 提供待ちを +1
+    adjustWaiting(1);
     setIssued(number);
     setCart({});
   };
@@ -64,64 +65,78 @@ export default function StorePos() {
           </div>
         )}
 
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-          {products.map((p) => {
-            const qty = cart[p.id] ?? 0;
-            return (
-              <div
-                key={p.id}
-                role="button"
-                tabIndex={0}
-                onClick={() => setQty(p.id, qty + 1)}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter' || event.key === ' ') {
-                    event.preventDefault();
-                    setQty(p.id, qty + 1);
-                  }
-                }}
-                aria-label={`${p.name}を追加`}
-                className="relative min-h-28 cursor-pointer rounded-2xl border border-border bg-card p-3 pr-12 transition-colors hover:bg-muted/50 focus:outline-none focus:ring-2 focus:ring-primary"
-              >
-                <p className="font-bold text-foreground">{p.name}</p>
-                <p className="text-sm text-muted-foreground">{yen(p.price)}</p>
-                {qty > 0 ? (
-                  <p className="mt-6 text-sm font-bold text-foreground">×{qty}</p>
-                ) : (
-                  <p className="mt-6 text-sm text-muted-foreground">カードをタップで追加</p>
-                )}
-                {qty > 0 && (
-                  <button
-                    type="button"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      setQty(p.id, qty - 1);
-                    }}
-                    aria-label={`${p.name}を減らす`}
-                    className="absolute right-2 top-2 grid h-10 w-10 place-items-center rounded-full border border-border bg-background text-foreground shadow-sm"
-                  >
-                    <Minus className="h-5 w-5" />
-                  </button>
-                )}
-              </div>
-            );
-          })}
-        </div>
-
-        <div className="rounded-2xl border border-border bg-card p-4">
-          <div className="flex items-center justify-between">
-            <span className="font-bold text-foreground">合計</span>
-            <span className="font-display text-2xl font-bold text-foreground">{yen(total)}</span>
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+            {products.map((p) => {
+              const qty = cart[p.id] ?? 0;
+              return (
+                <div
+                  key={p.id}
+                  className="flex min-h-36 flex-col rounded-2xl border border-border bg-card p-3"
+                >
+                  <p className="font-bold text-foreground">{p.name}</p>
+                  <p className="text-sm text-muted-foreground">{yen(p.price)}</p>
+                  <div className="mt-auto flex items-center justify-between gap-2 pt-4">
+                    <button
+                      type="button"
+                      onClick={() => setQty(p.id, qty - 1)}
+                      disabled={qty === 0}
+                      aria-label={`${p.name}を1減らす`}
+                      className="grid h-11 w-11 place-items-center rounded-xl border border-border bg-background text-foreground disabled:opacity-40"
+                    >
+                      <Minus className="h-5 w-5" />
+                    </button>
+                    <span className="min-w-8 text-center font-display text-xl font-bold text-foreground">
+                      {qty}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setQty(p.id, qty + 1)}
+                      aria-label={`${p.name}を1追加`}
+                      className="grid h-11 w-11 place-items-center rounded-xl text-white"
+                      style={{ backgroundColor: 'var(--primary)' }}
+                    >
+                      <Plus className="h-5 w-5" />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
           </div>
-          <button
-            type="button"
-            onClick={checkout}
-            disabled={entries.length === 0}
-            className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl py-3 font-bold text-white disabled:opacity-40"
-            style={{ backgroundColor: 'var(--accent)' }}
-          >
-            <Receipt className="h-5 w-5" />
-            会計して受付番号を発行
-          </button>
+
+          <aside className="rounded-2xl border border-border bg-card p-4 lg:sticky lg:top-32">
+            <h2 className="font-display text-base font-bold text-foreground">注文内容</h2>
+            {lineItems.length === 0 ? (
+              <p className="mt-3 text-sm text-muted-foreground">
+                商品の − / 数量 / ＋ で追加してください。
+              </p>
+            ) : (
+              <ul className="mt-3 space-y-2">
+                {lineItems.map((item) => (
+                  <li key={item.id} className="flex items-center justify-between text-sm">
+                    <span className="text-foreground">
+                      {item.name}×{item.qty}
+                    </span>
+                    <span className="text-muted-foreground">{yen(item.subtotal)}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <div className="mt-4 flex items-center justify-between border-t border-border pt-3">
+              <span className="font-bold text-foreground">合計</span>
+              <span className="font-display text-2xl font-bold text-foreground">{yen(total)}</span>
+            </div>
+            <button
+              type="button"
+              onClick={checkout}
+              disabled={lineItems.length === 0}
+              className="mt-3 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl py-3 font-bold text-white disabled:opacity-40"
+              style={{ backgroundColor: 'var(--primary)' }}
+            >
+              <Receipt className="h-5 w-5" />
+              会計して受付番号を発行
+            </button>
+          </aside>
         </div>
       </div>
     </StoreShell>

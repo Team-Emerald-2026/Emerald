@@ -34,6 +34,7 @@ interface FestivalState {
   counter: number; // 直近に発行した番号の連番（初期 100）
   bigNumber: string | null; // 「大きく表示」対象の番号
   waiting: number; // 店舗側の手動待ち人数カウンタ
+  waitMinPerPerson: number; // 来場者画面の待ち時間計算に使う 1人あたり分数
   session: {
     storeId: string;
     token: string;
@@ -51,6 +52,7 @@ const initialState: FestivalState = {
   counter: 100,
   bigNumber: null,
   waiting: 0,
+  waitMinPerPerson: 5,
   session: null,
   adminSession: null,
 };
@@ -59,7 +61,15 @@ function read(): FestivalState {
   try {
     const raw = localStorage.getItem(KEY);
     if (!raw) return initialState;
-    return { ...initialState, ...(JSON.parse(raw) as FestivalState) };
+    const parsed = JSON.parse(raw) as Partial<FestivalState>;
+    return {
+      ...initialState,
+      ...parsed,
+      waitMinPerPerson:
+        typeof parsed.waitMinPerPerson === 'number' && parsed.waitMinPerPerson >= 0
+          ? parsed.waitMinPerPerson
+          : initialState.waitMinPerPerson,
+    };
   } catch {
     return initialState;
   }
@@ -132,14 +142,32 @@ export function issueOrder(items: OrderItem[], total: number): string {
 
 export function setOrderStatus(number: string, status: OrderStatus) {
   const s = read();
+  const current = s.orders.find((o) => o.number === number);
+  const wasServed = current?.status === 'served';
+  const nowServed = status === 'served';
+  let waiting = s.waiting;
+  if (!wasServed && nowServed) waiting = Math.max(0, waiting - 1);
+  if (wasServed && !nowServed) waiting += 1;
+
   write({
     ...s,
+    waiting,
     orders: s.orders.map((o) =>
       o.number === number
-        ? { ...o, status, servedAt: status === 'served' ? Date.now() : o.servedAt }
+        ? { ...o, status, servedAt: status === 'served' ? Date.now() : undefined }
         : o,
     ),
   });
+}
+
+/** 提供済みを受付待ちに戻す（誤操作の取り消し）。 */
+export function revertServedOrder(number: string) {
+  setOrderStatus(number, 'waiting');
+}
+
+export function setWaitMinPerPerson(min: number) {
+  const s = read();
+  write({ ...s, waitMinPerPerson: Math.max(0, Math.floor(min)) });
 }
 
 export function setBigNumber(number: string | null) {

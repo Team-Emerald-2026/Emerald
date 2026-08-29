@@ -52,7 +52,7 @@ function toArea(store: BackendStore, facility?: BackendMapFacility): string {
 }
 
 function toWaitLabel(min: number) {
-  return min <= 0 ? 'すぐ入れる' : `${min}分待ち`;
+  return min <= 0 ? '待ち0分' : `待ち約${min}分`;
 }
 
 function RecommendationSkeleton() {
@@ -188,7 +188,8 @@ export default function Home() {
                   <span className="min-w-0 flex-1">
                     <span className="block truncate font-bold text-foreground">{booth.name}</span>
                     <span className="block text-sm text-muted-foreground">
-                      {booth.area}・{booth.popular ? '人気' : '空いている'}
+                      {booth.area}
+                      {booth.popular ? '・人気' : ''}
                     </span>
                   </span>
                   <span

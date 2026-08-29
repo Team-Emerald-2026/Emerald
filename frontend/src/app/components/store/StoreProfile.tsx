@@ -4,14 +4,17 @@ import StoreShell from './StoreShell';
 import {
   fetchStoreProfile,
   updateStoreProfile,
+  updateWaitTime,
   type StoreProfile as StoreProfileData,
 } from '../../lib/api';
-import { useFestival } from '../../lib/festivalStore';
+import { setWaitMinPerPerson, useFestival } from '../../lib/festivalStore';
 
 const DEFAULT_WAIT_MIN_PER_PERSON = 5;
 
 export default function StoreProfile() {
   const session = useFestival((s) => s.session);
+  const waitingPeople = useFestival((s) => s.waiting);
+  const storedWaitMin = useFestival((s) => s.waitMinPerPerson);
   const [profile, setProfile] = useState<StoreProfileData | null>(null);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -35,8 +38,7 @@ export default function StoreProfile() {
         setName(data.name);
         setDescription(data.description ?? '');
         setIsOpen(Boolean(data.is_open));
-        const wait = Number(data.current_wait_min);
-        setWaitMin(Number.isFinite(wait) && wait > 0 ? wait : DEFAULT_WAIT_MIN_PER_PERSON);
+        setWaitMin(storedWaitMin > 0 ? storedWaitMin : DEFAULT_WAIT_MIN_PER_PERSON);
       })
       .catch((err: unknown) => {
         setError(err instanceof Error ? err.message : '店舗情報を取得できませんでした。');
@@ -70,15 +72,21 @@ export default function StoreProfile() {
       const updated = await updateStoreProfile(session.token, profile.id, {
         name: name.trim(),
         description: description.trim(),
-        current_wait_min: waitMin,
+        current_wait_min: waitingPeople * waitMin,
         is_open: isOpen,
       });
+      setWaitMinPerPerson(waitMin);
+      if (session.storeId) {
+        await updateWaitTime(session.token, session.storeId, {
+          current_wait_min: waitingPeople * waitMin,
+          current_queue_count: waitingPeople,
+        });
+      }
       setProfile(updated);
       setName(updated.name);
       setDescription(updated.description ?? '');
       setIsOpen(Boolean(updated.is_open));
-      const wait = Number(updated.current_wait_min);
-      setWaitMin(Number.isFinite(wait) && wait > 0 ? wait : DEFAULT_WAIT_MIN_PER_PERSON);
+      setWaitMin(waitMin);
       setMessage('店舗情報を保存しました。');
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : '保存に失敗しました。');
@@ -125,7 +133,9 @@ export default function StoreProfile() {
               </span>
               <div>
                 <h2 className="font-display text-lg font-bold text-foreground">プロフィール編集</h2>
-                <p className="text-sm text-muted-foreground">店舗ID: {profile.id}</p>
+                <p className="text-sm text-muted-foreground">
+                  店舗ID（問い合わせ時に使用）: {profile.id}
+                </p>
               </div>
             </div>
 
@@ -150,9 +160,13 @@ export default function StoreProfile() {
 
             <div className="flex items-center justify-between rounded-xl border border-border bg-background px-3 py-3">
               <div>
-                <p className="text-sm font-medium text-foreground">営業</p>
+                <p className="text-sm font-medium text-foreground">
+                  {isOpen ? '営業中' : '受付停止中'}
+                </p>
                 <p className="text-xs text-muted-foreground">
-                  {isOpen ? '来場者画面に営業中と表示します' : '来場者画面に準備中と表示します'}
+                  {isOpen
+                    ? '来場者画面に営業中と表示します'
+                    : '来場者画面に受付停止中と表示します'}
                 </p>
               </div>
               <button
@@ -187,7 +201,7 @@ export default function StoreProfile() {
                 <span className="shrink-0 text-sm text-muted-foreground">分</span>
               </div>
               <span className="mt-1 block text-xs text-muted-foreground">
-                未設定の場合の初期値は{DEFAULT_WAIT_MIN_PER_PERSON}分です。
+                来場者画面の表示: 待ち人数{waitingPeople}人 × {waitMin}分 = 待ち約{waitingPeople * waitMin}分
               </span>
             </label>
 
@@ -207,7 +221,7 @@ export default function StoreProfile() {
               <Power className="h-5 w-5" style={{ color: isOpen ? 'var(--ok)' : 'var(--muted-foreground)' }} />
               <p className="mt-2 text-sm text-muted-foreground">営業状態</p>
               <p className="font-display text-2xl font-bold text-foreground">
-                {profile.is_open ? '営業中' : '準備中'}
+                {isOpen ? '営業中' : '受付停止中'}
               </p>
             </section>
 
@@ -215,8 +229,11 @@ export default function StoreProfile() {
               <Clock className="h-5 w-5" style={{ color: 'var(--primary)' }} />
               <p className="mt-2 text-sm text-muted-foreground">一人当たり待ち時間</p>
               <p className="font-display text-2xl font-bold text-foreground">
-                {profile.current_wait_min > 0 ? profile.current_wait_min : DEFAULT_WAIT_MIN_PER_PERSON}
+                {waitMin}
                 <span className="ml-1 text-sm font-medium">分</span>
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                表示待ち時間 {waitingPeople * waitMin}分
               </p>
             </section>
 
@@ -224,7 +241,7 @@ export default function StoreProfile() {
               <Users className="h-5 w-5" style={{ color: 'var(--primary)' }} />
               <p className="mt-2 text-sm text-muted-foreground">待ち人数</p>
               <p className="font-display text-2xl font-bold text-foreground">
-                {profile.current_queue_count}
+                {waitingPeople}
                 <span className="ml-1 text-sm font-medium">人</span>
               </p>
             </section>

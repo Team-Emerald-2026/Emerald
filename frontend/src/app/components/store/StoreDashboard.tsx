@@ -3,17 +3,22 @@ import StoreShell from './StoreShell';
 import {
   useFestival,
   selectWaitingOrders,
-  selectLatestNumber,
   logoutStore,
 } from '../../lib/festivalStore';
-import { Users, Megaphone, Hash } from 'lucide-react';
+import { Users, Clock, Hash } from 'lucide-react';
 import { ApiError, type BoothDashboard, fetchBoothDashboard } from '../../lib/api';
+
+function statusLabel(status: 'waiting' | 'called' | 'served') {
+  if (status === 'called') return '呼び出し中';
+  if (status === 'served') return '提供済み';
+  return '提供待ち';
+}
 
 export default function StoreDashboard() {
   const session = useFestival((s) => s.session);
   const waitingOrders = useFestival(selectWaitingOrders);
-  const bigNumber = useFestival((s) => s.bigNumber);
-  const latest = useFestival(selectLatestNumber);
+  const waitMinPerPerson = useFestival((s) => s.waitMinPerPerson);
+  const waitingPeople = useFestival((s) => s.waiting);
   const [dashboard, setDashboard] = useState<BoothDashboard | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -50,51 +55,51 @@ export default function StoreDashboard() {
     return () => abortController.abort();
   }, [session]);
 
+  const waitingCount = waitingOrders.filter((o) => o.status === 'waiting').length;
+  const calledCount = waitingOrders.filter((o) => o.status === 'called').length;
+  const estimatedMin = waitingPeople * waitMinPerPerson;
+
   const cards = [
     {
       label: '提供待ち',
-      value: dashboard ? `${dashboard.current_queue_count}` : '---',
-      unit: '人',
+      value: `${waitingOrders.length}`,
+      unit: '件',
+      hint:
+        waitingOrders.length === 0
+          ? '未提供の注文はありません'
+          : `受付待ち ${waitingCount}件・呼び出し中 ${calledCount}件`,
       icon: Users,
       color: 'var(--primary)',
     },
     {
-      label: '一人当たり待ち時間',
-      value: dashboard ? `${dashboard.current_wait_min}` : '---',
+      label: '来場者への待ち表示',
+      value: `${estimatedMin}`,
       unit: '分',
-      icon: Megaphone,
+      hint: `${waitingPeople}人 × ${waitMinPerPerson}分`,
+      icon: Clock,
       color: 'var(--accent)',
     },
     {
       label: '営業状態',
-      value: dashboard ? (dashboard.is_open ? '営業中' : '準備中') : '---',
+      value: dashboard ? (dashboard.is_open ? '営業中' : '受付停止中') : '---',
       unit: '',
+      hint: dashboard?.is_open ? '来場者画面に公開中' : '来場者画面では準備中',
       icon: Hash,
       color: '#7c5cff',
     },
-    //した二つに関してはAPIで実装よりlocalstorageで管理する方が良いかもしれない
-    // {
-    //   label: '大きく表示中',
-    //   value: bigNumber ?? '---',
-    //   unit: '',
-    //   icon: Megaphone,
-    //   color: 'var(--accent)',
-    // },
-    // {
-    //   label: '最新発行番号',
-    //   value: latest ?? '---',
-    //   unit: '',
-    //   icon: Hash,
-    //   color: '#7c5cff',
-    // },
   ];
+
+  const storeName = dashboard?.name?.trim() || '---';
+  const storeDescription = dashboard?.description?.trim() || '';
 
   return (
     <StoreShell title="ダッシュボード">
       <div className="mb-4 rounded-xl border border-border bg-card p-4">
-        <p className="font-display text-lg font-bold text-foreground">{dashboard?.name ?? '---'}</p>
+        <p className="text-xs font-medium text-muted-foreground">店舗名</p>
+        <p className="font-display text-lg font-bold text-foreground">{storeName}</p>
+        <p className="mt-3 text-xs font-medium text-muted-foreground">説明</p>
         <p className="mt-1 text-sm text-muted-foreground">
-          {dashboard?.description?.trim() || '店舗説明は未設定です。'}
+          {storeDescription || '店舗説明は未設定です。'}
         </p>
       </div>
 
@@ -121,6 +126,7 @@ export default function StoreDashboard() {
               {c.value}
               {c.unit && <span className="ml-1 text-base font-medium">{c.unit}</span>}
             </p>
+            <p className="mt-1 text-xs text-muted-foreground">{c.hint}</p>
           </div>
         ))}
       </div>
@@ -141,11 +147,12 @@ export default function StoreDashboard() {
                 <span className="font-display text-lg font-bold text-foreground">{o.number}</span>
                 <span className="text-sm text-muted-foreground">
                   {o.items.reduce((a, it) => a + it.qty, 0)}点
-                  {o.status === 'called' && (
-                    <span className="ml-2" style={{ color: 'var(--accent)' }}>
-                      呼び出し中
-                    </span>
-                  )}
+                  <span
+                    className="ml-2"
+                    style={{ color: o.status === 'called' ? 'var(--accent)' : 'var(--primary)' }}
+                  >
+                    {statusLabel(o.status)}
+                  </span>
                 </span>
               </li>
             ))}

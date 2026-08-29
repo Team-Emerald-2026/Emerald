@@ -24,6 +24,8 @@ interface Facility {
   floor: Floor;
   x: number; // マップ上の相対座標（%）
   y: number;
+  displayX?: number;
+  displayY?: number;
 }
 
 const campusMap = {
@@ -96,6 +98,40 @@ function toPercent(value: number, max: number): number {
   return Math.max(0, Math.min(100, (value / max) * 100));
 }
 
+function clampPercent(value: number) {
+  return Math.max(6, Math.min(94, value));
+}
+
+/** 近いピンを少し離して、教室番号が重なって読めなくならないようにする */
+function spreadPins(items: Facility[]): Facility[] {
+  const result = items.map((item) => ({
+    ...item,
+    displayX: item.x,
+    displayY: item.y,
+  }));
+  const minDist = 16;
+
+  for (let iter = 0; iter < 10; iter += 1) {
+    for (let i = 0; i < result.length; i += 1) {
+      for (let j = i + 1; j < result.length; j += 1) {
+        const dx = (result[j].displayX ?? 0) - (result[i].displayX ?? 0);
+        const dy = (result[j].displayY ?? 0) - (result[i].displayY ?? 0);
+        const dist = Math.hypot(dx, dy) || 0.01;
+        if (dist >= minDist) continue;
+        const push = (minDist - dist) / 2;
+        const nx = dx / dist;
+        const ny = dy / dist;
+        result[i].displayX = clampPercent((result[i].displayX ?? 0) - nx * push);
+        result[i].displayY = clampPercent((result[i].displayY ?? 0) - ny * push);
+        result[j].displayX = clampPercent((result[j].displayX ?? 0) + nx * push);
+        result[j].displayY = clampPercent((result[j].displayY ?? 0) + ny * push);
+      }
+    }
+  }
+
+  return result;
+}
+
 function toFacility(facility: BackendMapFacility): Facility {
   const floorNum = Number(facility.floor);
   const storeId = facility.store_id ?? '';
@@ -149,7 +185,9 @@ export default function CampusMap() {
   const displayFacilities = useMemo(() => {
     const unique: Record<string, Facility> = Object.create(null);
     for (const facility of facilities) {
-      const key = `${facility.floor}:${Math.round(facility.x)}:${Math.round(facility.y)}`;
+      const key = facility.storeId
+        ? `store:${facility.storeId}`
+        : `place:${facility.floor}:${facility.name}`;
       const current = unique[key];
       if (!current || (facility.storeId && !current.storeId)) {
         unique[key] = facility;
@@ -158,21 +196,17 @@ export default function CampusMap() {
 
     const merged = Object.values(unique);
     const names = new Set(merged.map((facility) => `${facility.floor}:${facility.name}`));
-    const coords = new Set(
-      merged.map((facility) => `${facility.floor}:${Math.round(facility.x)}:${Math.round(facility.y)}`),
-    );
 
     for (const location of mapLocations) {
       const floorLabel = `${location.floor}F`;
       const nameKey = `${floorLabel}:${location.name}`;
-      const coordKey = `${floorLabel}:${location.map_x}:${location.map_y}`;
-      if (names.has(nameKey) || coords.has(coordKey)) continue;
+      if (names.has(nameKey)) continue;
       merged.push({
         id: location.key,
         storeId: '',
         name: location.name,
         type: '体験',
-        floor: floorLabel,
+        floor: `${location.floor}F` as Floor,
         x: location.map_x,
         y: location.map_y,
       });
@@ -198,13 +232,20 @@ export default function CampusMap() {
   );
 
   const match = (f: Facility) => f.floor === floor && (type === 'すべて' || f.type === type);
-  const filtered = displayFacilities.filter(match);
+  const filtered = spreadPins(displayFacilities.filter(match));
   const selectedFacility =
     displayFacilities.find(
       (f) =>
         (targetStoreId != null && f.storeId === targetStoreId) ||
         (targetFacilityId != null && f.id === targetFacilityId),
     ) ?? null;
+
+  useEffect(() => {
+    if (!selectedFacility) return;
+    document
+      .getElementById(`facility-${selectedFacility.id}`)
+      ?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }, [selectedFacility]);
 
   const selectFacility = (f: Facility) => {
     const next = new URLSearchParams(searchParams);
@@ -226,38 +267,38 @@ export default function CampusMap() {
     const Icon = typeIcon[f.type];
     const isSelected = selectedFacility?.id === f.id;
     return (
-      <li
-        className={`flex items-center gap-3 rounded-xl border px-3 py-2.5 ${
-          isSelected
-            ? 'border-[color:var(--primary)] bg-[color:var(--primary)]/10'
-            : 'border-border bg-card'
-        }`}
-      >
-        <span
-          className="grid h-9 w-9 shrink-0 place-items-center rounded-lg"
-          style={{ backgroundColor: typeColor[f.type] }}
-        >
-          <Icon className="h-4 w-4 text-white" />
-        </span>
-        <div className="min-w-0 flex-1">
-          <p className="truncate font-medium text-foreground">{f.name}</p>
-          <p className="text-xs text-muted-foreground">
-            {f.floor}・{f.type}
-          </p>
-        </div>
+      <li id={`facility-${f.id}`}>
         <button
           type="button"
           onClick={() => selectFacility(f)}
-          className="shrink-0 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted"
+          className={`flex w-full items-center gap-3 rounded-xl border px-3 py-2.5 text-left ${
+            isSelected
+              ? 'border-[color:var(--primary)] bg-[color:var(--primary)]/10 ring-2 ring-[color:var(--primary)]'
+              : 'border-border bg-card'
+          }`}
         >
-          詳細
+          <span
+            className="grid h-9 w-9 shrink-0 place-items-center rounded-lg"
+            style={{ backgroundColor: typeColor[f.type] }}
+          >
+            <Icon className="h-4 w-4 text-white" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="truncate font-medium text-foreground">{f.name}</p>
+            <p className="text-xs text-muted-foreground">
+              {f.floor}・{f.type}
+            </p>
+          </div>
+          <span className="shrink-0 text-xs font-bold" style={{ color: 'var(--primary)' }}>
+            {isSelected ? '選択中' : '地図で見る'}
+          </span>
         </button>
       </li>
     );
   };
 
   return (
-    <div className="space-y-4 p-4">
+    <div className="space-y-3 p-4">
       <h1 className="font-display text-2xl font-bold text-foreground">{campusMap.name}</h1>
 
       {error && (
@@ -266,27 +307,35 @@ export default function CampusMap() {
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-3 rounded-xl border border-border bg-card p-3">
-        <label className="text-sm">
-          <span className="mb-1 block text-muted-foreground">階層</span>
-          <select
-            value={floor}
-            onChange={(e) => setFloor(e.target.value as typeof floor)}
-            className="w-full rounded-lg border border-input bg-background px-2 py-2 text-foreground"
-          >
-            {floors.map((f) => (
-              <option key={f} value={f}>
-                {f}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="text-sm">
-          <span className="mb-1 block text-muted-foreground">ブースタイプ</span>
+      <div className="space-y-2 rounded-xl border border-border bg-card p-2.5">
+        <div>
+          <p className="mb-1 px-1 text-[11px] font-medium text-muted-foreground">フロア</p>
+          <div className="flex gap-1 overflow-x-auto">
+            {floors.map((item) => {
+              const active = floor === item;
+              return (
+                <button
+                  key={item}
+                  type="button"
+                  onClick={() => setFloor(item)}
+                  className="min-h-9 shrink-0 rounded-full px-3 text-xs font-bold"
+                  style={{
+                    backgroundColor: active ? 'var(--primary)' : 'var(--muted)',
+                    color: active ? 'var(--primary-foreground)' : 'var(--muted-foreground)',
+                  }}
+                >
+                  {item}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+        <label className="flex items-center gap-2 text-xs">
+          <span className="shrink-0 text-muted-foreground">種類</span>
           <select
             value={type}
             onChange={(e) => setType(e.target.value as typeof type)}
-            className="w-full rounded-lg border border-input bg-background px-2 py-2 text-foreground"
+            className="min-h-9 w-full rounded-lg border border-input bg-background px-2 text-foreground"
           >
             {(['すべて', ...boothTypes] as const).map((t) => (
               <option key={t} value={t}>
@@ -298,7 +347,7 @@ export default function CampusMap() {
       </div>
 
       <div
-        className={`relative aspect-[825/466] w-full overflow-hidden rounded-2xl border border-border bg-muted ${
+        className={`relative aspect-[825/466] min-h-52 w-full overflow-hidden rounded-2xl border border-border bg-muted ${
           import.meta.env.DEV ? 'cursor-crosshair' : ''
         }`}
         onClick={(e) => {
@@ -318,35 +367,33 @@ export default function CampusMap() {
           {floor}
         </span>
         {filtered.map((f) => {
-          const Icon = typeIcon[f.type];
           const isSelected = selectedFacility?.id === f.id;
           const hasSelection = selectedFacility != null;
           return (
-            <div
+            <button
               key={f.id}
-              className={`absolute -translate-x-1/2 -translate-y-1/2 ${isSelected ? 'z-10' : 'z-0'}`}
-              style={{ left: `${f.x}%`, top: `${f.y}%` }}
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                selectFacility(f);
+              }}
+              className={`absolute -translate-x-1/2 -translate-y-1/2 whitespace-nowrap rounded-md px-1.5 py-1 text-[10px] font-bold leading-none text-white shadow-md transition ${
+                isSelected
+                  ? 'z-20 scale-110 ring-2 ring-white'
+                  : hasSelection
+                    ? 'z-0 opacity-55'
+                    : 'z-0'
+              }`}
+              style={{
+                left: `${f.displayX ?? f.x}%`,
+                top: `${f.displayY ?? f.y}%`,
+                backgroundColor: typeColor[f.type],
+              }}
+              title={f.name}
+              aria-pressed={isSelected}
             >
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  selectFacility(f);
-                }}
-                className={`grid place-items-center rounded-full shadow-md transition ${
-                  isSelected
-                    ? 'h-10 w-10 scale-110 ring-4 ring-white'
-                    : hasSelection
-                      ? 'h-8 w-8 ring-2 ring-white/70 opacity-45'
-                      : 'h-8 w-8 ring-2 ring-white/70'
-                }`}
-                style={{ backgroundColor: typeColor[f.type] }}
-                title={f.name}
-                aria-pressed={isSelected}
-              >
-                <Icon className={`${isSelected ? 'h-5 w-5' : 'h-4 w-4'} text-white`} />
-              </button>
-            </div>
+              {f.name}
+            </button>
           );
         })}
         {filtered.length === 0 && (
@@ -378,45 +425,39 @@ export default function CampusMap() {
             <button
               type="button"
               onClick={clearSelectedFacility}
-              className="shrink-0 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted"
+              className="min-h-11 shrink-0 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted"
             >
               閉じる
             </button>
           </div>
-          <div className="mt-4 grid grid-cols-2 gap-2">
+          <div className="mt-4 flex gap-2">
             {selectedFacility.storeId ? (
               <Link
                 to={`/attractions?detail=${encodeURIComponent(selectedFacility.storeId)}`}
-                className="rounded-xl border border-border px-3 py-2 text-center text-sm font-bold text-foreground hover:bg-muted"
+                className="min-h-11 flex-1 rounded-xl px-3 py-2 text-center text-sm font-bold text-white"
+                style={{ backgroundColor: 'var(--primary)' }}
               >
                 ブース詳細
               </Link>
             ) : (
-              <span className="rounded-xl bg-muted px-3 py-2 text-center text-sm font-bold text-muted-foreground">
+              <span className="min-h-11 flex-1 rounded-xl bg-muted px-3 py-2 text-center text-sm font-bold leading-7 text-muted-foreground">
                 詳細準備中
               </span>
             )}
-            {selectedFacility.type === 'フード' && selectedFacility.storeId ? (
+            {selectedFacility.type === 'フード' && selectedFacility.storeId && (
               <Link
                 to={`/restaurants?store=${encodeURIComponent(selectedFacility.storeId)}`}
-                className="rounded-xl px-3 py-2 text-center text-sm font-bold text-white"
-                style={{ backgroundColor: 'var(--accent)' }}
+                className="min-h-11 flex-1 rounded-xl border border-border px-3 py-2 text-center text-sm font-bold text-foreground"
               >
                 呼び出しを見る
               </Link>
-            ) : (
-              <span className="rounded-xl bg-muted px-3 py-2 text-center text-sm font-bold text-muted-foreground">
-                対象外
-              </span>
             )}
           </div>
         </section>
       )}
 
-      {/* 一覧 */}
-
       {filtered.length === 0 ? (
-        <p className="px-1 text-sm text-muted-foreground">この階層のブースはありません。</p>
+        <p className="px-1 text-sm text-muted-foreground">このフロアのブースはありません。</p>
       ) : (
         <ul className="space-y-2">
           {filtered.map((f) => (
@@ -425,7 +466,6 @@ export default function CampusMap() {
         </ul>
       )}
 
-      {/* 案内ボックス */}
       <div
         className="flex gap-2 rounded-xl p-3 text-sm"
         style={{ backgroundColor: 'var(--info-soft)', color: 'var(--info)' }}

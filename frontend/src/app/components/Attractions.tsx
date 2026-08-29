@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Ticket, Flame, MapPin, Info, ShoppingBag, ChevronDown, ChevronUp } from 'lucide-react';
+import { Ticket, Flame, MapPin, Info, ShoppingBag } from 'lucide-react';
 import {
   fetchMapFacilities,
   fetchRestaurants,
@@ -56,10 +56,10 @@ function toBooth(store: BackendStore, facility?: BackendMapFacility): Booth {
 }
 
 function waitStyle(min: number) {
-  if (min <= 0) return { label: 'すぐ入れる', bg: 'var(--ok-soft)', fg: 'var(--ok)' };
-  if (min < 15) return { label: `${min}分`, bg: 'var(--ok-soft)', fg: 'var(--ok)' };
-  if (min < 30) return { label: `${min}分`, bg: 'var(--warn-soft)', fg: 'var(--warn)' };
-  return { label: `${min}分`, bg: 'var(--busy-soft)', fg: 'var(--busy)' };
+  if (min <= 0) return { label: '待ち0分', bg: 'var(--ok-soft)', fg: 'var(--ok)' };
+  if (min < 15) return { label: `待ち約${min}分`, bg: 'var(--ok-soft)', fg: 'var(--ok)' };
+  if (min < 30) return { label: `待ち約${min}分`, bg: 'var(--warn-soft)', fg: 'var(--warn)' };
+  return { label: `待ち約${min}分`, bg: 'var(--busy-soft)', fg: 'var(--busy)' };
 }
 
 function BoothCardSkeleton() {
@@ -75,8 +75,7 @@ function BoothCardSkeleton() {
           <SkeletonText className="ml-auto w-12" />
         </div>
       </div>
-      <div className="mt-4 grid grid-cols-3 gap-2">
-        <Skeleton className="h-9 rounded-xl" />
+      <div className="mt-4 grid grid-cols-2 gap-2">
         <Skeleton className="h-9 rounded-xl" />
         <Skeleton className="h-9 rounded-xl" />
       </div>
@@ -188,7 +187,11 @@ export default function Attractions() {
                 key={b.id}
                 className="rounded-2xl border border-border bg-card p-4"
               >
-                <div className="flex items-start justify-between gap-3">
+                <button
+                  type="button"
+                  onClick={() => (detailId === b.id ? hideDetail() : showDetail(b.id))}
+                  className="flex w-full items-start justify-between gap-3 text-left"
+                >
                   <div className="min-w-0">
                     <h3 className="truncate font-bold text-foreground">{b.name}</h3>
                     <p className="mt-0.5 flex items-center gap-1 text-sm text-muted-foreground">
@@ -205,7 +208,7 @@ export default function Attractions() {
                     </span>
                     <p className="mt-1 text-[11px] text-muted-foreground">待ち時間</p>
                   </div>
-                </div>
+                </button>
 
                 {(b.ticket || b.popular) && (
                   <div className="mt-3 flex flex-wrap gap-2">
@@ -233,39 +236,23 @@ export default function Attractions() {
                   </div>
                 )}
 
-                <div className="mt-4 grid grid-cols-3 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => (detailId === b.id ? hideDetail() : showDetail(b.id))}
-                    className="inline-flex items-center justify-center gap-1 rounded-xl border border-border px-3 py-2 text-xs font-bold text-foreground hover:bg-muted"
-                  >
-                    {detailId === b.id ? (
-                      <ChevronUp className="h-3.5 w-3.5" />
-                    ) : (
-                      <ChevronDown className="h-3.5 w-3.5" />
-                    )}
-                    詳細
-                  </button>
+                <div className="mt-4 flex gap-2">
                   <Link
                     to={`/map?store=${encodeURIComponent(b.id)}`}
-                    className="inline-flex items-center justify-center gap-1 rounded-xl border border-border px-3 py-2 text-xs font-bold text-foreground hover:bg-muted"
+                    className="inline-flex min-h-11 flex-1 items-center justify-center gap-1 rounded-xl border border-border px-3 py-2 text-xs font-bold text-foreground hover:bg-muted"
                   >
                     <MapPin className="h-3.5 w-3.5" />
                     マップ
                   </Link>
-                  {b.category === 'フード' ? (
+                  {b.category === 'フード' && (
                     <Link
                       to={`/restaurants?store=${encodeURIComponent(b.id)}`}
-                      className="inline-flex items-center justify-center gap-1 rounded-xl px-3 py-2 text-xs font-bold text-white"
-                      style={{ backgroundColor: 'var(--accent)' }}
+                      className="inline-flex min-h-11 flex-1 items-center justify-center gap-1 rounded-xl px-3 py-2 text-xs font-bold text-white"
+                      style={{ backgroundColor: 'var(--primary)' }}
                     >
                       <ShoppingBag className="h-3.5 w-3.5" />
                       呼び出し
                     </Link>
-                  ) : (
-                    <span className="inline-flex items-center justify-center rounded-xl bg-muted px-3 py-2 text-xs font-bold text-muted-foreground">
-                      対象外
-                    </span>
                   )}
                 </div>
               </li>
