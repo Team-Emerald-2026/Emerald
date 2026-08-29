@@ -8,10 +8,10 @@ import {
   Info as InfoIcon,
   HeartPulse,
   Headset,
-  MapPin,
   type LucideIcon,
 } from 'lucide-react';
 import { fetchMapFacilities, type BackendMapFacility } from '../lib/api';
+import { mapLocations } from '../lib/mapLocations';
 
 type BoothType = '体験' | 'フード' | '物販' | 'トイレ' | '案内' | '救護室' | 'サポート';
 type Floor = `${number}F`;
@@ -97,16 +97,22 @@ function toPercent(value: number, max: number): number {
 }
 
 function toFacility(facility: BackendMapFacility): Facility {
-  const floor = Number(facility.floor);
+  const floorNum = Number(facility.floor);
+  const storeId = facility.store_id ?? '';
+  const placeholder = !storeId
+    ? mapLocations.find(
+        (location) => location.floor === floorNum && location.name === facility.name,
+      )
+    : undefined;
 
   return {
     id: facility.id,
-    storeId: facility.store_id ?? '',
+    storeId,
     name: facility.name,
     type: toBoothType(facility.type),
-    floor: `${Number.isFinite(floor) ? floor : 1}F`,
-    x: toPercent(Number(facility.x), 240),
-    y: toPercent(Number(facility.y), 180),
+    floor: `${Number.isFinite(floorNum) ? floorNum : 1}F`,
+    x: placeholder ? placeholder.map_x : toPercent(Number(facility.x), 240),
+    y: placeholder ? placeholder.map_y : toPercent(Number(facility.y), 180),
   };
 }
 
@@ -115,11 +121,11 @@ export default function CampusMap() {
   const targetStoreId = searchParams.get('store');
   const targetFacilityId = searchParams.get('facility');
   const floorParam = searchParams.get('floor');
-  const initialFloor: 'すべて' | MapFloor =
+  const initialFloor: MapFloor =
     floorParam && (floors as readonly string[]).includes(floorParam)
       ? (floorParam as MapFloor)
       : '1F';
-  const [floor, setFloor] = useState<'すべて' | MapFloor>(initialFloor);
+  const [floor, setFloor] = useState<MapFloor>(initialFloor);
   const [type, setType] = useState<'すべて' | BoothType>('すべて');
   const [facilities, setFacilities] = useState<Facility[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -149,7 +155,30 @@ export default function CampusMap() {
         unique[key] = facility;
       }
     }
-    return Object.values(unique);
+
+    const merged = Object.values(unique);
+    const names = new Set(merged.map((facility) => `${facility.floor}:${facility.name}`));
+    const coords = new Set(
+      merged.map((facility) => `${facility.floor}:${Math.round(facility.x)}:${Math.round(facility.y)}`),
+    );
+
+    for (const location of mapLocations) {
+      const floorLabel = `${location.floor}F`;
+      const nameKey = `${floorLabel}:${location.name}`;
+      const coordKey = `${floorLabel}:${location.map_x}:${location.map_y}`;
+      if (names.has(nameKey) || coords.has(coordKey)) continue;
+      merged.push({
+        id: location.key,
+        storeId: '',
+        name: location.name,
+        type: '体験',
+        floor: floorLabel,
+        x: location.map_x,
+        y: location.map_y,
+      });
+    }
+
+    return merged;
   }, [facilities]);
 
   useEffect(() => {
@@ -168,8 +197,7 @@ export default function CampusMap() {
     [displayFacilities],
   );
 
-  const match = (f: Facility) =>
-    (floor === 'すべて' || f.floor === floor) && (type === 'すべて' || f.type === type);
+  const match = (f: Facility) => f.floor === floor && (type === 'すべて' || f.type === type);
   const filtered = displayFacilities.filter(match);
   const selectedFacility =
     displayFacilities.find(
@@ -246,7 +274,7 @@ export default function CampusMap() {
             onChange={(e) => setFloor(e.target.value as typeof floor)}
             className="w-full rounded-lg border border-input bg-background px-2 py-2 text-foreground"
           >
-            {(['すべて', ...floors] as const).map((f) => (
+            {floors.map((f) => (
               <option key={f} value={f}>
                 {f}
               </option>
@@ -269,10 +297,12 @@ export default function CampusMap() {
         </label>
       </div>
 
-      {/* 校内マップ（クリックで座標を計測・開発用） */}
       <div
-        className="relative aspect-[825/466] w-full cursor-crosshair overflow-hidden rounded-2xl border border-border bg-muted"
+        className={`relative aspect-[825/466] w-full overflow-hidden rounded-2xl border border-border bg-muted ${
+          import.meta.env.DEV ? 'cursor-crosshair' : ''
+        }`}
         onClick={(e) => {
+          if (!import.meta.env.DEV) return;
           const rect = e.currentTarget.getBoundingClientRect();
           const x = Math.round(((e.clientX - rect.left) / rect.width) * 100);
           const y = Math.round(((e.clientY - rect.top) / rect.height) * 100);
@@ -280,10 +310,13 @@ export default function CampusMap() {
         }}
       >
         <img
-          src={floor === 'すべて' ? mapImageByFloor['1F'] : mapImageByFloor[floor]}
-          alt={`${floor === 'すべて' ? '1F' : floor} 校内マップ`}
+          src={mapImageByFloor[floor]}
+          alt={`${floor} 校内マップ`}
           className="absolute inset-0 h-full w-full object-fill"
         />
+        <span className="absolute left-3 top-3 z-10 rounded-full bg-black/70 px-2.5 py-1 text-xs font-bold text-white">
+          {floor}
+        </span>
         {filtered.map((f) => {
           const Icon = typeIcon[f.type];
           const isSelected = selectedFacility?.id === f.id;
@@ -317,13 +350,13 @@ export default function CampusMap() {
           );
         })}
         {filtered.length === 0 && (
-          <p className="absolute inset-0 grid place-items-center text-sm text-muted-foreground">
-            該当するブースがありません
+          <p className="absolute bottom-3 left-1/2 z-10 -translate-x-1/2 rounded-full bg-white/90 px-3 py-1 text-xs text-muted-foreground">
+            この階に表示できるブースはありません
           </p>
         )}
       </div>
 
-      {clickPos && (
+      {import.meta.env.DEV && clickPos && (
         <p className="text-sm text-muted-foreground">
           クリック位置: x={clickPos.x}, y={clickPos.y}
           （この数字を seeder にコピー）
@@ -382,26 +415,8 @@ export default function CampusMap() {
 
       {/* 一覧 */}
 
-      {floor === 'すべて' ? (
-        <div className="space-y-4">
-          {floors.map((fl) => {
-            const rows = filtered.filter((f) => f.floor === fl);
-            if (rows.length === 0) return null;
-            return (
-              <section key={fl}>
-                <h2 className="mb-2 flex items-center gap-2 px-1 font-display text-base font-bold text-foreground">
-                  <MapPin className="h-4 w-4" style={{ color: 'var(--primary)' }} />
-                  {fl}
-                </h2>
-                <ul className="space-y-2">
-                  {rows.map((f) => (
-                    <FacilityRow key={f.id} f={f} />
-                  ))}
-                </ul>
-              </section>
-            );
-          })}
-        </div>
+      {filtered.length === 0 ? (
+        <p className="px-1 text-sm text-muted-foreground">この階層のブースはありません。</p>
       ) : (
         <ul className="space-y-2">
           {filtered.map((f) => (
