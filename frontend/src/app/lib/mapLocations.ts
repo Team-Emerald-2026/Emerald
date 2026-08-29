@@ -6,7 +6,7 @@ export const mapLocations = [
   { key: '3f-303-1', name: '303-1', floor: 3, map_x: 52, map_y: 60 },
   { key: '3f-303-2', name: '303-2', floor: 3, map_x: 52, map_y: 73 },
   { key: '3f-303-3', name: '303-3', floor: 3, map_x: 52, map_y: 86 },
-  { key: '3f-303-4', name: '303-4', floor: 3, map_x: 56, map_y: 82 },
+  { key: '3f-303-4', name: '303-4', floor: 3, map_x: 61, map_y: 86 },
   { key: '3f-304-6', name: '304-6', floor: 3, map_x: 70, map_y: 60 },
   { key: '3f-304-7', name: '304-7', floor: 3, map_x: 70, map_y: 73 },
   { key: '3f-304-5', name: '304-5', floor: 3, map_x: 70, map_y: 86 },
