@@ -27,8 +27,9 @@ const emptyInput: AdminStoreInput = {
 };
 
 const storeTypes = [
-  { value: 'booth', label: '体験' },
-  { value: 'food', label: 'フード' },
+  { value: 'booth', label: '体験ブース' },
+  { value: 'food', label: '飲食ブース' },
+  { value: 'stage', label: 'イベントもの' },
   { value: 'shop', label: '物販' },
   { value: 'information', label: '案内' },
   { value: 'toilet', label: 'トイレ' },

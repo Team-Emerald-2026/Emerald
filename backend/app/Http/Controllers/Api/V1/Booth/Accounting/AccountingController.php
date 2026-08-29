@@ -7,6 +7,7 @@ use App\Http\Resources\Booth\Accounting\MenuItemResource;
 use App\Http\Resources\Booth\Accounting\OrderResource;
 use App\Models\MenuItem;
 use App\Models\Order;
+use App\Models\OrderItem;
 use App\Models\Store;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -21,6 +22,7 @@ class AccountingController extends Controller
 
         $menuItems = MenuItem::query()
             ->forStore($storeId)
+            ->where('is_available', true)
             ->select(['id', 'name', 'description', 'price', 'is_available'])
             ->orderBy('id')
             ->get();
@@ -28,6 +30,64 @@ class AccountingController extends Controller
         return MenuItemResource::collection($menuItems)
             ->response()
             ->setEncodingOptions(JSON_UNESCAPED_UNICODE);
+    }
+
+    public function storeMenuItem(Request $request)
+    {
+        $validated = $this->validateMenuItem($request);
+
+        $item = MenuItem::query()->create([
+            'store_id' => $this->currentStoreId(),
+            'name' => $validated['name'],
+            'description' => null,
+            'price' => $validated['price'],
+            'is_available' => true,
+        ]);
+
+        return MenuItemResource::make($item)
+            ->response()
+            ->setStatusCode(201)
+            ->setEncodingOptions(JSON_UNESCAPED_UNICODE);
+    }
+
+    public function updateMenuItem(Request $request, int $id)
+    {
+        $item = $this->findStoreMenuItem($id);
+        if (! $item) {
+            return $this->menuItemNotFound();
+        }
+
+        $validated = $this->validateMenuItem($request);
+        $item->fill([
+            'name' => $validated['name'],
+            'price' => $validated['price'],
+        ]);
+        $item->save();
+
+        return MenuItemResource::make($item->refresh())
+            ->response()
+            ->setEncodingOptions(JSON_UNESCAPED_UNICODE);
+    }
+
+    public function destroyMenuItem(int $id)
+    {
+        $item = $this->findStoreMenuItem($id);
+        if (! $item) {
+            return $this->menuItemNotFound();
+        }
+
+        $usedInOrders = OrderItem::query()
+            ->where('menu_item_id', $item->id)
+            ->exists();
+
+        if ($usedInOrders) {
+            $item->is_available = false;
+            $item->save();
+        } else {
+            $item->delete();
+        }
+
+        return response()->json(null, 204);
     }
 
     public function index(Request $request)
@@ -392,6 +452,33 @@ class AccountingController extends Controller
     private function currentStoreId(): string
     {
         return Auth::user()->store_id;
+    }
+
+    private function validateMenuItem(Request $request): array
+    {
+        return $request->validate([
+            'name' => ['required', 'string', 'max:255'],
+            'price' => ['required', 'integer', 'min:0', 'max:10000000'],
+        ]);
+    }
+
+    private function findStoreMenuItem(int $id): ?MenuItem
+    {
+        return MenuItem::query()
+            ->forStore($this->currentStoreId())
+            ->where('is_available', true)
+            ->find($id);
+    }
+
+    private function menuItemNotFound()
+    {
+        return response()->json([
+            'error' => [
+                'code' => 'NOT_FOUND',
+                'message' => '指定した商品が見つかりません',
+                'details' => ['field' => 'id'],
+            ],
+        ], 404, [], JSON_UNESCAPED_UNICODE);
     }
 
     private function ticketPrefixForStoreId(string $storeId): string

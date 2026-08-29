@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\V1\Booth\Dashboard;
 
 use App\Http\Controllers\Controller;
 use App\Http\Resources\Booth\DashboardResource;
+use App\Models\MapFacilities;
 use App\Models\Order;
 use App\Models\SalesEntry;
 use App\Models\Store;
@@ -35,6 +36,7 @@ class DashboardController extends Controller
             'description' => ['required', 'string', 'max:1000'],
             'current_wait_min' => ['required', 'integer', 'min:0', 'max:180'],
             'is_open' => ['required', 'boolean'],
+            'type' => ['sometimes', 'string', 'in:booth,food,stage'],
         ];
 
         if (Schema::hasColumn('stores', 'wait_display_mode')) {
@@ -42,10 +44,18 @@ class DashboardController extends Controller
             $rules['wait_display_text'] = ['nullable', 'string', 'max:255'];
         }
 
-        $store->fill($request->validate($rules));
+        $validated = $request->validate($rules);
+        $boothType = $validated['type'] ?? null;
+        unset($validated['type']);
+
+        $store->fill($validated);
         $store->save();
 
-        return DashboardResource::make($this->withRevenue($store->refresh()))
+        if (is_string($boothType)) {
+            $this->syncBoothType($store, $boothType);
+        }
+
+        return DashboardResource::make($this->withRevenue($this->loadDashboardStore($store->id)))
             ->response()
             ->setEncodingOptions(JSON_UNESCAPED_UNICODE);
     }
@@ -64,9 +74,41 @@ class DashboardController extends Controller
             $columns[] = 'wait_display_text';
         }
 
-        return Store::query()
-            ->select($columns)
+        return $this->loadDashboardStore($storeId, $columns);
+    }
+
+    private function loadDashboardStore(string $storeId, ?array $columns = null): Store
+    {
+        $query = Store::query();
+        if ($columns !== null) {
+            $query->select($columns);
+        }
+
+        return $query
+            ->with('mapFacility:id,store_id,type')
             ->findOrFail($storeId);
+    }
+
+    private function syncBoothType(Store $store, string $type): void
+    {
+        $facility = MapFacilities::query()->where('store_id', $store->id)->first();
+
+        if ($facility) {
+            $facility->type = $type;
+            $facility->name = $store->name;
+            $facility->save();
+
+            return;
+        }
+
+        MapFacilities::query()->create([
+            'store_id' => $store->id,
+            'name' => $store->name,
+            'type' => $type,
+            'floor' => 1,
+            'x' => 50,
+            'y' => 50,
+        ]);
     }
 
     private function withRevenue(Store $store): Store

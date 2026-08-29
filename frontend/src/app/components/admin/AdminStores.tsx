@@ -19,7 +19,9 @@ const yen = (value: number) => `¥${value.toLocaleString('ja-JP')}`;
 const typeLabel = (type: string) => {
   switch (type) {
     case 'food':
-      return 'フード';
+      return '飲食ブース';
+    case 'stage':
+      return 'イベントもの';
     case 'shop':
       return '物販';
     case 'information':
@@ -31,7 +33,7 @@ const typeLabel = (type: string) => {
     case 'support':
       return 'サポート';
     default:
-      return '体験';
+      return '体験ブース';
   }
 };
 

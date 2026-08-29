@@ -1,15 +1,35 @@
 import { useEffect, useState } from 'react';
-import { Building2, Clock, Power, Users } from 'lucide-react';
+import { Building2, Clock, Pencil, Plus, Power, Trash2, Users } from 'lucide-react';
 import StoreShell from './StoreShell';
 import {
+  createBoothMenuItem,
+  deleteBoothMenuItem,
+  fetchBoothMenuItems,
   fetchStoreProfile,
+  updateBoothMenuItem,
   updateStoreProfile,
   updateWaitTime,
+  type BackendMenuItem,
+  type BoothKind,
   type StoreProfile as StoreProfileData,
 } from '../../lib/api';
 import { setWaitMinPerPerson, useFestival } from '../../lib/festivalStore';
 
 const DEFAULT_WAIT_MIN_PER_PERSON = 5;
+
+const boothTypes: Array<{ value: BoothKind; label: string }> = [
+  { value: 'booth', label: '体験ブース' },
+  { value: 'food', label: '飲食ブース' },
+  { value: 'stage', label: 'イベントもの' },
+];
+
+const yen = (value: number) => `¥${value.toLocaleString('ja-JP')}`;
+
+function toBoothKind(type?: string | null): BoothKind {
+  if (type === 'food') return 'food';
+  if (type === 'stage' || type === 'shop') return 'stage';
+  return 'booth';
+}
 
 export default function StoreProfile() {
   const session = useFestival((s) => s.session);
@@ -18,12 +38,19 @@ export default function StoreProfile() {
   const [profile, setProfile] = useState<StoreProfileData | null>(null);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
+  const [boothType, setBoothType] = useState<BoothKind>('booth');
   const [waitMin, setWaitMin] = useState(DEFAULT_WAIT_MIN_PER_PERSON);
   const [isOpen, setIsOpen] = useState(true);
+  const [menuItems, setMenuItems] = useState<BackendMenuItem[]>([]);
+  const [productName, setProductName] = useState('');
+  const [productPrice, setProductPrice] = useState('');
+  const [editingProductId, setEditingProductId] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
+  const [productError, setProductError] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [savingProduct, setSavingProduct] = useState(false);
 
   useEffect(() => {
     if (!session?.token) {
@@ -32,19 +59,29 @@ export default function StoreProfile() {
       return;
     }
 
-    fetchStoreProfile(session.token)
-      .then((data) => {
+    const token = session.token;
+    Promise.all([fetchStoreProfile(token), fetchBoothMenuItems(token)])
+      .then(([data, items]) => {
         setProfile(data);
         setName(data.name);
         setDescription(data.description ?? '');
+        setBoothType(toBoothKind(data.type));
         setIsOpen(Boolean(data.is_open));
         setWaitMin(storedWaitMin > 0 ? storedWaitMin : DEFAULT_WAIT_MIN_PER_PERSON);
+        setMenuItems(items.filter((item) => item.is_available !== false));
       })
       .catch((err: unknown) => {
         setError(err instanceof Error ? err.message : '店舗情報を取得できませんでした。');
       })
       .finally(() => setLoading(false));
   }, [session?.token]);
+
+  const resetProductForm = () => {
+    setProductName('');
+    setProductPrice('');
+    setEditingProductId(null);
+    setProductError('');
+  };
 
   const save = async () => {
     if (!session?.token || !profile) {
@@ -74,6 +111,7 @@ export default function StoreProfile() {
         description: description.trim(),
         current_wait_min: waitingPeople * waitMin,
         is_open: isOpen,
+        type: boothType,
       });
       setWaitMinPerPerson(waitMin);
       if (session.storeId) {
@@ -85,6 +123,7 @@ export default function StoreProfile() {
       setProfile(updated);
       setName(updated.name);
       setDescription(updated.description ?? '');
+      setBoothType(toBoothKind(updated.type));
       setIsOpen(Boolean(updated.is_open));
       setWaitMin(waitMin);
       setMessage('店舗情報を保存しました。');
@@ -92,6 +131,74 @@ export default function StoreProfile() {
       setError(err instanceof Error ? err.message : '保存に失敗しました。');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const parsedPrice = Number(productPrice);
+  const productPriceValid = Number.isInteger(parsedPrice) && parsedPrice >= 0;
+
+  const saveProduct = async () => {
+    if (!session?.token) {
+      setProductError('ログイン情報がありません。再度ログインしてください。');
+      return;
+    }
+    if (!productName.trim()) {
+      setProductError('商品名を入力してください。');
+      return;
+    }
+    if (!productPriceValid) {
+      setProductError('値段は0以上の整数で入力してください。');
+      return;
+    }
+
+    setSavingProduct(true);
+    setProductError('');
+
+    try {
+      const payload = { name: productName.trim(), price: parsedPrice };
+      if (editingProductId !== null) {
+        const updated = await updateBoothMenuItem(session.token, editingProductId, payload);
+        setMenuItems((current) =>
+          current.map((item) => (String(item.id) === String(updated.id) ? updated : item)),
+        );
+      } else {
+        const created = await createBoothMenuItem(session.token, payload);
+        setMenuItems((current) => [...current, created]);
+      }
+      resetProductForm();
+    } catch (err: unknown) {
+      setProductError(err instanceof Error ? err.message : '商品の保存に失敗しました。');
+    } finally {
+      setSavingProduct(false);
+    }
+  };
+
+  const startEditProduct = (item: BackendMenuItem) => {
+    setEditingProductId(item.id);
+    setProductName(item.name);
+    setProductPrice(String(item.price));
+    setProductError('');
+  };
+
+  const removeProduct = async (item: BackendMenuItem) => {
+    if (!session?.token) {
+      setProductError('ログイン情報がありません。再度ログインしてください。');
+      return;
+    }
+
+    setSavingProduct(true);
+    setProductError('');
+
+    try {
+      await deleteBoothMenuItem(session.token, item.id);
+      setMenuItems((current) => current.filter((entry) => String(entry.id) !== String(item.id)));
+      if (String(editingProductId) === String(item.id)) {
+        resetProductForm();
+      }
+    } catch (err: unknown) {
+      setProductError(err instanceof Error ? err.message : '商品の削除に失敗しました。');
+    } finally {
+      setSavingProduct(false);
     }
   };
 
@@ -158,6 +265,31 @@ export default function StoreProfile() {
               />
             </label>
 
+            <fieldset className="text-sm">
+              <legend className="mb-2 text-muted-foreground">ブース種別</legend>
+              <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="ブース種別">
+                {boothTypes.map((type) => {
+                  const active = boothType === type.value;
+                  return (
+                    <button
+                      key={type.value}
+                      type="button"
+                      role="radio"
+                      aria-checked={active}
+                      onClick={() => setBoothType(type.value)}
+                      className="rounded-full px-4 py-1.5 text-sm font-medium transition-colors"
+                      style={{
+                        backgroundColor: active ? 'var(--primary)' : 'var(--muted)',
+                        color: active ? 'var(--primary-foreground)' : 'var(--muted-foreground)',
+                      }}
+                    >
+                      {type.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </fieldset>
+
             <div className="flex items-center justify-between rounded-xl border border-border bg-background px-3 py-3">
               <div>
                 <p className="text-sm font-medium text-foreground">
@@ -214,6 +346,104 @@ export default function StoreProfile() {
             >
               {saving ? '保存中...' : '保存する'}
             </button>
+          </section>
+
+          <section className="space-y-3 rounded-2xl border border-border bg-card p-5">
+            <div>
+              <h2 className="font-display text-lg font-bold text-foreground">商品</h2>
+              <p className="text-sm text-muted-foreground">商品名と値段のみ登録・編集できます。</p>
+            </div>
+
+            {productError && (
+              <p className="text-sm" style={{ color: 'var(--busy)' }}>
+                {productError}
+              </p>
+            )}
+
+            <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_8rem_auto]">
+              <label className="block text-sm">
+                <span className="mb-1 block text-muted-foreground">商品名</span>
+                <input
+                  value={productName}
+                  onChange={(e) => setProductName(e.target.value)}
+                  placeholder="例: 焼きそば"
+                  className="w-full rounded-lg border border-input bg-background px-3 py-2.5 text-foreground outline-none"
+                />
+              </label>
+              <label className="block text-sm">
+                <span className="mb-1 block text-muted-foreground">値段</span>
+                <input
+                  type="number"
+                  min={0}
+                  step={1}
+                  value={productPrice}
+                  onChange={(e) => setProductPrice(e.target.value)}
+                  placeholder="400"
+                  className="w-full rounded-lg border border-input bg-background px-3 py-2.5 text-foreground outline-none"
+                />
+              </label>
+              <div className="flex items-end gap-2">
+                <button
+                  type="button"
+                  onClick={saveProduct}
+                  disabled={savingProduct}
+                  className="flex min-h-11 flex-1 items-center justify-center gap-1 rounded-xl px-4 py-2.5 font-bold text-white disabled:opacity-60"
+                  style={{ backgroundColor: 'var(--primary)' }}
+                >
+                  {editingProductId !== null ? <Pencil className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+                  {savingProduct ? '保存中...' : editingProductId !== null ? '更新' : '追加'}
+                </button>
+                {editingProductId !== null && (
+                  <button
+                    type="button"
+                    onClick={resetProductForm}
+                    className="min-h-11 rounded-xl border border-border px-3 py-2.5 text-sm text-foreground hover:bg-muted"
+                  >
+                    キャンセル
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {menuItems.length === 0 ? (
+              <p className="rounded-xl border border-border bg-background p-4 text-center text-sm text-muted-foreground">
+                登録されている商品はありません。
+              </p>
+            ) : (
+              <ul className="space-y-2">
+                {menuItems.map((item) => (
+                  <li
+                    key={item.id}
+                    className="flex items-center justify-between gap-3 rounded-xl border border-border bg-background px-4 py-3"
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate font-medium text-foreground">{item.name}</p>
+                      <p className="text-sm text-muted-foreground">{yen(item.price)}</p>
+                    </div>
+                    <div className="flex shrink-0 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => startEditProduct(item)}
+                        className="grid h-10 w-10 place-items-center rounded-lg border border-border text-foreground hover:bg-muted"
+                        aria-label={`${item.name}を編集`}
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void removeProduct(item)}
+                        disabled={savingProduct}
+                        className="grid h-10 w-10 place-items-center rounded-lg border border-border hover:bg-muted disabled:opacity-60"
+                        style={{ color: 'var(--busy)' }}
+                        aria-label={`${item.name}を削除`}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
           </section>
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">

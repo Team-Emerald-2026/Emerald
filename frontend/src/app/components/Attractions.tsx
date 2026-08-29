@@ -26,8 +26,13 @@ const categories: Array<'すべて' | Category> = ['すべて', '体験', 'フ�
 function toCategory(type?: string): Category {
   switch (type) {
     case 'food':
+    case 'フード':
+    case '飲食ブース':
       return 'フード';
     case 'stage':
+    case 'shop':
+    case 'ステージ':
+    case 'イベントもの':
       return 'ステージ';
     default:
       return '体験';

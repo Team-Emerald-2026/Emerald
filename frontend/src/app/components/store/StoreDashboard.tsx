@@ -5,7 +5,7 @@ import {
   selectWaitingOrders,
   logoutStore,
 } from '../../lib/festivalStore';
-import { Users, Clock, Hash } from 'lucide-react';
+import { Users, Clock, Hash, Banknote } from 'lucide-react';
 import { ApiError, type BoothDashboard, fetchBoothDashboard } from '../../lib/api';
 
 function statusLabel(status: 'waiting' | 'called' | 'served') {
@@ -58,6 +58,7 @@ export default function StoreDashboard() {
   const waitingCount = waitingOrders.filter((o) => o.status === 'waiting').length;
   const calledCount = waitingOrders.filter((o) => o.status === 'called').length;
   const estimatedMin = waitingPeople * waitMinPerPerson;
+  const yen = (value: number) => `¥${value.toLocaleString('ja-JP')}`;
 
   const cards = [
     {
@@ -78,6 +79,14 @@ export default function StoreDashboard() {
       hint: `${waitingPeople}人 × ${waitMinPerPerson}分`,
       icon: Clock,
       color: 'var(--accent)',
+    },
+    {
+      label: '総売上',
+      value: dashboard ? yen(dashboard.revenue ?? 0) : '---',
+      unit: '',
+      hint: '会計済み注文と手入力売上の合計',
+      icon: Banknote,
+      color: '#22c55e',
     },
     {
       label: '営業状態',
@@ -112,7 +121,7 @@ export default function StoreDashboard() {
         <p className="mb-4 rounded-xl border border-border bg-card p-3 text-sm text-red-500">{error}</p>
       )}
 
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {cards.map((c) => (
           <div key={c.label} className="rounded-2xl border border-border bg-card p-4">
             <span

@@ -3,8 +3,10 @@
 namespace Tests\Feature;
 
 use App\Models\EventNotice;
+use App\Models\MapFacilities;
 use App\Models\MenuItem;
 use App\Models\Order;
+use App\Models\OrderItem;
 use App\Models\SalesEntry;
 use App\Models\Store;
 use App\Models\User;
@@ -333,5 +335,119 @@ class MissingApisTest extends TestCase
             ->assertOk()
             ->assertJsonPath('data.id', 'store-no-sales')
             ->assertJsonPath('data.revenue', 0);
+    }
+
+    public function test_admin_seeder_creates_login_account(): void
+    {
+        $this->seed(\Database\Seeders\AdminUserSeeder::class);
+
+        $this->postJson('/api/v1/booth/auth/login', [
+            'login_id' => 'admin',
+            'password' => 'password',
+        ])
+            ->assertOk()
+            ->assertJsonPath('role', 'admin');
+    }
+
+    public function test_store_user_can_update_booth_type(): void
+    {
+        $store = $this->createStore();
+        MapFacilities::query()->create([
+            'store_id' => $store->id,
+            'name' => $store->name,
+            'type' => 'booth',
+            'floor' => 1,
+            'x' => 50,
+            'y' => 50,
+        ]);
+        Sanctum::actingAs($this->createStoreUser($store));
+
+        $this->patchJson("/api/v1/booth/dashboard/{$store->id}", [
+            'name' => $store->name,
+            'description' => $store->description,
+            'current_wait_min' => 5,
+            'is_open' => true,
+            'type' => 'food',
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.attributes.type', 'food');
+
+        $this->assertDatabaseHas('map_facilities', [
+            'store_id' => $store->id,
+            'type' => 'food',
+        ]);
+    }
+
+    public function test_store_user_can_manage_menu_items(): void
+    {
+        $store = $this->createStore();
+        Sanctum::actingAs($this->createStoreUser($store));
+
+        $created = $this->postJson('/api/v1/booth/accounting/menu-items', [
+            'name' => '焼きそば',
+            'price' => 400,
+        ])
+            ->assertCreated()
+            ->assertJsonPath('data.name', '焼きそば')
+            ->assertJsonPath('data.price', 400);
+
+        $id = $created->json('data.id');
+
+        $this->patchJson("/api/v1/booth/accounting/menu-items/{$id}", [
+            'name' => '焼きそば大盛',
+            'price' => 500,
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.name', '焼きそば大盛')
+            ->assertJsonPath('data.price', 500);
+
+        $this->getJson('/api/v1/booth/accounting/menu-items')
+            ->assertOk()
+            ->assertJsonCount(1, 'data');
+
+        $this->deleteJson("/api/v1/booth/accounting/menu-items/{$id}")
+            ->assertNoContent();
+
+        $this->getJson('/api/v1/booth/accounting/menu-items')
+            ->assertOk()
+            ->assertJsonCount(0, 'data');
+    }
+
+    public function test_deleting_ordered_menu_item_hides_it(): void
+    {
+        $store = $this->createStore();
+        Sanctum::actingAs($this->createStoreUser($store));
+        $item = MenuItem::query()->create([
+            'store_id' => $store->id,
+            'name' => 'ブレンドコーヒー',
+            'description' => 'ホット',
+            'price' => 350,
+            'is_available' => true,
+        ]);
+        $order = Order::query()->create([
+            'store_id' => $store->id,
+            'ticket_number' => 'C-160',
+            'total_price' => 350,
+            'status' => 'issued',
+            'ordered_at' => now(),
+        ]);
+        OrderItem::query()->create([
+            'order_id' => $order->id,
+            'menu_item_id' => $item->id,
+            'quantity' => 1,
+            'unit_price' => 350,
+            'subtotal' => 350,
+        ]);
+
+        $this->deleteJson("/api/v1/booth/accounting/menu-items/{$item->id}")
+            ->assertNoContent();
+
+        $this->assertDatabaseHas('menu_items', [
+            'id' => $item->id,
+            'is_available' => false,
+        ]);
+        $this->getJson('/api/v1/booth/accounting/menu-items')
+            ->assertOk()
+            ->assertJsonCount(0, 'data');
     }
 }

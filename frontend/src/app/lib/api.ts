@@ -8,6 +8,8 @@ export interface BoothLoginResponse {
   role?: 'store' | 'admin';
 }
 
+export type BoothKind = 'booth' | 'food' | 'stage';
+
 export interface BoothDashboard {
   id: string;
   name: string;
@@ -18,6 +20,7 @@ export interface BoothDashboard {
   wait_display_mode?: 'minutes' | 'text';
   wait_display_text?: string | null;
   revenue?: number;
+  type?: string;
 }
 
 export interface BackendStore {
@@ -38,7 +41,7 @@ export interface BackendStore {
 }
 
 export interface BackendMenuItem {
-  id: number;
+  id: string;
   name: string;
   description: string | null;
   price: number;
@@ -280,6 +283,59 @@ export function fetchBoothDashboard(token: string, signal?: AbortSignal) {
   return request('/v1/booth/dashboard', { signal, token }).then((payload) =>
     normalizeItem<BoothDashboard>(payload),
   );
+}
+
+export function fetchBoothMenuItems(token: string, signal?: AbortSignal) {
+  return request('/v1/booth/accounting/menu-items', { signal, token }).then((payload) =>
+    normalizeCollection<BackendMenuItem>(payload),
+  );
+}
+
+export function createBoothMenuItem(
+  token: string,
+  input: { name: string; price: number },
+  signal?: AbortSignal,
+) {
+  return request('/v1/booth/accounting/menu-items', {
+    method: 'POST',
+    token,
+    body: input,
+    signal,
+  }).then((payload) => {
+    const created = normalizeItem<BackendMenuItem>(payload);
+    if (!created) {
+      throw new Error('商品を追加できませんでした。');
+    }
+    return created;
+  });
+}
+
+export function updateBoothMenuItem(
+  token: string,
+  id: string,
+  input: { name: string; price: number },
+  signal?: AbortSignal,
+) {
+  return request(`/v1/booth/accounting/menu-items/${encodeURIComponent(String(id))}`, {
+    method: 'PATCH',
+    token,
+    body: input,
+    signal,
+  }).then((payload) => {
+    const updated = normalizeItem<BackendMenuItem>(payload);
+    if (!updated) {
+      throw new Error('商品を更新できませんでした。');
+    }
+    return updated;
+  });
+}
+
+export function deleteBoothMenuItem(token: string, id: string, signal?: AbortSignal) {
+  return request(`/v1/booth/accounting/menu-items/${encodeURIComponent(String(id))}`, {
+    method: 'DELETE',
+    token,
+    signal,
+  });
 }
 
 export function fetchAdminStores(token: string, signal?: AbortSignal) {
@@ -598,6 +654,8 @@ export interface StoreProfile {
   is_open: boolean;
   current_wait_min: number;
   current_queue_count: number;
+  type?: string;
+  revenue?: number;
 }
 
 export function fetchStoreProfile(token: string, signal?: AbortSignal): Promise<StoreProfile> {
@@ -617,6 +675,7 @@ export function updateStoreProfile(
     description: string;
     current_wait_min: number;
     is_open: boolean;
+    type?: BoothKind;
   },
   signal?: AbortSignal,
 ) {

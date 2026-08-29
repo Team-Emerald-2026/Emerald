@@ -19,6 +19,7 @@ class DashboardResource extends JsonResource
             'wait_display_mode' => $this->wait_display_mode ?? 'minutes',
             'wait_display_text' => $this->wait_display_text,
             'revenue' => (int) ($this->revenue ?? 0),
+            'type' => $this->boothType(),
         ];
 
         return [
@@ -26,5 +27,14 @@ class DashboardResource extends JsonResource
             'type' => 'stores',
             'attributes' => $data,
         ];
+    }
+
+    private function boothType(): string
+    {
+        $facilityType = $this->resource->relationLoaded('mapFacility')
+            ? $this->resource->mapFacility?->type
+            : null;
+
+        return is_string($facilityType) && $facilityType !== '' ? $facilityType : 'booth';
     }
 }
