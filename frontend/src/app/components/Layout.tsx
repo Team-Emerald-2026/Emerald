@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
-import { Home, Tent, Hash, MapPin, Sun, Moon } from 'lucide-react';
+import { Home, Tent, Hash, CalendarDays, MapPin, Sun, Moon } from 'lucide-react';
 
 /** ライト/ダークの切替ボタン。選択は localStorage('theme') に保存。 */
 function ThemeToggle() {
@@ -33,6 +33,7 @@ const tabs = [
   { to: '/', label: 'ホーム', icon: Home, end: true },
   { to: '/attractions', label: 'ブース', icon: Tent, end: false },
   { to: '/restaurants', label: '呼び出し', icon: Hash, end: false },
+  { to: '/events', label: 'イベント', icon: CalendarDays, end: false },
   { to: '/map', label: 'マップ', icon: MapPin, end: false },
 ];
 

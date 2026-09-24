@@ -440,13 +440,17 @@ export function fetchEvent(id: string, signal?: AbortSignal) {
   );
 }
 
-export function fetchAdminEvents(token: string, signal?: AbortSignal) {
+export function fetchAdminEvents(token?: string, signal?: AbortSignal) {
   return request('/v1/admin/events', { signal, token }).then((payload) =>
     normalizeCollection<EventNotice>(payload),
   );
 }
 
-export function createAdminEvent(token: string, input: EventNoticeInput, signal?: AbortSignal) {
+export function createAdminEvent(
+  token: string | undefined,
+  input: EventNoticeInput,
+  signal?: AbortSignal,
+) {
   return request('/v1/admin/events', {
     method: 'POST',
     token,
@@ -456,7 +460,7 @@ export function createAdminEvent(token: string, input: EventNoticeInput, signal?
 }
 
 export function updateAdminEvent(
-  token: string,
+  token: string | undefined,
   id: string,
   input: EventNoticeInput,
   signal?: AbortSignal,
@@ -469,7 +473,7 @@ export function updateAdminEvent(
   }).then((payload) => normalizeItem<EventNotice>(payload));
 }
 
-export function deleteAdminEvent(token: string, id: string, signal?: AbortSignal) {
+export function deleteAdminEvent(token: string | undefined, id: string, signal?: AbortSignal) {
   return request(`/v1/admin/events/${encodeURIComponent(id)}`, {
     method: 'DELETE',
     token,
