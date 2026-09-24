@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { Navigate, NavLink, useNavigate } from 'react-router-dom';
-import { BarChart3, LogOut, Store } from 'lucide-react';
+import { BarChart3, CalendarDays, LogOut, Store } from 'lucide-react';
 import { logoutAdmin, ApiError } from '../../lib/api';
 import { logoutAdminSession, useFestival } from '../../lib/festivalStore';
 import { ADMIN_PUBLIC_ACCESS } from '../../lib/adminAccess';
@@ -8,6 +8,7 @@ import { ADMIN_PUBLIC_ACCESS } from '../../lib/adminAccess';
 const links = [
   { to: '/admin', label: 'ダッシュボード', icon: BarChart3, end: true },
   { to: '/admin/stores', label: '店舗管理', icon: Store, end: false },
+  { to: '/admin/events', label: 'イベント', icon: CalendarDays, end: false },
 ];
 
 export default function AdminShell({

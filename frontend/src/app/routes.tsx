@@ -4,6 +4,7 @@ import Home from './components/Home';
 import Attractions from './components/Attractions';
 import Restaurants from './components/Restaurants';
 import CampusMap from './components/Map';
+import Events from './components/Events';
 import NotFound from './components/NotFound';
 import StoreLogin from './components/store/StoreLogin';
 import StorePos from './components/store/StorePos';
@@ -14,6 +15,7 @@ import StoreServed from './components/store/StoreServed';
 import StoreProfile from './components/store/StoreProfile';
 import AdminDashboard from './components/admin/AdminDashboard';
 import AdminStores from './components/admin/AdminStores';
+import AdminEvents from './components/admin/AdminEvents';
 
 export const router = createBrowserRouter([
   {
@@ -23,6 +25,7 @@ export const router = createBrowserRouter([
       { path: '/', element: <Home /> },
       { path: '/attractions', element: <Attractions /> },
       { path: '/restaurants', element: <Restaurants /> },
+      { path: '/events', element: <Events /> },
       { path: '/map', element: <CampusMap /> },
     ],
   },
@@ -36,5 +39,6 @@ export const router = createBrowserRouter([
   { path: '/store/profile', element: <StoreProfile /> },
   { path: '/admin', element: <AdminDashboard /> },
   { path: '/admin/stores', element: <AdminStores /> },
+  { path: '/admin/events', element: <AdminEvents /> },
   { path: '*', element: <NotFound /> },
 ]);
