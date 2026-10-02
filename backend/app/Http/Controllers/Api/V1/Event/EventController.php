@@ -12,7 +12,6 @@ class EventController extends Controller
     {
         $events = EventNotice::query()
             ->published()
-            ->visibleAt()
             ->orderByRaw('starts_at is null')
             ->orderBy('starts_at')
             ->orderBy('id')
@@ -27,7 +26,6 @@ class EventController extends Controller
     {
         $event = EventNotice::query()
             ->published()
-            ->visibleAt()
             ->find($id);
 
         if (! $event) {

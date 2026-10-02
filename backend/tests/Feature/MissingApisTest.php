@@ -193,6 +193,23 @@ class MissingApisTest extends TestCase
             ->assertJsonPath('data.title', '開会式');
     }
 
+    public function test_future_dated_events_are_listed(): void
+    {
+        EventNotice::query()->create([
+            'title' => '2日目のライブ',
+            'body' => '開催日はまだ先',
+            'type' => 'event',
+            'starts_at' => now()->addDays(30),
+            'ends_at' => null,
+            'is_published' => true,
+        ]);
+
+        $this->getJson('/api/v1/events')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.title', '2日目のライブ');
+    }
+
     public function test_store_user_can_create_and_list_sales_entries(): void
     {
         $store = $this->createStore();
