@@ -1,28 +1,18 @@
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { fetchEvents, type EventNotice } from '../lib/api';
+import {
+  EVENT_DAYS,
+  buildTimetableRows,
+  classifyItem,
+  defaultDayKey,
+  getEventDay,
+  minutesToTime,
+  noticesForDay,
+  timeLabel,
+  type EventDayKey,
+} from '../lib/eventSchedule';
+import EventDayTabs from './EventDayTabs';
 import { Skeleton } from './Skeleton';
-
-const DEFAULT_START_HOUR = 10;
-const DEFAULT_END_HOUR = 18;
-
-function hourLabel(hour: number) {
-  return `${hour}時`;
-}
-
-function eventHour(item: EventNotice): number | null {
-  if (!item.starts_at) return null;
-  const date = new Date(item.starts_at);
-  if (Number.isNaN(date.getTime())) return null;
-  return date.getHours();
-}
-
-/** 仮の学園祭時間帯：10時〜18時で固定 */
-function buildHours() {
-  return Array.from(
-    { length: DEFAULT_END_HOUR - DEFAULT_START_HOUR + 1 },
-    (_, i) => DEFAULT_START_HOUR + i,
-  );
-}
 
 function ScheduleSkeleton() {
   return (
@@ -41,11 +31,23 @@ function ScheduleSkeleton() {
   );
 }
 
+function EventContent({ item }: { item: EventNotice }) {
+  return (
+    <div>
+      <p className="font-display text-base font-bold text-foreground">{item.title}</p>
+      {item.body && (
+        <p className="mt-0.5 line-clamp-2 text-xs leading-relaxed text-muted-foreground">{item.body}</p>
+      )}
+    </div>
+  );
+}
+
 /** 来場者向け：表示のみ。編集は /admin/events */
 export default function Events() {
   const [items, setItems] = useState<EventNotice[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [dayKey, setDayKey] = useState<EventDayKey>(defaultDayKey);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -66,36 +68,21 @@ export default function Events() {
     return () => controller.abort();
   }, []);
 
-  const scheduleItems = useMemo(
-    () => items.filter((item) => eventHour(item) != null),
-    [items],
-  );
-  const hours = useMemo(() => buildHours(), []);
-
-  const eventsByHour = useMemo(() => {
-    const map = new Map<number, EventNotice[]>();
-    for (const item of scheduleItems) {
-      const hour = eventHour(item);
-      if (hour == null) continue;
-      if (hour < DEFAULT_START_HOUR || hour > DEFAULT_END_HOUR) continue;
-      const list = map.get(hour) ?? [];
-      list.push(item);
-      map.set(hour, list);
-    }
-    return map;
-  }, [scheduleItems]);
-
-  const unscheduledNotices = useMemo(
-    () => items.filter((item) => eventHour(item) == null),
-    [items],
-  );
+  const classified = useMemo(() => items.map(classifyItem), [items]);
+  const rows = useMemo(() => buildTimetableRows(classified, dayKey), [classified, dayKey]);
+  const notices = useMemo(() => noticesForDay(classified, dayKey), [classified, dayKey]);
+  const day = getEventDay(dayKey) ?? EVENT_DAYS[0];
 
   return (
     <div className="space-y-4 p-4 pb-8">
       <div>
         <h1 className="font-display text-2xl font-bold text-foreground">イベント</h1>
-        <p className="mt-1 text-sm text-muted-foreground">本日のタイムテーブル</p>
+        <p className="mt-1 text-sm text-muted-foreground">
+          タイムテーブル（{minutesToTime(day.startMinutes)}〜{minutesToTime(day.endMinutes)}）
+        </p>
       </div>
+
+      <EventDayTabs value={dayKey} onChange={setDayKey} />
 
       {error && (
         <p className="rounded-xl border border-border bg-card p-4 text-sm" style={{ color: 'var(--busy)' }}>
@@ -111,49 +98,48 @@ export default function Events() {
             <div className="border-r border-border px-3 py-2.5">時間</div>
             <div className="px-3 py-2.5">内容</div>
           </div>
-          {hours.map((hour) => {
-            const rowItems = eventsByHour.get(hour) ?? [];
-            return (
-              <div
-                key={hour}
-                className="grid min-h-14 grid-cols-[4.5rem_1fr] border-b border-border last:border-b-0"
-              >
+          {rows.map((row) => (
+            <Fragment key={row.hour}>
+              <div className="grid min-h-14 grid-cols-[4.5rem_1fr] border-b border-border last:border-b-0">
                 <div className="flex items-start border-r border-border bg-muted/30 px-3 py-3">
                   <span className="text-sm font-bold tabular-nums text-foreground">
-                    {hourLabel(hour)}
+                    {timeLabel(row.hour * 60)}
                   </span>
                 </div>
                 <div className="space-y-2 px-3 py-3">
-                  {rowItems.length === 0 ? (
+                  {row.exact.length === 0 ? (
                     <span className="text-sm text-muted-foreground/50">—</span>
                   ) : (
-                    rowItems.map((item) => (
-                      <div key={item.id}>
-                        <p className="font-display text-base font-bold text-foreground">{item.title}</p>
-                        {item.body && (
-                          <p className="mt-0.5 line-clamp-2 text-xs leading-relaxed text-muted-foreground">
-                            {item.body}
-                          </p>
-                        )}
-                      </div>
-                    ))
+                    row.exact.map((item) => <EventContent key={item.id} item={item} />)
                   )}
                 </div>
               </div>
-            );
-          })}
+              {row.between.map(({ minutes, item }) => (
+                <div
+                  key={item.id}
+                  className="grid grid-cols-[4.5rem_1fr] border-b border-border bg-primary/5 last:border-b-0"
+                >
+                  <div className="flex items-start justify-end border-r border-border px-3 py-3">
+                    <span className="text-xs font-bold tabular-nums text-muted-foreground">
+                      {timeLabel(minutes)}
+                    </span>
+                  </div>
+                  <div className="border-l-2 px-3 py-3" style={{ borderColor: 'var(--primary)' }}>
+                    <EventContent item={item} />
+                  </div>
+                </div>
+              ))}
+            </Fragment>
+          ))}
         </div>
       )}
 
-      {!loading && unscheduledNotices.length > 0 && (
+      {!loading && notices.length > 0 && (
         <section className="space-y-2">
           <h2 className="px-1 text-sm font-bold text-muted-foreground">お知らせ</h2>
           <ul className="overflow-hidden rounded-2xl border border-border bg-card">
-            {unscheduledNotices.map((item, index) => (
-              <li
-                key={item.id}
-                className={`px-4 py-3 ${index > 0 ? 'border-t border-border' : ''}`}
-              >
+            {notices.map((item, index) => (
+              <li key={item.id} className={`px-4 py-3 ${index > 0 ? 'border-t border-border' : ''}`}>
                 <p className="font-display font-bold text-foreground">{item.title}</p>
                 <p className="mt-1 text-sm text-muted-foreground">{item.body}</p>
               </li>

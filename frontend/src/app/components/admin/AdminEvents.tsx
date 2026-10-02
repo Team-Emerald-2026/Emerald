@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { CalendarDays, Edit3, ExternalLink, Plus, Trash2, X } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import AdminShell from './AdminShell';
+import EventDayTabs from '../EventDayTabs';
 import {
   ApiError,
   createAdminEvent,
@@ -11,66 +12,83 @@ import {
   type EventNotice,
   type EventNoticeInput,
 } from '../../lib/api';
+import {
+  EVENT_DAYS,
+  buildTimetableRows,
+  classifyItem,
+  defaultDayKey,
+  getEventDay,
+  jstParts,
+  minutesToTime,
+  noticesForDay,
+  timeLabel,
+  timeToMinutes,
+  toStartsAt,
+  type EventDayKey,
+} from '../../lib/eventSchedule';
 import { logoutAdminSession, useFestival } from '../../lib/festivalStore';
 import { ADMIN_PUBLIC_ACCESS } from '../../lib/adminAccess';
-
-const SCHEDULE_START_HOUR = 10;
-const SCHEDULE_END_HOUR = 18;
-const HOURS = Array.from(
-  { length: SCHEDULE_END_HOUR - SCHEDULE_START_HOUR + 1 },
-  (_, i) => SCHEDULE_START_HOUR + i,
-); // 10〜18時
 
 type FormState = {
   title: string;
   body: string;
   type: 'event' | 'notice';
-  hour: number | '';
+  /** 開催日（YYYY-MM-DD）。お知らせのみ '' = 両日共通 */
+  day: string;
+  /** HH:MM（イベントのみ） */
+  time: string;
   is_published: boolean;
 };
 
-const emptyForm = (): FormState => ({
+const emptyForm = (day: EventDayKey): FormState => ({
   title: '',
   body: '',
   type: 'event',
-  hour: 12,
+  day,
+  time: '12:00',
   is_published: true,
 });
 
-function eventHour(item: EventNotice): number | null {
-  if (!item.starts_at) return null;
-  const date = new Date(item.starts_at);
-  if (Number.isNaN(date.getTime())) return null;
-  return date.getHours();
-}
+function toForm(item: EventNotice, fallbackDay: EventDayKey): FormState {
+  const parts = jstParts(item.starts_at);
+  const knownDay = parts && getEventDay(parts.day) ? parts.day : '';
 
-function startsAtForHour(hour: number) {
-  const date = new Date();
-  date.setHours(hour, 0, 0, 0);
-  return date.toISOString();
-}
+  if (item.type === 'notice') {
+    return {
+      title: item.title,
+      body: item.body,
+      type: 'notice',
+      day: knownDay,
+      time: '12:00',
+      is_published: item.is_published ?? true,
+    };
+  }
 
-function toForm(item: EventNotice): FormState {
-  const hour = eventHour(item);
   return {
     title: item.title,
     body: item.body,
-    type: item.type === 'notice' ? 'notice' : 'event',
-    hour: hour ?? (item.type === 'notice' ? '' : 12),
+    type: 'event',
+    day: knownDay || fallbackDay,
+    time: parts ? minutesToTime(parts.minutes) : '12:00',
     is_published: item.is_published ?? true,
   };
 }
 
-function hourLabel(hour: number) {
-  return `${hour}時`;
+function noticeDayLabel(item: EventNotice) {
+  const info = classifyItem(item);
+  if (info.kind === 'notice') {
+    return info.day ? (getEventDay(info.day)?.short ?? info.day) : '両日共通';
+  }
+  return '日程外';
 }
 
 export default function AdminEvents() {
   const adminSession = useFestival((s) => s.adminSession);
   const [items, setItems] = useState<EventNotice[]>([]);
+  const [dayKey, setDayKey] = useState<EventDayKey>(defaultDayKey);
   const [editing, setEditing] = useState<EventNotice | null>(null);
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState<FormState>(emptyForm);
+  const [form, setForm] = useState<FormState>(() => emptyForm(defaultDayKey()));
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -101,35 +119,30 @@ export default function AdminEvents() {
     return () => controller.abort();
   }, [adminSession]);
 
-  const scheduleItems = useMemo(
-    () => items.filter((item) => eventHour(item) != null),
-    [items],
+  const classified = useMemo(() => items.map(classifyItem), [items]);
+  const rows = useMemo(() => buildTimetableRows(classified, dayKey), [classified, dayKey]);
+  const dayNotices = useMemo(() => noticesForDay(classified, dayKey), [classified, dayKey]);
+  const allNotices = useMemo(
+    () =>
+      classified
+        .filter((c) => c.kind === 'notice')
+        .map((c) => c.item),
+    [classified],
   );
-  const notices = useMemo(
-    () => items.filter((item) => eventHour(item) == null),
-    [items],
+  const orphans = useMemo(
+    () =>
+      classified
+        .filter((c) => c.kind === 'orphan')
+        .map((c) => c.item),
+    [classified],
   );
-  const eventsByHour = useMemo(() => {
-    const map = new Map<number, EventNotice[]>();
-    for (const item of scheduleItems) {
-      const hour = eventHour(item);
-      if (hour == null) continue;
-      if (hour < SCHEDULE_START_HOUR || hour > SCHEDULE_END_HOUR) continue;
-      const list = map.get(hour) ?? [];
-      list.push(item);
-      map.set(hour, list);
-    }
-    return map;
-  }, [scheduleItems]);
-
-  const previewHours = HOURS;
+  const formDay = getEventDay(form.day);
 
   const openCreate = (hour?: number) => {
     setEditing(null);
     setForm({
-      ...emptyForm(),
-      hour: hour ?? 12,
-      type: 'event',
+      ...emptyForm(dayKey),
+      time: hour != null ? minutesToTime(hour * 60) : '12:00',
     });
     setShowForm(true);
     setMessage('');
@@ -138,11 +151,7 @@ export default function AdminEvents() {
 
   const openCreateNotice = () => {
     setEditing(null);
-    setForm({
-      ...emptyForm(),
-      type: 'notice',
-      hour: '',
-    });
+    setForm({ ...emptyForm(dayKey), type: 'notice', day: dayKey });
     setShowForm(true);
     setMessage('');
     setError('');
@@ -150,10 +159,15 @@ export default function AdminEvents() {
 
   const openEdit = (item: EventNotice) => {
     setEditing(item);
-    setForm(toForm(item));
+    setForm(toForm(item, dayKey));
     setShowForm(true);
     setMessage('');
     setError('');
+  };
+
+  const closeForm = () => {
+    setShowForm(false);
+    setEditing(null);
   };
 
   const updateField = <K extends keyof FormState>(key: K, value: FormState[K]) => {
@@ -170,17 +184,41 @@ export default function AdminEvents() {
       setError('内容を入力してください。');
       return;
     }
-    if (form.type === 'event' && form.hour === '') {
-      setError('イベントの時間を選んでください。');
-      return;
+
+    let startsAt: string | null = null;
+
+    if (form.type === 'event') {
+      const day = getEventDay(form.day);
+      if (!day) {
+        setError('開催日を選んでください。');
+        return;
+      }
+      const minutes = timeToMinutes(form.time);
+      if (minutes == null) {
+        setError('時間を入力してください。');
+        return;
+      }
+      if (minutes < day.startMinutes || minutes > day.endMinutes) {
+        setError(
+          `${day.label}は ${minutesToTime(day.startMinutes)}〜${minutesToTime(day.endMinutes)} の間で指定してください。`,
+        );
+        return;
+      }
+      startsAt = toStartsAt(day.key, form.time);
+    } else if (form.day) {
+      if (!getEventDay(form.day)) {
+        setError('表示する日を選び直してください。');
+        return;
+      }
+      startsAt = toStartsAt(form.day, '00:00');
     }
 
-    // 終了時刻は付けない（過ぎると来場者画面から消えるため）
+    // 終了時刻は付けない（公開は「公開する」のチェックで切り替える）
     const input: EventNoticeInput = {
       title: form.title.trim(),
       body: form.body.trim(),
       type: form.type,
-      starts_at: form.hour === '' ? null : startsAtForHour(Number(form.hour)),
+      starts_at: startsAt,
       ends_at: null,
       is_published: form.is_published,
     };
@@ -197,8 +235,10 @@ export default function AdminEvents() {
         await createAdminEvent(adminSession?.token, input);
         setMessage('作成しました。来場者のイベント画面にも反映されます。');
       }
-      setShowForm(false);
-      setEditing(null);
+      if (form.type === 'event' && getEventDay(form.day)) {
+        setDayKey(form.day as EventDayKey);
+      }
+      closeForm();
       await loadItems();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : '保存に失敗しました。');
@@ -217,10 +257,7 @@ export default function AdminEvents() {
     try {
       await deleteAdminEvent(adminSession?.token, item.id);
       setMessage('削除しました。来場者画面からも消えます。');
-      if (editing?.id === item.id) {
-        setShowForm(false);
-        setEditing(null);
-      }
+      if (editing?.id === item.id) closeForm();
       await loadItems();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : '削除に失敗しました。');
@@ -228,6 +265,75 @@ export default function AdminEvents() {
       setSaving(false);
     }
   };
+
+  const renderEventItem = (item: EventNotice, minutes?: number) => (
+    <div key={item.id} className="flex items-start gap-1 rounded-lg px-1 py-1 hover:bg-muted/60">
+      <button type="button" onClick={() => openEdit(item)} className="min-w-0 flex-1 text-left">
+        <p className="font-display text-base font-bold text-foreground">
+          {minutes != null && (
+            <span className="mr-2 text-xs font-bold tabular-nums text-muted-foreground">
+              {timeLabel(minutes)}
+            </span>
+          )}
+          {item.title}
+          {!item.is_published && (
+            <span className="ml-2 text-xs font-medium text-muted-foreground">（非公開）</span>
+          )}
+        </p>
+        {item.body && <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{item.body}</p>}
+      </button>
+      <button
+        type="button"
+        onClick={() => openEdit(item)}
+        className="grid h-8 w-8 shrink-0 place-items-center rounded-md text-muted-foreground hover:bg-muted"
+        title="編集"
+      >
+        <Edit3 className="h-3.5 w-3.5" />
+      </button>
+      <button
+        type="button"
+        onClick={() => void remove(item)}
+        className="grid h-8 w-8 shrink-0 place-items-center rounded-md text-red-500 hover:bg-muted"
+        title="削除"
+      >
+        <Trash2 className="h-3.5 w-3.5" />
+      </button>
+    </div>
+  );
+
+  const renderNoticeItem = (item: EventNotice, index: number) => (
+    <li
+      key={item.id}
+      className={`flex items-start gap-2 px-3 py-3 ${index > 0 ? 'border-t border-border' : ''}`}
+    >
+      <button type="button" onClick={() => openEdit(item)} className="min-w-0 flex-1 text-left">
+        <p className="font-display font-bold text-foreground">
+          <span className="mr-2 rounded-md bg-muted px-1.5 py-0.5 text-xs font-medium text-muted-foreground">
+            {noticeDayLabel(item)}
+          </span>
+          {item.title}
+          {!item.is_published && (
+            <span className="ml-2 text-xs font-medium text-muted-foreground">（非公開）</span>
+          )}
+        </p>
+        <p className="mt-1 text-sm text-muted-foreground">{item.body}</p>
+      </button>
+      <button
+        type="button"
+        onClick={() => openEdit(item)}
+        className="grid h-8 w-8 shrink-0 place-items-center rounded-md text-muted-foreground hover:bg-muted"
+      >
+        <Edit3 className="h-3.5 w-3.5" />
+      </button>
+      <button
+        type="button"
+        onClick={() => void remove(item)}
+        className="grid h-8 w-8 shrink-0 place-items-center rounded-md text-red-500 hover:bg-muted"
+      >
+        <Trash2 className="h-3.5 w-3.5" />
+      </button>
+    </li>
+  );
 
   return (
     <AdminShell title="イベント・お知らせ">
@@ -296,10 +402,7 @@ export default function AdminEvents() {
               </h3>
               <button
                 type="button"
-                onClick={() => {
-                  setShowForm(false);
-                  setEditing(null);
-                }}
+                onClick={closeForm}
                 className="grid h-9 w-9 place-items-center rounded-lg hover:bg-muted"
                 aria-label="閉じる"
               >
@@ -317,7 +420,8 @@ export default function AdminEvents() {
                     setForm((prev) => ({
                       ...prev,
                       type,
-                      hour: type === 'event' ? (prev.hour === '' ? 12 : prev.hour) : '',
+                      // イベントは開催日が必須。お知らせは「両日共通」も選べる
+                      day: type === 'event' && !getEventDay(prev.day) ? dayKey : prev.day,
                     }));
                   }}
                   className="w-full rounded-lg border border-input bg-background px-3 py-2.5 text-foreground"
@@ -327,20 +431,42 @@ export default function AdminEvents() {
                 </select>
               </label>
 
+              <label className="block text-sm">
+                <span className="mb-1 block text-muted-foreground">
+                  {form.type === 'event' ? '開催日' : '表示する日'}
+                </span>
+                <select
+                  value={form.day}
+                  onChange={(e) => updateField('day', e.target.value)}
+                  className="w-full rounded-lg border border-input bg-background px-3 py-2.5 text-foreground"
+                >
+                  {form.type === 'notice' && <option value="">両日共通</option>}
+                  {EVENT_DAYS.map((day) => (
+                    <option key={day.key} value={day.key}>
+                      {day.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
               {form.type === 'event' && (
                 <label className="block text-sm">
-                  <span className="mb-1 block text-muted-foreground">時間（来場者画面の行）</span>
-                  <select
-                    value={form.hour === '' ? 12 : form.hour}
-                    onChange={(e) => updateField('hour', Number(e.target.value))}
+                  <span className="mb-1 block text-muted-foreground">
+                    時間
+                    {formDay && (
+                      <span className="ml-2 text-xs">
+                        （{minutesToTime(formDay.startMinutes)}〜{minutesToTime(formDay.endMinutes)}）
+                      </span>
+                    )}
+                  </span>
+                  <input
+                    type="time"
+                    value={form.time}
+                    min={formDay ? minutesToTime(formDay.startMinutes) : undefined}
+                    max={formDay ? minutesToTime(formDay.endMinutes) : undefined}
+                    onChange={(e) => updateField('time', e.target.value)}
                     className="w-full rounded-lg border border-input bg-background px-3 py-2.5 text-foreground"
-                  >
-                    {HOURS.map((h) => (
-                      <option key={h} value={h}>
-                        {hourLabel(h)}
-                      </option>
-                    ))}
-                  </select>
+                  />
                 </label>
               )}
 
@@ -349,7 +475,7 @@ export default function AdminEvents() {
                 <input
                   value={form.title}
                   onChange={(e) => updateField('title', e.target.value)}
-                  placeholder={form.type === 'notice' ? '例: 呼び出し番号の見方' : '例: スペシャルゲスト'}
+                  placeholder={form.type === 'notice' ? '例: 呼び出し番号の見方' : '例: スペシャルゲスト登壇'}
                   className="w-full rounded-lg border border-input bg-background px-3 py-2.5 text-foreground outline-none"
                   autoFocus
                 />
@@ -373,6 +499,8 @@ export default function AdminEvents() {
                 />
                 公開する（オフだと来場者には見えません）
               </label>
+
+              {error && <p className="text-sm text-red-500">{error}</p>}
             </div>
 
             <div className="flex gap-2 border-t border-border p-4">
@@ -387,10 +515,7 @@ export default function AdminEvents() {
               </button>
               <button
                 type="button"
-                onClick={() => {
-                  setShowForm(false);
-                  setEditing(null);
-                }}
+                onClick={closeForm}
                 className="rounded-xl border border-border px-4 py-3 text-sm text-foreground hover:bg-muted"
               >
                 キャンセル
@@ -400,86 +525,65 @@ export default function AdminEvents() {
         </div>
       )}
 
+      <div className="mb-3">
+        <EventDayTabs value={dayKey} onChange={setDayKey} />
+      </div>
+
       {/* 来場者と同じ時間割プレビュー＋行ごとの追加 */}
       <section className="mb-5">
-        <h3 className="mb-2 px-1 text-sm font-bold text-muted-foreground">本日のタイムテーブル（プレビュー）</h3>
+        <h3 className="mb-2 px-1 text-sm font-bold text-muted-foreground">タイムテーブル（プレビュー）</h3>
         <div className="overflow-hidden rounded-2xl border border-border bg-card">
           <div className="grid grid-cols-[4.5rem_1fr] border-b border-border bg-muted/50 text-xs font-bold text-muted-foreground">
             <div className="border-r border-border px-3 py-2.5">時間</div>
             <div className="px-3 py-2.5">内容</div>
           </div>
-          {previewHours.map((hour) => {
-            const rowItems = eventsByHour.get(hour) ?? [];
-            return (
-              <div
-                key={hour}
-                className="grid min-h-14 grid-cols-[4.5rem_1fr] border-b border-border last:border-b-0"
-              >
+          {rows.map((row) => (
+            <Fragment key={row.hour}>
+              <div className="grid min-h-14 grid-cols-[4.5rem_1fr] border-b border-border last:border-b-0">
                 <div className="border-r border-border bg-muted/30 px-3 py-3">
-                  <span className="text-sm font-bold tabular-nums text-foreground">{hourLabel(hour)}</span>
+                  <span className="text-sm font-bold tabular-nums text-foreground">
+                    {timeLabel(row.hour * 60)}
+                  </span>
                 </div>
                 <div className="space-y-2 px-2 py-2">
-                  {rowItems.length === 0 ? (
+                  {row.exact.map((item) => renderEventItem(item))}
+                  {row.exact.length === 0 && (
                     <button
                       type="button"
-                      onClick={() => openCreate(hour)}
+                      onClick={() => openCreate(row.hour)}
                       className="flex w-full items-center gap-1 rounded-lg px-2 py-2 text-left text-sm text-muted-foreground hover:bg-muted"
                     >
                       <Plus className="h-3.5 w-3.5" />
                       この時間に追加
                     </button>
-                  ) : (
-                    rowItems.map((item) => (
-                      <div
-                        key={item.id}
-                        className="flex items-start gap-1 rounded-lg px-1 py-1 hover:bg-muted/60"
-                      >
-                        <button
-                          type="button"
-                          onClick={() => openEdit(item)}
-                          className="min-w-0 flex-1 text-left"
-                        >
-                          <p className="font-display text-base font-bold text-foreground">
-                            {item.title}
-                            {!item.is_published && (
-                              <span className="ml-2 text-xs font-medium text-muted-foreground">
-                                （非公開）
-                              </span>
-                            )}
-                          </p>
-                          {item.body && (
-                            <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{item.body}</p>
-                          )}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => openEdit(item)}
-                          className="grid h-8 w-8 shrink-0 place-items-center rounded-md text-muted-foreground hover:bg-muted"
-                          title="編集"
-                        >
-                          <Edit3 className="h-3.5 w-3.5" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => void remove(item)}
-                          className="grid h-8 w-8 shrink-0 place-items-center rounded-md text-red-500 hover:bg-muted"
-                          title="削除"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
-                    ))
                   )}
                 </div>
               </div>
-            );
-          })}
+              {row.between.map(({ minutes, item }) => (
+                <div
+                  key={item.id}
+                  className="grid grid-cols-[4.5rem_1fr] border-b border-border bg-primary/5 last:border-b-0"
+                >
+                  <div className="flex items-start justify-end border-r border-border px-3 py-3">
+                    <span className="text-xs font-bold tabular-nums text-muted-foreground">
+                      {timeLabel(minutes)}
+                    </span>
+                  </div>
+                  <div className="border-l-2 px-2 py-2" style={{ borderColor: 'var(--primary)' }}>
+                    {renderEventItem(item)}
+                  </div>
+                </div>
+              ))}
+            </Fragment>
+          ))}
         </div>
       </section>
 
       <section className="space-y-2">
         <div className="flex items-center justify-between px-1">
-          <h3 className="text-sm font-bold text-muted-foreground">お知らせ</h3>
+          <h3 className="text-sm font-bold text-muted-foreground">
+            お知らせ（{getEventDay(dayKey)?.short}と両日共通）
+          </h3>
           <button
             type="button"
             onClick={openCreateNotice}
@@ -490,44 +594,32 @@ export default function AdminEvents() {
           </button>
         </div>
         <ul className="overflow-hidden rounded-2xl border border-border bg-card">
-          {notices.length === 0 ? (
+          {dayNotices.length === 0 ? (
             <li className="px-4 py-6 text-center text-sm text-muted-foreground">
-              お知らせはまだありません
+              この日のお知らせはまだありません
             </li>
           ) : (
-            notices.map((item, index) => (
-              <li
-                key={item.id}
-                className={`flex items-start gap-2 px-3 py-3 ${index > 0 ? 'border-t border-border' : ''}`}
-              >
-                <button type="button" onClick={() => openEdit(item)} className="min-w-0 flex-1 text-left">
-                  <p className="font-display font-bold text-foreground">
-                    {item.title}
-                    {!item.is_published && (
-                      <span className="ml-2 text-xs font-medium text-muted-foreground">（非公開）</span>
-                    )}
-                  </p>
-                  <p className="mt-1 text-sm text-muted-foreground">{item.body}</p>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => openEdit(item)}
-                  className="grid h-8 w-8 shrink-0 place-items-center rounded-md text-muted-foreground hover:bg-muted"
-                >
-                  <Edit3 className="h-3.5 w-3.5" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void remove(item)}
-                  className="grid h-8 w-8 shrink-0 place-items-center rounded-md text-red-500 hover:bg-muted"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
-              </li>
-            ))
+            dayNotices.map((item, index) => renderNoticeItem(item, index))
           )}
         </ul>
+        {allNotices.length > dayNotices.length && (
+          <p className="px-1 text-xs text-muted-foreground">
+            別の日のお知らせは、上の日付タブを切り替えると確認できます。
+          </p>
+        )}
       </section>
+
+      {orphans.length > 0 && (
+        <section className="mt-5 space-y-2">
+          <h3 className="px-1 text-sm font-bold text-red-500">日程外のデータ（修正または削除してください）</h3>
+          <p className="px-1 text-xs text-muted-foreground">
+            開催日（10/24・10/25）に入っていないため、来場者画面には表示されません。
+          </p>
+          <ul className="overflow-hidden rounded-2xl border border-border bg-card">
+            {orphans.map((item, index) => renderNoticeItem(item, index))}
+          </ul>
+        </section>
+      )}
 
       {!loading && items.length === 0 && (
         <div className="mt-4 rounded-2xl border border-border bg-card p-8 text-center">
