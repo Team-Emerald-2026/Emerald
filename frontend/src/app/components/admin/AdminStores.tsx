@@ -5,6 +5,7 @@ import AdminStoreForm from './AdminStoreForm';
 import {
   ApiError,
   createAdminStore,
+  deleteAdminStorePermanently,
   fetchAdminStores,
   hideAdminStore,
   updateAdminStore,
@@ -122,9 +123,33 @@ export default function AdminStores() {
     try {
       await hideAdminStore(adminSession?.token, store.id);
       setMessage('店舗を営業停止・非表示にしました。');
+      if (editing?.id === store.id) {
+        setShowForm(false);
+        setEditing(null);
+      }
       await loadStores();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : '非表示削除に失敗しました。');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // 確認（店舗名の入力）はフォーム側で済ませている
+  const deleteStore = async (store: AdminStore) => {
+    if ((!adminSession && !ADMIN_PUBLIC_ACCESS) || saving) return;
+
+    setSaving(true);
+    setError('');
+    setMessage('');
+    try {
+      await deleteAdminStorePermanently(adminSession?.token, store.id);
+      setMessage(`店舗「${store.name}」を完全に削除しました。`);
+      setShowForm(false);
+      setEditing(null);
+      await loadStores();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : '店舗の削除に失敗しました。');
     } finally {
       setSaving(false);
     }
@@ -135,7 +160,7 @@ export default function AdminStores() {
       <div className="mb-4 flex items-center justify-between gap-3">
         <div>
           <h2 className="font-display text-xl font-bold text-foreground">店舗一覧</h2>
-          <p className="text-sm text-muted-foreground">作成、編集、営業停止・非表示を管理します。</p>
+          <p className="text-sm text-muted-foreground">作成、編集、営業停止・非表示、削除を管理します。削除は編集画面から行えます。</p>
         </div>
         <button
           type="button"
@@ -167,6 +192,8 @@ export default function AdminStores() {
               setEditing(null);
             }}
             onSubmit={submit}
+            onHide={editing ? () => void hideStore(editing) : undefined}
+            onDelete={editing ? () => void deleteStore(editing) : undefined}
           />
         </div>
       )}

@@ -80,6 +80,7 @@ Route::prefix('v1/admin')->group(function () {
     Route::get('stores/{id}', [AdminStoreController::class, 'show']);
     Route::patch('stores/{id}', [AdminStoreController::class, 'update']);
     Route::delete('stores/{id}', [AdminStoreController::class, 'destroy']);
+    Route::delete('stores/{id}/permanent', [AdminStoreController::class, 'forceDestroy']);
     Route::get('events', [AdminEventController::class, 'index']);
     Route::post('events', [AdminEventController::class, 'store']);
     Route::get('events/{id}', [AdminEventController::class, 'show']);
