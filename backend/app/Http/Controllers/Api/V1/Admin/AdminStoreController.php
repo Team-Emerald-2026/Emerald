@@ -4,12 +4,16 @@ namespace App\Http\Controllers\Api\V1\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\MapFacilities;
+use App\Models\MenuItem;
 use App\Models\Order;
+use App\Models\OrderItem;
+use App\Models\SalesEntry;
 use App\Models\Store;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
@@ -216,6 +220,46 @@ class AdminStoreController extends Controller
         $facility = MapFacilities::query()->where('store_id', $store->id)->first();
 
         return response()->json(['data' => $this->serializeStore($store->refresh(), null, null, $facility)], 200, [], JSON_UNESCAPED_UNICODE);
+    }
+
+    /**
+     * 店舗を完全に削除する（元に戻せない）。
+     * 注文・メニュー・売上入力・受付番号・店舗ログインアカウント・マップ枠も一緒に消す。
+     */
+    public function forceDestroy(Request $request, string $id)
+    {
+        $this->authorizeAdmin($request);
+
+        $store = Store::query()->findOrFail($id);
+
+        DB::transaction(function () use ($store) {
+            // order_items.menu_item_id は restrict のため、先に明細→注文→メニューの順で消す
+            $orderIds = Order::query()->where('store_id', $store->id)->pluck('id');
+            OrderItem::query()->whereIn('order_id', $orderIds)->delete();
+            Order::query()->where('store_id', $store->id)->delete();
+            MenuItem::query()->where('store_id', $store->id)->delete();
+
+            if (Schema::hasTable('sales_entries')) {
+                SalesEntry::query()->where('store_id', $store->id)->delete();
+            }
+            if (Schema::hasTable('ticket_counters')) {
+                DB::table('ticket_counters')->where('store_id', $store->id)->delete();
+            }
+
+            User::query()
+                ->where('role', 'store')
+                ->where('store_id', $store->id)
+                ->get()
+                ->each(function (User $user) {
+                    $user->tokens()->delete();
+                    $user->delete();
+                });
+
+            MapFacilities::query()->where('store_id', $store->id)->delete();
+            $store->delete();
+        });
+
+        return response()->noContent();
     }
 
     private function authorizeAdmin(Request $request): void

@@ -468,6 +468,85 @@ class MissingApisTest extends TestCase
             ->assertJsonCount(0, 'data');
     }
 
+    public function test_admin_can_permanently_delete_store_with_related_data(): void
+    {
+        $store = $this->createStore();
+        $other = $this->createStore('store-102', ['name' => '焼きそば', 'ticket_prefix' => 'Y']);
+        $this->createStoreUser($store);
+        $this->createStoreUser($other, 'yakisoba_admin');
+        MapFacilities::query()->create([
+            'store_id' => $store->id,
+            'name' => $store->name,
+            'type' => 'booth',
+            'floor' => 1,
+            'x' => 50,
+            'y' => 50,
+        ]);
+        $item = MenuItem::query()->create([
+            'store_id' => $store->id,
+            'name' => 'ブレンドコーヒー',
+            'description' => 'ホット',
+            'price' => 350,
+            'is_available' => true,
+        ]);
+        $order = Order::query()->create([
+            'store_id' => $store->id,
+            'ticket_number' => 'C-170',
+            'total_price' => 350,
+            'status' => 'settled',
+            'ordered_at' => now(),
+            'settled_at' => now(),
+        ]);
+        OrderItem::query()->create([
+            'order_id' => $order->id,
+            'menu_item_id' => $item->id,
+            'quantity' => 1,
+            'unit_price' => 350,
+            'subtotal' => 350,
+        ]);
+        SalesEntry::query()->create([
+            'store_id' => $store->id,
+            'amount' => 1000,
+            'recorded_at' => now(),
+        ]);
+        Order::query()->create([
+            'store_id' => $other->id,
+            'ticket_number' => 'Y-001',
+            'total_price' => 500,
+            'status' => 'issued',
+            'ordered_at' => now(),
+        ]);
+        Sanctum::actingAs($this->createAdmin());
+
+        $this->deleteJson("/api/v1/admin/stores/{$store->id}/permanent")
+            ->assertNoContent();
+
+        $this->assertDatabaseMissing('stores', ['id' => $store->id]);
+        $this->assertDatabaseMissing('menu_items', ['store_id' => $store->id]);
+        $this->assertDatabaseMissing('orders', ['store_id' => $store->id]);
+        $this->assertDatabaseMissing('order_items', ['order_id' => $order->id]);
+        $this->assertDatabaseMissing('sales_entries', ['store_id' => $store->id]);
+        $this->assertDatabaseMissing('map_facilities', ['store_id' => $store->id]);
+        $this->assertDatabaseMissing('users', ['login_id' => 'cafe_admin']);
+
+        // 他の店舗のデータは残る
+        $this->assertDatabaseHas('stores', ['id' => $other->id]);
+        $this->assertDatabaseHas('users', ['login_id' => 'yakisoba_admin']);
+        $this->assertDatabaseHas('orders', ['store_id' => $other->id]);
+    }
+
+    public function test_permanent_store_delete_requires_admin_role(): void
+    {
+        config(['admin.public_access' => false]);
+        $store = $this->createStore();
+        Sanctum::actingAs($this->createStoreUser($store));
+
+        $this->deleteJson("/api/v1/admin/stores/{$store->id}/permanent")
+            ->assertForbidden();
+
+        $this->assertDatabaseHas('stores', ['id' => $store->id]);
+    }
+
     public function test_admin_stores_are_readable_without_login_when_public(): void
     {
         $this->createStore();

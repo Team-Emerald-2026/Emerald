@@ -376,6 +376,15 @@ export function hideAdminStore(token: string | undefined, id: string, signal?: A
   }).then((payload) => (isRecord(payload) ? payload.data as AdminStore : null));
 }
 
+/** 店舗を完全に削除する（注文・メニュー・ログインアカウント等も消える。元に戻せない） */
+export function deleteAdminStorePermanently(token: string | undefined, id: string, signal?: AbortSignal) {
+  return request(`/v1/admin/stores/${encodeURIComponent(id)}/permanent`, {
+    method: 'DELETE',
+    signal,
+    token,
+  });
+}
+
 export function fetchAdminAnalytics(token?: string, signal?: AbortSignal) {
   return request('/v1/admin/analytics', { signal, token }).then((payload) =>
     isRecord(payload) ? payload.data as AdminAnalytics : null,

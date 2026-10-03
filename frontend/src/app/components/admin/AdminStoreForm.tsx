@@ -7,6 +7,10 @@ interface Props {
   saving: boolean;
   onCancel: () => void;
   onSubmit: (input: AdminStoreInput) => void;
+  /** 編集時のみ：営業停止・非表示にする */
+  onHide?: () => void;
+  /** 編集時のみ：完全に削除する（元に戻せない） */
+  onDelete?: () => void;
 }
 
 const emptyInput: AdminStoreInput = {
@@ -37,10 +41,16 @@ const storeTypes = [
   { value: 'support', label: 'サポート' },
 ] as const;
 
-export default function AdminStoreForm({ store, saving, onCancel, onSubmit }: Props) {
+export default function AdminStoreForm({ store, saving, onCancel, onSubmit, onHide, onDelete }: Props) {
   const [input, setInput] = useState<AdminStoreInput>(emptyInput);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [confirmName, setConfirmName] = useState('');
 
   useEffect(() => {
+    // 店舗を切り替えたら、削除確認はリセットする
+    setConfirmingDelete(false);
+    setConfirmName('');
+
     if (!store) {
       setInput(emptyInput);
       return;
@@ -235,6 +245,88 @@ export default function AdminStoreForm({ store, saving, onCancel, onSubmit }: Pr
       >
         {saving ? '保存中...' : '保存する'}
       </button>
+
+      {store && (onHide || onDelete) && (
+        <div className="mt-6 space-y-3 border-t border-border pt-4">
+          <h3 className="text-sm font-bold text-muted-foreground">店舗の停止・削除</h3>
+
+          {onHide && (
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-xs text-muted-foreground">
+                来場者画面から隠して営業を止めます。データは残り、あとから戻せます。
+              </p>
+              <button
+                type="button"
+                onClick={onHide}
+                disabled={saving || !store.is_visible}
+                className="shrink-0 rounded-xl border border-border px-4 py-2 text-sm font-bold text-foreground hover:bg-muted disabled:opacity-40"
+              >
+                営業停止・非表示にする
+              </button>
+            </div>
+          )}
+
+          {onDelete && !confirmingDelete && (
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-xs text-muted-foreground">
+                店舗とその注文・メニュー・売上・ログインアカウントをすべて消します。元に戻せません。
+              </p>
+              <button
+                type="button"
+                onClick={() => setConfirmingDelete(true)}
+                disabled={saving}
+                className="shrink-0 rounded-xl border border-red-500 px-4 py-2 text-sm font-bold text-red-500 hover:bg-red-500/10 disabled:opacity-40"
+              >
+                完全に削除する
+              </button>
+            </div>
+          )}
+
+          {onDelete && confirmingDelete && (
+            <div className="space-y-3 rounded-xl border border-red-500 bg-red-500/5 p-3">
+              <p className="text-sm font-bold text-red-500">この操作は元に戻せません</p>
+              <ul className="list-disc space-y-0.5 pl-5 text-xs text-muted-foreground">
+                <li>店舗「{store.name}」</li>
+                <li>注文履歴・売上（現在の収益 ¥{store.revenue.toLocaleString('ja-JP')} / {store.order_count}件）</li>
+                <li>メニュー、売上入力、受付番号</li>
+                <li>店舗のログインアカウントとマップ上の位置</li>
+              </ul>
+              <label className="block text-sm">
+                <span className="mb-1 block text-muted-foreground">
+                  確認のため、店舗名「{store.name}」を入力してください
+                </span>
+                <input
+                  value={confirmName}
+                  onChange={(event) => setConfirmName(event.target.value)}
+                  className="w-full rounded-lg border border-input bg-background px-3 py-2.5 text-foreground outline-none"
+                  autoComplete="off"
+                />
+              </label>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={onDelete}
+                  disabled={saving || confirmName.trim() !== store.name.trim()}
+                  className="flex-1 rounded-xl bg-red-500 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-40"
+                >
+                  {saving ? '削除中...' : '完全に削除する'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setConfirmingDelete(false);
+                    setConfirmName('');
+                  }}
+                  disabled={saving}
+                  className="rounded-xl border border-border px-4 py-2.5 text-sm text-foreground hover:bg-muted"
+                >
+                  やめる
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </section>
   );
 }
