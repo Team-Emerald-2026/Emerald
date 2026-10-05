@@ -5,6 +5,7 @@ import Attractions from './components/Attractions';
 import Restaurants from './components/Restaurants';
 import CampusMap from './components/Map';
 import Events from './components/Events';
+import Monitor from './components/Monitor';
 import NotFound from './components/NotFound';
 import StoreLogin from './components/store/StoreLogin';
 import StorePos from './components/store/StorePos';
@@ -29,6 +30,8 @@ export const router = createBrowserRouter([
       { path: '/map', element: <CampusMap /> },
     ],
   },
+  // 校内モニター（プロジェクター）向け呼び出し番号一覧（認証不要）
+  { path: '/monitor', element: <Monitor /> },
   // 店舗向け画面（来場者ナビとは独立）
   { path: '/store/login', element: <StoreLogin /> },
   { path: '/store', element: <StorePos /> },
