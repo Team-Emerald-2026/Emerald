@@ -11,7 +11,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { fetchMapFacilities, type BackendMapFacility } from '../lib/api';
-import { mapLocations } from '../lib/mapLocations';
+import { floors, mapImageByFloor, type MapFloor } from '../lib/campusMap';
 
 type BoothType = '体験' | 'フード' | '物販' | 'トイレ' | '案内' | '救護室' | 'サポート';
 type Floor = `${number}F`;
@@ -30,20 +30,6 @@ interface Facility {
 
 const campusMap = {
   name: '京都TECH学園祭 校内マップ',
-};
-
-const floors = ['1F', '2F', '3F', '4F', '5F', '6F', '7F', '8F'] as const;
-type MapFloor = (typeof floors)[number];
-
-const mapImageByFloor: Record<MapFloor, string> = {
-  '1F': '/campus-map-1f.png',
-  '2F': '/campus-map-2f.png',
-  '3F': '/campus-map-3f.png',
-  '4F': '/campus-map-4f.png',
-  '5F': '/campus-map-5f.png',
-  '6F': '/campus-map-6f.png',
-  '7F': '/campus-map-7f.png',
-  '8F': '/campus-map-8f.png',
 };
 
 const typeIcon: Record<BoothType, LucideIcon> = {
@@ -135,11 +121,6 @@ function spreadPins(items: Facility[]): Facility[] {
 function toFacility(facility: BackendMapFacility): Facility {
   const floorNum = Number(facility.floor);
   const storeId = facility.store_id ?? '';
-  const placeholder = !storeId
-    ? mapLocations.find(
-        (location) => location.floor === floorNum && location.name === facility.name,
-      )
-    : undefined;
 
   return {
     id: facility.id,
@@ -147,8 +128,9 @@ function toFacility(facility: BackendMapFacility): Facility {
     name: facility.name,
     type: toBoothType(facility.type),
     floor: `${Number.isFinite(floorNum) ? floorNum : 1}F`,
-    x: placeholder ? placeholder.map_x : toPercent(Number(facility.x), 240),
-    y: placeholder ? placeholder.map_y : toPercent(Number(facility.y), 180),
+    // 位置は管理画面の「マップ編集」で保存した値をそのまま使う
+    x: toPercent(Number(facility.x), 240),
+    y: toPercent(Number(facility.y), 180),
   };
 }
 
@@ -194,25 +176,8 @@ export default function CampusMap() {
       }
     }
 
-    const merged = Object.values(unique);
-    const names = new Set(merged.map((facility) => `${facility.floor}:${facility.name}`));
-
-    for (const location of mapLocations) {
-      const floorLabel = `${location.floor}F`;
-      const nameKey = `${floorLabel}:${location.name}`;
-      if (names.has(nameKey)) continue;
-      merged.push({
-        id: location.key,
-        storeId: '',
-        name: location.name,
-        type: '体験',
-        floor: `${location.floor}F` as Floor,
-        x: location.map_x,
-        y: location.map_y,
-      });
-    }
-
-    return merged;
+    // 場所の一覧は DB が元。固定リストで補わない（管理画面で消した場所が復活しないように）
+    return Object.values(unique);
   }, [facilities]);
 
   useEffect(() => {
