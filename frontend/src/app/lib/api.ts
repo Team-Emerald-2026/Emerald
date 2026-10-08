@@ -385,6 +385,71 @@ export function deleteAdminStorePermanently(token: string | undefined, id: strin
   });
 }
 
+/** 管理画面「マップ編集」用の場所（ピン） */
+export interface AdminMapFacility {
+  id: string;
+  /** 紐づいている店舗のID（空き枠なら null） */
+  store_id: string | null;
+  store_name: string | null;
+  /** 紐づいている店舗が来場者画面に表示中か（空き枠なら null） */
+  store_visible: boolean | null;
+  name: string;
+  type: string;
+  floor: number;
+  x: number;
+  y: number;
+}
+
+export interface AdminMapFacilityInput {
+  name?: string;
+  type?: string;
+  floor?: number;
+  x?: number;
+  y?: number;
+}
+
+export function fetchAdminMapFacilities(token?: string, signal?: AbortSignal) {
+  return request('/v1/admin/map/facilities', { signal, token }).then((payload) => {
+    if (isRecord(payload) && Array.isArray(payload.data)) return payload.data as AdminMapFacility[];
+    return [];
+  });
+}
+
+export function createAdminMapFacility(
+  token: string | undefined,
+  input: Required<AdminMapFacilityInput>,
+  signal?: AbortSignal,
+) {
+  return request('/v1/admin/map/facilities', {
+    method: 'POST',
+    signal,
+    token,
+    body: input,
+  }).then((payload) => (isRecord(payload) ? (payload.data as AdminMapFacility) : null));
+}
+
+export function updateAdminMapFacility(
+  token: string | undefined,
+  id: string,
+  input: AdminMapFacilityInput,
+  signal?: AbortSignal,
+) {
+  return request(`/v1/admin/map/facilities/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    signal,
+    token,
+    body: input,
+  }).then((payload) => (isRecord(payload) ? (payload.data as AdminMapFacility) : null));
+}
+
+export function deleteAdminMapFacility(token: string | undefined, id: string, signal?: AbortSignal) {
+  return request(`/v1/admin/map/facilities/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    signal,
+    token,
+  });
+}
+
 export function fetchAdminAnalytics(token?: string, signal?: AbortSignal) {
   return request('/v1/admin/analytics', { signal, token }).then((payload) =>
     isRecord(payload) ? payload.data as AdminAnalytics : null,

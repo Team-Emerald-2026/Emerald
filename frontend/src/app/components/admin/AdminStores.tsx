@@ -6,15 +6,16 @@ import {
   ApiError,
   createAdminStore,
   deleteAdminStorePermanently,
+  fetchAdminMapFacilities,
   fetchAdminStores,
   hideAdminStore,
   updateAdminStore,
+  type AdminMapFacility,
   type AdminStore,
   type AdminStoreInput,
 } from '../../lib/api';
 import { logoutAdminSession, useFestival } from '../../lib/festivalStore';
 import { ADMIN_PUBLIC_ACCESS } from '../../lib/adminAccess';
-import { findMapLocation } from '../../lib/mapLocations';
 
 const yen = (value: number) => `¥${value.toLocaleString('ja-JP')}`;
 
@@ -42,6 +43,7 @@ const typeLabel = (type: string) => {
 export default function AdminStores() {
   const adminSession = useFestival((s) => s.adminSession);
   const [stores, setStores] = useState<AdminStore[]>([]);
+  const [locations, setLocations] = useState<AdminMapFacility[]>([]);
   const [editing, setEditing] = useState<AdminStore | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -53,6 +55,11 @@ export default function AdminStores() {
     if (!adminSession && !ADMIN_PUBLIC_ACCESS) return Promise.resolve();
     setLoading(true);
     setError('');
+    // 場所の一覧は店舗の位置の候補に使う。取得できなくても店舗一覧は表示する
+    void fetchAdminMapFacilities(adminSession?.token, signal)
+      .then((data) => setLocations(data))
+      .catch(() => undefined);
+
     return fetchAdminStores(adminSession?.token, signal)
       .then((data) => setStores(data))
       .catch((err: unknown) => {
@@ -73,6 +80,18 @@ export default function AdminStores() {
     void loadStores(controller.signal);
     return () => controller.abort();
   }, [adminSession]);
+
+  // 同じ位置にある空き枠の名前（例: 301）があればそれを、なければ座標を表示する
+  const locationLabel = (store: AdminStore) => {
+    const place = locations.find(
+      (item) =>
+        item.store_id === null &&
+        item.floor === store.floor &&
+        item.x === store.map_x &&
+        item.y === store.map_y,
+    );
+    return place ? `${store.floor}F ${place.name}` : `${store.floor}F（X:${store.map_x}% Y:${store.map_y}%）`;
+  };
 
   const openCreate = () => {
     setEditing(null);
@@ -186,6 +205,7 @@ export default function AdminStores() {
         <div className="mb-5">
           <AdminStoreForm
             store={editing}
+            locations={locations}
             saving={saving}
             onCancel={() => {
               setShowForm(false);
@@ -229,7 +249,7 @@ export default function AdminStores() {
                     ID: {store.id} / ログインID: {store.login_id ?? '未設定'} / Prefix: {store.ticket_prefix ?? '未設定'}
                   </p>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    種類: {typeLabel(store.type)} / 位置: {findMapLocation(store.floor, store.map_x, store.map_y)?.name ?? `${store.floor}F`}
+                    種類: {typeLabel(store.type)} / 位置: {locationLabel(store)}
                   </p>
                 </div>
                 <div className="shrink-0 text-left sm:text-right">
