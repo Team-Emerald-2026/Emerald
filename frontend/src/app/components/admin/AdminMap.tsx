@@ -25,8 +25,13 @@ import {
 import { logoutAdminSession, useFestival } from '../../lib/festivalStore';
 import { ADMIN_PUBLIC_ACCESS } from '../../lib/adminAccess';
 
-/** この距離（%）より近いピンは、重なって読みにくくなるので注意を出す */
-const NEAR_DISTANCE = 4;
+/**
+ * ピンの文字は固定の大きさ（スマホ幅の地図で、横およそ14%・縦およそ9%）。
+ * 横も縦もこの範囲より近いピンは、重なって読みにくくなるので注意を出す。
+ * 来場者マップはピンを自動で動かさず、登録した位置のまま表示する。
+ */
+const NEAR_X = 14;
+const NEAR_Y = 9;
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
@@ -112,11 +117,13 @@ export default function AdminMap() {
     if (!focusPoint) return [];
     return floorFacilities
       .filter((item) => item.id !== focusPoint.ignoreId)
+      .filter(
+        (item) => Math.abs(item.x - focusPoint.x) < NEAR_X && Math.abs(item.y - focusPoint.y) < NEAR_Y,
+      )
       .map((item) => ({
         item,
         distance: Math.hypot(item.x - focusPoint.x, item.y - focusPoint.y),
       }))
-      .filter(({ distance }) => distance < NEAR_DISTANCE)
       .sort((a, b) => a.distance - b.distance);
   }, [floorFacilities, focusPoint?.x, focusPoint?.y, focusPoint?.ignoreId]);
 
@@ -331,7 +338,9 @@ export default function AdminMap() {
       <div
         ref={mapRef}
         onClick={handleMapClick}
-        className="relative aspect-[825/466] min-h-52 w-full cursor-crosshair select-none overflow-hidden rounded-2xl border border-border bg-muted"
+        // 来場者画面（スマホ幅）と同じくらいの大きさで表示する。ピンの大きさは固定のため、
+        // 大きい画面で配置すると来場者画面ではピンがはみ出して見えてしまうので、幅をそろえている。
+        className="relative mx-auto aspect-[825/466] min-h-52 w-full max-w-sm cursor-crosshair select-none overflow-hidden rounded-2xl border border-border bg-muted"
       >
         <img
           src={mapImageByFloor[floor]}
