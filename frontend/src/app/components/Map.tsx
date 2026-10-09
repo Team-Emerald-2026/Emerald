@@ -24,8 +24,6 @@ interface Facility {
   floor: Floor;
   x: number; // マップ上の相対座標（%）
   y: number;
-  displayX?: number;
-  displayY?: number;
 }
 
 const campusMap = {
@@ -82,40 +80,6 @@ function toPercent(value: number, max: number): number {
   if (!Number.isFinite(value)) return 50;
   if (value >= 0 && value <= 100) return value;
   return Math.max(0, Math.min(100, (value / max) * 100));
-}
-
-function clampPercent(value: number) {
-  return Math.max(6, Math.min(94, value));
-}
-
-/** 近いピンを少し離して、教室番号が重なって読めなくならないようにする */
-function spreadPins(items: Facility[]): Facility[] {
-  const result = items.map((item) => ({
-    ...item,
-    displayX: item.x,
-    displayY: item.y,
-  }));
-  const minDist = 16;
-
-  for (let iter = 0; iter < 10; iter += 1) {
-    for (let i = 0; i < result.length; i += 1) {
-      for (let j = i + 1; j < result.length; j += 1) {
-        const dx = (result[j].displayX ?? 0) - (result[i].displayX ?? 0);
-        const dy = (result[j].displayY ?? 0) - (result[i].displayY ?? 0);
-        const dist = Math.hypot(dx, dy) || 0.01;
-        if (dist >= minDist) continue;
-        const push = (minDist - dist) / 2;
-        const nx = dx / dist;
-        const ny = dy / dist;
-        result[i].displayX = clampPercent((result[i].displayX ?? 0) - nx * push);
-        result[i].displayY = clampPercent((result[i].displayY ?? 0) - ny * push);
-        result[j].displayX = clampPercent((result[j].displayX ?? 0) + nx * push);
-        result[j].displayY = clampPercent((result[j].displayY ?? 0) + ny * push);
-      }
-    }
-  }
-
-  return result;
 }
 
 function toFacility(facility: BackendMapFacility): Facility {
@@ -197,7 +161,8 @@ export default function CampusMap() {
   );
 
   const match = (f: Facility) => f.floor === floor && (type === 'すべて' || f.type === type);
-  const filtered = spreadPins(displayFacilities.filter(match));
+  // ピンは管理画面で登録した位置のまま表示する（自動で動かすと管理画面の見た目とずれるため）
+  const filtered = displayFacilities.filter(match);
   const selectedFacility =
     displayFacilities.find(
       (f) =>
@@ -350,8 +315,8 @@ export default function CampusMap() {
                     : 'z-0'
               }`}
               style={{
-                left: `${f.displayX ?? f.x}%`,
-                top: `${f.displayY ?? f.y}%`,
+                left: `${f.x}%`,
+                top: `${f.y}%`,
                 backgroundColor: typeColor[f.type],
               }}
               title={f.name}
