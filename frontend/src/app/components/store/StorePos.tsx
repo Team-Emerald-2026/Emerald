@@ -1,7 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Minus, Plus, Receipt } from 'lucide-react';
 import StoreShell from './StoreShell';
-import { issueOrder, adjustWaiting } from '../../lib/festivalStore';
+import { issueOrder, adjustWaiting, useFestival } from '../../lib/festivalStore';
+import { fetchBoothMenuItems } from '../../lib/api';
 
 interface Product {
   id: string;
@@ -9,20 +11,45 @@ interface Product {
   price: number;
 }
 
-const products: Product[] = [
-  { id: 'p1', name: '焼きそば', price: 400 },
-  { id: 'p2', name: 'たこ焼き 6個', price: 350 },
-  { id: 'p3', name: 'フランクフルト', price: 250 },
-  { id: 'p4', name: 'クレープ', price: 500 },
-  { id: 'p5', name: 'ドリンク', price: 200 },
-  { id: 'p6', name: 'かき氷', price: 300 },
-];
-
 const yen = (n: number) => `¥${n.toLocaleString('ja-JP')}`;
 
 export default function StorePos() {
+  const session = useFestival((s) => s.session);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [cart, setCart] = useState<Record<string, number>>({});
   const [issued, setIssued] = useState<string | null>(null);
+
+  // ログイン中の店舗が「店舗情報」で登録したメニューを読み込む
+  useEffect(() => {
+    if (!session?.token) {
+      setLoading(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    setLoading(true);
+    setLoadError('');
+    fetchBoothMenuItems(session.token, controller.signal)
+      .then((items) => {
+        setProducts(
+          items
+            .filter((item) => item.is_available !== false)
+            .map((item) => ({ id: String(item.id), name: item.name, price: Number(item.price) })),
+        );
+        setCart({});
+      })
+      .catch((err: unknown) => {
+        if (controller.signal.aborted) return;
+        setLoadError(err instanceof Error ? err.message : 'メニューを取得できませんでした。');
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false);
+      });
+
+    return () => controller.abort();
+  }, [session?.token]);
 
   const setQty = (id: string, qty: number) =>
     setCart((c) => {
@@ -33,9 +60,9 @@ export default function StorePos() {
     });
 
   const entries = Object.entries(cart);
-  const lineItems = entries.map(([id, qty]) => {
-    const product = products.find((p) => p.id === id)!;
-    return { ...product, qty, subtotal: product.price * qty };
+  const lineItems = entries.flatMap(([id, qty]) => {
+    const product = products.find((p) => p.id === id);
+    return product ? [{ ...product, qty, subtotal: product.price * qty }] : [];
   });
   const total = lineItems.reduce((sum, item) => sum + item.subtotal, 0);
 
@@ -66,6 +93,29 @@ export default function StorePos() {
         )}
 
         <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start">
+          {loading ? (
+            <p className="rounded-2xl border border-border bg-card p-6 text-center text-sm text-muted-foreground">
+              メニューを読み込み中...
+            </p>
+          ) : loadError ? (
+            <p className="rounded-2xl border border-border bg-card p-6 text-center text-sm text-red-500">
+              {loadError}
+            </p>
+          ) : products.length === 0 ? (
+            <div className="rounded-2xl border border-border bg-card p-6 text-center">
+              <p className="font-bold text-foreground">メニューがまだ登録されていません</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                「店舗情報」でメニューを登録すると、ここに表示されます。
+              </p>
+              <Link
+                to="/store/profile"
+                className="mt-4 inline-flex min-h-11 items-center justify-center rounded-xl px-5 py-2 text-sm font-bold text-white"
+                style={{ backgroundColor: 'var(--primary)' }}
+              >
+                店舗情報でメニューを登録する
+              </Link>
+            </div>
+          ) : (
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
             {products.map((p) => {
               const qty = cart[p.id] ?? 0;
@@ -103,6 +153,7 @@ export default function StorePos() {
               );
             })}
           </div>
+          )}
 
           <aside className="rounded-2xl border border-border bg-card p-4 lg:sticky lg:top-32">
             <h2 className="font-display text-base font-bold text-foreground">注文内容</h2>
