@@ -575,7 +575,6 @@ export function deleteBoothSale(token: string, id: string, signal?: AbortSignal)
 
 export function updateWaitTime(
   token: string,
-  storeId: string,
   input: {
     current_wait_min: number;
     current_queue_count: number;
@@ -584,19 +583,27 @@ export function updateWaitTime(
   },
   signal?: AbortSignal,
 ) {
-  return request(`/v1/store/${encodeURIComponent(storeId)}/wait-time`, {
+  return request('/v1/booth/wait-time', {
     method: 'PATCH',
     token,
     body: input,
     signal,
-  }) as Promise<{
-    id: string;
-    current_wait_min: number;
-    current_queue_count: number;
-    wait_display_mode: 'minutes' | 'text';
-    wait_display_text: string | null;
-    updated_at: string | null;
-  }>;
+  }).then((payload) => {
+    const updated = normalizeItem<{
+      id: string;
+      current_wait_min: number;
+      current_queue_count: number;
+      wait_display_mode: 'minutes' | 'text';
+      wait_display_text: string | null;
+      updated_at: string | null;
+    }>(payload);
+
+    if (!updated) {
+      throw new Error('待ち時間を更新できませんでした。');
+    }
+
+    return updated;
+  });
 }
 
 export function callBoothOrder(token: string, orderId: number, signal?: AbortSignal) {

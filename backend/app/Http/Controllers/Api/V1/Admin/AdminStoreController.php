@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\V1\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Http\Resources\Booth\WaitTimeResource;
 use App\Models\MapFacilities;
 use App\Models\MenuItem;
 use App\Models\Order;
@@ -204,6 +205,27 @@ class AdminStoreController extends Controller
         });
 
         return response()->json(['data' => $result], 200, [], JSON_UNESCAPED_UNICODE);
+    }
+
+    public function updateWaitTime(Request $request, string $id)
+    {
+        abort_unless($request->user()?->role === 'admin', 403, '管理者権限が必要です。');
+
+        $store = Store::query()->findOrFail($id);
+
+        $validated = $request->validate([
+            'current_wait_min' => ['required', 'integer', 'min:0', 'max:180'],
+            'current_queue_count' => ['required', 'integer', 'min:0', 'max:999'],
+            'wait_display_mode' => ['sometimes', 'string', 'in:minutes,text'],
+            'wait_display_text' => ['nullable', 'string', 'max:255'],
+        ]);
+
+        $store->fill($validated);
+        $store->save();
+
+        return WaitTimeResource::make($store)
+            ->response()
+            ->setEncodingOptions(JSON_UNESCAPED_UNICODE);
     }
 
     public function destroy(Request $request, string $id)

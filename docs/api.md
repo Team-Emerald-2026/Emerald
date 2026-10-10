@@ -54,6 +54,7 @@
 | /admin/stores | POST | Bearer Token | 新規店舗作成 |
 | /admin/stores/{id} | GET | Bearer Token | 店舗詳細取得 |
 | /admin/stores/{id} | PATCH | Bearer Token | 店舗編集 |
+| /admin/stores/{id}/wait-time | PATCH | Bearer Token | 管理者による店舗の待ち時間・待ち人数更新 |
 | /admin/stores/{id} | DELETE | Bearer Token | 店舗削除（非表示化） |
 | /admin/revenue | GET | Bearer Token | 総収益取得 |
 | /admin/analytics | GET | Bearer Token | 集計・分析・可視化用データ取得 |
@@ -213,7 +214,7 @@ POST /api/v1/store/login
 
 ### 4.4 待ち時間更新
 ```javascript
-PATCH /api/v1/store/{id}/wait-time
+PATCH /api/v1/booth/wait-time
 {
   method: 'PATCH',
   headers: {
@@ -228,12 +229,8 @@ PATCH /api/v1/store/{id}/wait-time
 ```
 
 #### 説明
-店舗側が待ち時間や待ち人数を更新する。
-
-#### パラメータ
-| 項目 | 型 | 必須 | 説明 |
-| --- | --- | --- | --- |
-| id | string | 必須 | 店舗ID |
+店舗側がログイン中の自店舗について、待ち時間や待ち人数を更新する。
+対象店舗は認証トークンに紐づく `store_id` から決定されるため、URLに店舗IDを指定しない。
 
 #### リクエストボディ
 ```json
@@ -246,18 +243,22 @@ PATCH /api/v1/store/{id}/wait-time
 #### 成功レスポンス (200)
 ```json
 {
-	"id": "store-101",
-	"current_wait_min": 20,
-	"current_queue_count": 10,
-	"updated_at": "2026-05-09T12:34:56Z"
+	"data": {
+		"id": "store-101",
+		"current_wait_min": 20,
+		"current_queue_count": 10,
+		"wait_display_mode": "minutes",
+		"wait_display_text": null,
+		"updated_at": "2026-05-09T12:34:56Z"
+	}
 }
 ```
 
 #### エラー例
 - 400 Bad Request: `current_wait_min` や `current_queue_count` の値が不正な場合
 - 401 Unauthorized: JWTが無効または期限切れの場合
-- 403 Forbidden: 自店舗以外の待ち時間を更新しようとした場合
-- 404 Not Found: 指定した店舗IDが存在しない場合
+- 403 Forbidden: 店舗に紐づかないユーザーが更新しようとした場合
+- 404 Not Found: 認証ユーザーに紐づく店舗が存在しない場合
 
 今後、時間で開始するブース向けに、数値の待ち時間ではなくテキスト表示を返せる項目を追加する。
 `wait_display_mode` を `text` にし、`wait_display_text` に表示文言を入れる。
@@ -442,10 +443,17 @@ GET /api/v1/events/{id}
 
 ### 4.11 管理画面
 
+#### 待ち時間更新APIのフロントエンド利用状況
+
+管理者向けの `PATCH /api/v1/admin/stores/{id}/wait-time` はバックエンドに実装済みです。
+ただし、現在のフロントエンド管理画面は、店舗編集時に `PATCH /api/v1/admin/stores/{id}` を使用しており、
+待ち時間・待ち人数も店舗情報と一緒に更新しています。管理者画面から専用の待ち時間更新APIはまだ利用していません。
+
 - `GET /api/v1/admin/stores`: 店舗一覧取得
 - `POST /api/v1/admin/stores`: 新規店舗作成
 - `GET /api/v1/admin/stores/{id}`: 店舗詳細取得
 - `PATCH /api/v1/admin/stores/{id}`: 店舗編集
+- `PATCH /api/v1/admin/stores/{id}/wait-time`: 管理者による店舗の待ち時間・待ち人数更新
 - `DELETE /api/v1/admin/stores/{id}`: 店舗削除（非表示化）
 - `GET /api/v1/admin/revenue`: 総収益取得（会計清算 + 当日売上入力）
 - `GET /api/v1/admin/analytics`: 集計・分析・可視化用データ取得
