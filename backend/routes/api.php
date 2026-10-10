@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\V1\Auth\AuthController;
 use App\Http\Controllers\Api\V1\Admin\AdminAuthController;
 use App\Http\Controllers\Api\V1\Admin\AdminAnalyticsController;
 use App\Http\Controllers\Api\V1\Admin\AdminEventController;
+use App\Http\Controllers\Api\V1\Admin\AdminMapFacilityController;
 use App\Http\Controllers\Api\V1\Admin\AdminStoreController;
 use App\Http\Controllers\Api\V1\CallNumber\CallNumberController;
 use App\Http\Controllers\Api\V1\Event\EventController;
@@ -83,6 +84,10 @@ Route::prefix('v1/admin')->group(function () {
         ->middleware('auth:sanctum');
     Route::delete('stores/{id}', [AdminStoreController::class, 'destroy']);
     Route::delete('stores/{id}/permanent', [AdminStoreController::class, 'forceDestroy']);
+    Route::get('map/facilities', [AdminMapFacilityController::class, 'index']);
+    Route::post('map/facilities', [AdminMapFacilityController::class, 'store']);
+    Route::patch('map/facilities/{id}', [AdminMapFacilityController::class, 'update'])->whereNumber('id');
+    Route::delete('map/facilities/{id}', [AdminMapFacilityController::class, 'destroy'])->whereNumber('id');
     Route::get('events', [AdminEventController::class, 'index']);
     Route::post('events', [AdminEventController::class, 'store']);
     Route::get('events/{id}', [AdminEventController::class, 'show']);

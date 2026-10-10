@@ -1,9 +1,11 @@
-import { useEffect, useState } from 'react';
-import type { AdminStore, AdminStoreInput } from '../../lib/api';
-import { findMapLocation, mapLocations } from '../../lib/mapLocations';
+import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
+import type { AdminMapFacility, AdminStore, AdminStoreInput } from '../../lib/api';
 
 interface Props {
   store: AdminStore | null;
+  /** マップ編集で登録されている場所（店舗の位置の候補） */
+  locations: AdminMapFacility[];
   saving: boolean;
   onCancel: () => void;
   onSubmit: (input: AdminStoreInput) => void;
@@ -41,7 +43,26 @@ const storeTypes = [
   { value: 'support', label: 'サポート' },
 ] as const;
 
-export default function AdminStoreForm({ store, saving, onCancel, onSubmit, onHide, onDelete }: Props) {
+interface LocationOption {
+  key: string;
+  floor: number;
+  x: number;
+  y: number;
+  label: string;
+  disabled: boolean;
+}
+
+const locationKey = (floor: number, x: number, y: number) => `${floor}:${x}:${y}`;
+
+export default function AdminStoreForm({
+  store,
+  locations,
+  saving,
+  onCancel,
+  onSubmit,
+  onHide,
+  onDelete,
+}: Props) {
   const [input, setInput] = useState<AdminStoreInput>(emptyInput);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [confirmName, setConfirmName] = useState('');
@@ -78,16 +99,52 @@ export default function AdminStoreForm({ store, saving, onCancel, onSubmit, onHi
     setInput((current) => ({ ...current, [key]: value }));
   };
 
-  const selectedLocation = findMapLocation(input.floor, input.map_x, input.map_y);
+  // 候補は「店舗がまだ入っていない場所」＋「他の店舗が使用中の場所（選べない）」
+  const locationOptions = useMemo<LocationOption[]>(() => {
+    const occupants = new Map<string, AdminMapFacility>();
+    for (const item of locations) {
+      if (item.store_id) occupants.set(locationKey(item.floor, item.x, item.y), item);
+    }
+
+    const places = new Map<string, AdminMapFacility>();
+    for (const item of locations) {
+      if (item.store_id) continue;
+      const key = locationKey(item.floor, item.x, item.y);
+      if (!places.has(key)) places.set(key, item);
+    }
+
+    return [...places.entries()]
+      .sort(
+        ([, a], [, b]) =>
+          a.floor - b.floor || a.name.localeCompare(b.name, 'ja', { numeric: true }),
+      )
+      .map(([key, place]) => {
+        const occupant = occupants.get(key);
+        const usedByOther = occupant && occupant.store_id !== store?.id ? occupant : null;
+        return {
+          key,
+          floor: place.floor,
+          x: place.x,
+          y: place.y,
+          label: `${place.floor}F ${place.name}${
+            usedByOther ? `（使用中: ${usedByOther.store_name ?? usedByOther.store_id}）` : ''
+          }`,
+          disabled: Boolean(usedByOther),
+        };
+      });
+  }, [locations, store?.id]);
+
+  const selectedKey = locationKey(input.floor, input.map_x, input.map_y);
+  const hasSelectedOption = locationOptions.some((option) => option.key === selectedKey);
 
   const selectLocation = (key: string) => {
-    const location = mapLocations.find((item) => item.key === key);
-    if (!location) return;
+    const option = locationOptions.find((item) => item.key === key);
+    if (!option) return;
     setInput((current) => ({
       ...current,
-      floor: location.floor,
-      map_x: location.map_x,
-      map_y: location.map_y,
+      floor: option.floor,
+      map_x: option.x,
+      map_y: option.y,
     }));
   };
 
@@ -161,6 +218,8 @@ export default function AdminStoreForm({ store, saving, onCancel, onSubmit, onHi
           <input
             value={input.login_id}
             onChange={(event) => update('login_id', event.target.value)}
+            // ブラウザが保存済みの管理者のログインIDを勝手に入れないようにする
+            autoComplete="off"
             className="w-full rounded-lg border border-input bg-background px-3 py-2.5 text-foreground outline-none"
           />
         </label>
@@ -172,6 +231,8 @@ export default function AdminStoreForm({ store, saving, onCancel, onSubmit, onHi
             type="password"
             value={input.password}
             onChange={(event) => update('password', event.target.value)}
+            // 保存済みのパスワードを自動入力させない（店舗のパスワードを上書きしてしまうため）
+            autoComplete="new-password"
             className="w-full rounded-lg border border-input bg-background px-3 py-2.5 text-foreground outline-none"
           />
         </label>
@@ -198,21 +259,32 @@ export default function AdminStoreForm({ store, saving, onCancel, onSubmit, onHi
         <label className="sm:col-span-2 text-sm">
           <span className="mb-1 block text-muted-foreground">店舗位置</span>
           <select
-            value={selectedLocation?.key ?? ''}
+            value={hasSelectedOption || store ? selectedKey : ''}
             onChange={(event) => selectLocation(event.target.value)}
             className="w-full rounded-lg border border-input bg-background px-3 py-2.5 text-foreground outline-none"
           >
-            <option value="" disabled>
-              場所を選択してください
-            </option>
-            {mapLocations.map((location) => (
-              <option key={location.key} value={location.key}>
-                {location.name}
+            {!hasSelectedOption && !store && (
+              <option value="" disabled>
+                場所を選択してください
+              </option>
+            )}
+            {!hasSelectedOption && store && (
+              <option value={selectedKey}>
+                現在の位置: {input.floor}F（X:{input.map_x}% Y:{input.map_y}%）
+              </option>
+            )}
+            {locationOptions.map((option) => (
+              <option key={option.key} value={option.key} disabled={option.disabled}>
+                {option.label}
               </option>
             ))}
           </select>
           <span className="mt-1 block text-xs text-muted-foreground">
-            選択位置: {input.floor}F / X:{input.map_x}% / Y:{input.map_y}%
+            選択位置: {input.floor}F / X:{input.map_x}% / Y:{input.map_y}%　候補にない場所は
+            <Link to="/admin/map" className="font-bold" style={{ color: 'var(--primary)' }}>
+              マップ編集
+            </Link>
+            で追加できます。
           </span>
         </label>
       </div>

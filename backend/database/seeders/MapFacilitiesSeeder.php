@@ -22,6 +22,7 @@ class MapFacilitiesSeeder extends Seeder
             ['store_id' => null, 'name' => '304-5', 'type' => 'booth', 'floor' => 3, 'x' => 80, 'y' => 78],
             ['store_id' => null, 'name' => '304-6', 'type' => 'booth', 'floor' => 3, 'x' => 50, 'y' => 36],
             ['store_id' => null, 'name' => '304-7', 'type' => 'booth', 'floor' => 3, 'x' => 68, 'y' => 36],
+            ['store_id' => null, 'name' => '304-8', 'type' => 'booth', 'floor' => 3, 'x' => 82, 'y' => 36],
             ['store_id' => null, 'name' => '401', 'type' => 'booth', 'floor' => 4, 'x' => 20, 'y' => 77],
             ['store_id' => null, 'name' => '402', 'type' => 'booth', 'floor' => 4, 'x' => 38, 'y' => 77],
             ['store_id' => null, 'name' => '403', 'type' => 'booth', 'floor' => 4, 'x' => 56, 'y' => 77],

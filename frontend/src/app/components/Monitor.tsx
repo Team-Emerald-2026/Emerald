@@ -5,18 +5,27 @@ import {
   type BackendMapFacility,
   type MonitorCallNumber,
 } from '../lib/api';
-import { mapLocations } from '../lib/mapLocations';
-
 /** 呼び出し番号の取得間隔（ミリ秒） */
 const CALL_NUMBERS_INTERVAL_MS = 5000;
 /** ブース枠と店舗の紐付け（マップ施設）の再取得間隔（ミリ秒） */
 const FACILITIES_INTERVAL_MS = 60000;
 
-/** モニターに表示する対象ブース枠（303・304 の 7 枠） */
-const TARGET_BOOTHS = mapLocations
-  .filter((location) => location.key.startsWith('3f-303-') || location.key.startsWith('3f-304-'))
-  .slice()
-  .sort((a, b) => a.name.localeCompare(b.name, 'ja'));
+/**
+ * モニターに表示する対象ブース枠（303・304 の 8 枠）。
+ * 店舗との紐付けは floor/x/y の一致で判定するため、
+ * 管理画面のマップ編集でこれらのピンを動かした場合は、ここの座標も同じ値に直すこと。
+ * （座標は MapFacilitiesSeeder と同じ。304-8 は仮の位置）
+ */
+const TARGET_BOOTHS = [
+  { key: '303-1', name: '303-1', floor: 3, map_x: 50, map_y: 62 },
+  { key: '303-2', name: '303-2', floor: 3, map_x: 66, map_y: 62 },
+  { key: '303-3', name: '303-3', floor: 3, map_x: 50, map_y: 88 },
+  { key: '303-4', name: '303-4', floor: 3, map_x: 66, map_y: 88 },
+  { key: '304-5', name: '304-5', floor: 3, map_x: 80, map_y: 78 },
+  { key: '304-6', name: '304-6', floor: 3, map_x: 50, map_y: 36 },
+  { key: '304-7', name: '304-7', floor: 3, map_x: 68, map_y: 36 },
+  { key: '304-8', name: '304-8', floor: 3, map_x: 82, map_y: 36 },
+];
 
 interface BoothSlot {
   key: string;
@@ -55,7 +64,7 @@ function useClock() {
 
 /**
  * 校内モニター（プロジェクター）向け呼び出し番号一覧。
- * 認証不要の公開ページ。303・304 教室の 7 ブースのみを表示する。
+ * 認証不要の公開ページ。303・304 教室の 8 ブースのみを表示する。
  */
 export default function Monitor() {
   const [facilities, setFacilities] = useState<BackendMapFacility[]>([]);
@@ -142,7 +151,7 @@ export default function Monitor() {
         </div>
       </header>
 
-      {/* ブース一覧（303-1〜4・304-5〜7 の 7 枠） */}
+      {/* ブース一覧（303-1〜4・304-5〜8 の 8 枠） */}
       <main className="grid flex-1 grid-cols-2 content-start gap-4 xl:grid-cols-4">
         {slots.map((slot) => (
           <BoothCard key={slot.key} slot={slot} />

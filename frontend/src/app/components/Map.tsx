@@ -11,7 +11,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { fetchMapFacilities, type BackendMapFacility } from '../lib/api';
-import { mapLocations } from '../lib/mapLocations';
+import { floors, mapImageByFloor, type MapFloor } from '../lib/campusMap';
 
 type BoothType = '体験' | 'フード' | '物販' | 'トイレ' | '案内' | '救護室' | 'サポート';
 type Floor = `${number}F`;
@@ -20,30 +20,22 @@ interface Facility {
   id: string;
   storeId: string | null;
   name: string;
+  /** 場所の名前（部屋番号など）。地図のピンにはこれを表示する。なければ name を使う */
+  label: string | null;
   type: BoothType;
   floor: Floor;
   x: number; // マップ上の相対座標（%）
   y: number;
-  displayX?: number;
-  displayY?: number;
 }
+
+/** 地図のピンに表示する文字（部屋番号などの場所の名前。なければ名前） */
+const pinText = (f: Facility) => f.label ?? f.name;
+
+/** 一覧やカードで、名前に添える部屋番号（名前と同じなら不要） */
+const roomNote = (f: Facility) => (f.label && f.label !== f.name ? f.label : null);
 
 const campusMap = {
   name: '京都TECH学園祭 校内マップ',
-};
-
-const floors = ['1F', '2F', '3F', '4F', '5F', '6F', '7F', '8F'] as const;
-type MapFloor = (typeof floors)[number];
-
-const mapImageByFloor: Record<MapFloor, string> = {
-  '1F': '/campus-map-1f.png',
-  '2F': '/campus-map-2f.png',
-  '3F': '/campus-map-3f.png',
-  '4F': '/campus-map-4f.png',
-  '5F': '/campus-map-5f.png',
-  '6F': '/campus-map-6f.png',
-  '7F': '/campus-map-7f.png',
-  '8F': '/campus-map-8f.png',
 };
 
 const typeIcon: Record<BoothType, LucideIcon> = {
@@ -98,57 +90,20 @@ function toPercent(value: number, max: number): number {
   return Math.max(0, Math.min(100, (value / max) * 100));
 }
 
-function clampPercent(value: number) {
-  return Math.max(6, Math.min(94, value));
-}
-
-/** 近いピンを少し離して、教室番号が重なって読めなくならないようにする */
-function spreadPins(items: Facility[]): Facility[] {
-  const result = items.map((item) => ({
-    ...item,
-    displayX: item.x,
-    displayY: item.y,
-  }));
-  const minDist = 16;
-
-  for (let iter = 0; iter < 10; iter += 1) {
-    for (let i = 0; i < result.length; i += 1) {
-      for (let j = i + 1; j < result.length; j += 1) {
-        const dx = (result[j].displayX ?? 0) - (result[i].displayX ?? 0);
-        const dy = (result[j].displayY ?? 0) - (result[i].displayY ?? 0);
-        const dist = Math.hypot(dx, dy) || 0.01;
-        if (dist >= minDist) continue;
-        const push = (minDist - dist) / 2;
-        const nx = dx / dist;
-        const ny = dy / dist;
-        result[i].displayX = clampPercent((result[i].displayX ?? 0) - nx * push);
-        result[i].displayY = clampPercent((result[i].displayY ?? 0) - ny * push);
-        result[j].displayX = clampPercent((result[j].displayX ?? 0) + nx * push);
-        result[j].displayY = clampPercent((result[j].displayY ?? 0) + ny * push);
-      }
-    }
-  }
-
-  return result;
-}
-
 function toFacility(facility: BackendMapFacility): Facility {
   const floorNum = Number(facility.floor);
   const storeId = facility.store_id ?? '';
-  const placeholder = !storeId
-    ? mapLocations.find(
-        (location) => location.floor === floorNum && location.name === facility.name,
-      )
-    : undefined;
 
   return {
     id: facility.id,
     storeId,
     name: facility.name,
+    label: facility.label?.trim() || null,
     type: toBoothType(facility.type),
     floor: `${Number.isFinite(floorNum) ? floorNum : 1}F`,
-    x: placeholder ? placeholder.map_x : toPercent(Number(facility.x), 240),
-    y: placeholder ? placeholder.map_y : toPercent(Number(facility.y), 180),
+    // 位置は管理画面の「マップ編集」で保存した値をそのまま使う
+    x: toPercent(Number(facility.x), 240),
+    y: toPercent(Number(facility.y), 180),
   };
 }
 
@@ -194,25 +149,8 @@ export default function CampusMap() {
       }
     }
 
-    const merged = Object.values(unique);
-    const names = new Set(merged.map((facility) => `${facility.floor}:${facility.name}`));
-
-    for (const location of mapLocations) {
-      const floorLabel = `${location.floor}F`;
-      const nameKey = `${floorLabel}:${location.name}`;
-      if (names.has(nameKey)) continue;
-      merged.push({
-        id: location.key,
-        storeId: '',
-        name: location.name,
-        type: '体験',
-        floor: `${location.floor}F` as Floor,
-        x: location.map_x,
-        y: location.map_y,
-      });
-    }
-
-    return merged;
+    // 場所の一覧は DB が元。固定リストで補わない（管理画面で消した場所が復活しないように）
+    return Object.values(unique);
   }, [facilities]);
 
   useEffect(() => {
@@ -232,7 +170,8 @@ export default function CampusMap() {
   );
 
   const match = (f: Facility) => f.floor === floor && (type === 'すべて' || f.type === type);
-  const filtered = spreadPins(displayFacilities.filter(match));
+  // ピンは管理画面で登録した位置のまま表示する（自動で動かすと管理画面の見た目とずれるため）
+  const filtered = displayFacilities.filter(match);
   const selectedFacility =
     displayFacilities.find(
       (f) =>
@@ -286,7 +225,8 @@ export default function CampusMap() {
           <div className="min-w-0 flex-1">
             <p className="truncate font-medium text-foreground">{f.name}</p>
             <p className="text-xs text-muted-foreground">
-              {f.floor}・{f.type}
+              {f.floor}
+              {roomNote(f) ? `・${roomNote(f)}` : ''}・{f.type}
             </p>
           </div>
           <span className="shrink-0 text-xs font-bold" style={{ color: 'var(--primary)' }}>
@@ -377,7 +317,7 @@ export default function CampusMap() {
                 e.stopPropagation();
                 selectFacility(f);
               }}
-              className={`absolute -translate-x-1/2 -translate-y-1/2 whitespace-nowrap rounded-md px-1.5 py-1 text-[10px] font-bold leading-none text-white shadow-md transition ${
+              className={`absolute max-w-[20%] -translate-x-1/2 -translate-y-1/2 truncate whitespace-nowrap rounded-md px-1.5 py-1 text-[10px] font-bold leading-none text-white shadow-md transition ${
                 isSelected
                   ? 'z-20 scale-110 ring-2 ring-white'
                   : hasSelection
@@ -385,14 +325,14 @@ export default function CampusMap() {
                     : 'z-0'
               }`}
               style={{
-                left: `${f.displayX ?? f.x}%`,
-                top: `${f.displayY ?? f.y}%`,
+                left: `${f.x}%`,
+                top: `${f.y}%`,
                 backgroundColor: typeColor[f.type],
               }}
               title={f.name}
               aria-pressed={isSelected}
             >
-              {f.name}
+              {pinText(f)}
             </button>
           );
         })}
@@ -419,7 +359,8 @@ export default function CampusMap() {
                 {selectedFacility.name}
               </h2>
               <p className="mt-1 text-sm text-muted-foreground">
-                {selectedFacility.floor}・{selectedFacility.type}
+                {selectedFacility.floor}
+                {roomNote(selectedFacility) ? `・${roomNote(selectedFacility)}` : ''}・{selectedFacility.type}
               </p>
             </div>
             <button
