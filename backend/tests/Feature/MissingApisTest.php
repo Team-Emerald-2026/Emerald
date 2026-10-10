@@ -61,30 +61,69 @@ class MissingApisTest extends TestCase
         $store = $this->createStore();
         Sanctum::actingAs($this->createStoreUser($store));
 
-        $this->patchJson("/api/v1/store/{$store->id}/wait-time", [
+        $this->patchJson('/api/v1/booth/wait-time', [
             'current_wait_min' => 20,
             'current_queue_count' => 10,
             'wait_display_mode' => 'text',
             'wait_display_text' => '13時開始',
         ])
             ->assertOk()
-            ->assertJsonPath('id', $store->id)
-            ->assertJsonPath('current_wait_min', 20)
-            ->assertJsonPath('current_queue_count', 10)
-            ->assertJsonPath('wait_display_mode', 'text')
-            ->assertJsonPath('wait_display_text', '13時開始');
+            ->assertJsonPath('data.id', $store->id)
+            ->assertJsonPath('data.current_wait_min', 20)
+            ->assertJsonPath('data.current_queue_count', 10)
+            ->assertJsonPath('data.wait_display_mode', 'text')
+            ->assertJsonPath('data.wait_display_text', '13時開始');
     }
 
-    public function test_store_user_cannot_update_other_store_wait_time(): void
+    public function test_admin_cannot_update_booth_wait_time(): void
     {
-        $own = $this->createStore('store-101');
-        $other = $this->createStore('store-102', ['ticket_prefix' => 'Y', 'name' => 'やきそば']);
-        Sanctum::actingAs($this->createStoreUser($own));
+        $this->createStore();
+        Sanctum::actingAs($this->createAdmin());
 
-        $this->patchJson("/api/v1/store/{$other->id}/wait-time", [
-            'current_wait_min' => 1,
-            'current_queue_count' => 1,
-        ])->assertForbidden();
+        $this->patchJson('/api/v1/booth/wait-time', [
+            'current_wait_min' => 20,
+            'current_queue_count' => 10,
+        ])
+            ->assertForbidden()
+            ->assertJsonPath('error.code', 'FORBIDDEN');
+    }
+
+    public function test_admin_can_update_store_wait_time(): void
+    {
+        $store = $this->createStore();
+        Sanctum::actingAs($this->createAdmin());
+
+        $this->patchJson("/api/v1/admin/stores/{$store->id}/wait-time", [
+            'current_wait_min' => 25,
+            'current_queue_count' => 12,
+            'wait_display_mode' => 'text',
+            'wait_display_text' => '整理券配布中',
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.id', $store->id)
+            ->assertJsonPath('data.current_wait_min', 25)
+            ->assertJsonPath('data.current_queue_count', 12)
+            ->assertJsonPath('data.wait_display_mode', 'text')
+            ->assertJsonPath('data.wait_display_text', '整理券配布中');
+
+        $this->assertDatabaseHas('stores', [
+            'id' => $store->id,
+            'current_wait_min' => 25,
+            'current_queue_count' => 12,
+        ]);
+    }
+
+    public function test_store_user_cannot_update_admin_store_wait_time(): void
+    {
+        $store = $this->createStore();
+        Sanctum::actingAs($this->createStoreUser($store));
+
+        $this->patchJson("/api/v1/admin/stores/{$store->id}/wait-time", [
+            'current_wait_min' => 25,
+            'current_queue_count' => 12,
+        ])
+            ->assertForbidden()
+            ->assertJsonPath('error.code', 'FORBIDDEN');
     }
 
     public function test_restaurant_detail_includes_menu_and_ticket_numbers(): void

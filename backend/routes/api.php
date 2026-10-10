@@ -10,7 +10,7 @@ use App\Http\Controllers\Api\V1\Event\EventController;
 use App\Http\Controllers\Api\V1\Map\FacilityController;
 use App\Http\Controllers\Api\V1\Monitor\MonitorCallNumberController;
 use App\Http\Controllers\Api\V1\Store\StoreController;
-use App\Http\Controllers\Api\V1\Store\WaitTimeController;
+use App\Http\Controllers\Api\V1\Booth\WaitTimeController;
 
 use App\Http\Controllers\Api\V1\Booth\Accounting\AccountingController;
 use App\Http\Controllers\Api\V1\Booth\Dashboard\DashboardController;
@@ -41,7 +41,6 @@ Route::prefix('v1')->group(function () {
 
     Route::middleware('auth:sanctum')->group(function () {
         Route::post('auth/logout', [AuthController::class, 'logout']);
-        Route::patch('store/{id}/wait-time', [WaitTimeController::class, 'update']);
     });
 });
 
@@ -67,6 +66,7 @@ Route::prefix('v1/booth')->group(function () {
         Route::post('sales', [SalesController::class, 'store']);
         Route::patch('sales/{id}', [SalesController::class, 'update'])->whereNumber('id');
         Route::delete('sales/{id}', [SalesController::class, 'destroy'])->whereNumber('id');
+        Route::patch('wait-time', [WaitTimeController::class, 'update']);
     });
 });
 
@@ -79,6 +79,8 @@ Route::prefix('v1/admin')->group(function () {
     Route::post('stores', [AdminStoreController::class, 'store']);
     Route::get('stores/{id}', [AdminStoreController::class, 'show']);
     Route::patch('stores/{id}', [AdminStoreController::class, 'update']);
+    Route::patch('stores/{id}/wait-time', [AdminStoreController::class, 'updateWaitTime'])
+        ->middleware('auth:sanctum');
     Route::delete('stores/{id}', [AdminStoreController::class, 'destroy']);
     Route::delete('stores/{id}/permanent', [AdminStoreController::class, 'forceDestroy']);
     Route::get('events', [AdminEventController::class, 'index']);
