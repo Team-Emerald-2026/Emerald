@@ -28,9 +28,11 @@ class AdminMapFacilityController extends Controller
             ->get()
             ->keyBy('id');
 
+        $slotLabels = MapFacilities::slotLabels();
+
         return response()->json([
             'data' => $facilities
-                ->map(fn (MapFacilities $facility) => $this->serialize($facility, $stores->get($facility->store_id)))
+                ->map(fn (MapFacilities $facility) => $this->serialize($facility, $stores->get($facility->store_id), $slotLabels))
                 ->values(),
         ], 200, [], JSON_UNESCAPED_UNICODE);
     }
@@ -106,14 +108,23 @@ class AdminMapFacilityController extends Controller
         return response()->noContent();
     }
 
-    private function serialize(MapFacilities $facility, ?Store $store = null): array
+    /**
+     * @param  array<string, string>|null  $slotLabels  位置→空き枠の名前（省略時は都度DBから引く）
+     */
+    private function serialize(MapFacilities $facility, ?Store $store = null, ?array $slotLabels = null): array
     {
+        $slotLabels ??= MapFacilities::slotLabels();
+
         return [
             'id' => (string) $facility->id,
             'store_id' => $facility->store_id,
             'store_name' => $store?->name,
             'store_visible' => $store ? (bool) ($store->is_visible ?? true) : null,
             'name' => $facility->name,
+            // 場所の名前（部屋番号など）。店舗が入った枠は、同じ位置の空き枠の名前。なければ null
+            'label' => $facility->store_id === null
+                ? $facility->name
+                : ($slotLabels[MapFacilities::positionKey($facility->floor, $facility->x, $facility->y)] ?? null),
             'type' => $facility->type,
             'floor' => (int) $facility->floor,
             'x' => (int) $facility->x,

@@ -20,11 +20,19 @@ interface Facility {
   id: string;
   storeId: string | null;
   name: string;
+  /** 場所の名前（部屋番号など）。地図のピンにはこれを表示する。なければ name を使う */
+  label: string | null;
   type: BoothType;
   floor: Floor;
   x: number; // マップ上の相対座標（%）
   y: number;
 }
+
+/** 地図のピンに表示する文字（部屋番号などの場所の名前。なければ名前） */
+const pinText = (f: Facility) => f.label ?? f.name;
+
+/** 一覧やカードで、名前に添える部屋番号（名前と同じなら不要） */
+const roomNote = (f: Facility) => (f.label && f.label !== f.name ? f.label : null);
 
 const campusMap = {
   name: '京都TECH学園祭 校内マップ',
@@ -90,6 +98,7 @@ function toFacility(facility: BackendMapFacility): Facility {
     id: facility.id,
     storeId,
     name: facility.name,
+    label: facility.label?.trim() || null,
     type: toBoothType(facility.type),
     floor: `${Number.isFinite(floorNum) ? floorNum : 1}F`,
     // 位置は管理画面の「マップ編集」で保存した値をそのまま使う
@@ -216,7 +225,8 @@ export default function CampusMap() {
           <div className="min-w-0 flex-1">
             <p className="truncate font-medium text-foreground">{f.name}</p>
             <p className="text-xs text-muted-foreground">
-              {f.floor}・{f.type}
+              {f.floor}
+              {roomNote(f) ? `・${roomNote(f)}` : ''}・{f.type}
             </p>
           </div>
           <span className="shrink-0 text-xs font-bold" style={{ color: 'var(--primary)' }}>
@@ -307,7 +317,7 @@ export default function CampusMap() {
                 e.stopPropagation();
                 selectFacility(f);
               }}
-              className={`absolute -translate-x-1/2 -translate-y-1/2 whitespace-nowrap rounded-md px-1.5 py-1 text-[10px] font-bold leading-none text-white shadow-md transition ${
+              className={`absolute max-w-[20%] -translate-x-1/2 -translate-y-1/2 truncate whitespace-nowrap rounded-md px-1.5 py-1 text-[10px] font-bold leading-none text-white shadow-md transition ${
                 isSelected
                   ? 'z-20 scale-110 ring-2 ring-white'
                   : hasSelection
@@ -322,7 +332,7 @@ export default function CampusMap() {
               title={f.name}
               aria-pressed={isSelected}
             >
-              {f.name}
+              {pinText(f)}
             </button>
           );
         })}
@@ -349,7 +359,8 @@ export default function CampusMap() {
                 {selectedFacility.name}
               </h2>
               <p className="mt-1 text-sm text-muted-foreground">
-                {selectedFacility.floor}・{selectedFacility.type}
+                {selectedFacility.floor}
+                {roomNote(selectedFacility) ? `・${roomNote(selectedFacility)}` : ''}・{selectedFacility.type}
               </p>
             </div>
             <button
