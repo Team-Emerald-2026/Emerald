@@ -62,6 +62,7 @@ Route::prefix('v1/booth')->group(function () {
         Route::patch('accounting/orders/{id}/settle', [AccountingController::class, 'settle'])->whereNumber('id');
         Route::patch('accounting/orders/{id}/call', [AccountingController::class, 'call'])->whereNumber('id');
         Route::patch('accounting/orders/{id}/serve', [AccountingController::class, 'serve'])->whereNumber('id');
+        Route::patch('accounting/orders/{id}/unserve', [AccountingController::class, 'unserve'])->whereNumber('id');
         Route::patch('dashboard/{id}', [DashboardController::class, 'update']);
         Route::get('sales', [SalesController::class, 'index']);
         Route::post('sales', [SalesController::class, 'store']);

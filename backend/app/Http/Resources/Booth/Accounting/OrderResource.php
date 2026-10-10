@@ -23,6 +23,7 @@ class OrderResource extends JsonResource
                     return [
                         'id' => $item->id,
                         'menu_item_id' => $item->menu_item_id,
+                        'name' => $item->relationLoaded('menuItem') ? $item->menuItem?->name : null,
                         'quantity' => $item->quantity,
                         'unit_price' => $item->unit_price,
                         'subtotal' => $item->subtotal,

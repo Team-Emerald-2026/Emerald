@@ -15,8 +15,12 @@ class StoreResource extends JsonResource
             'description' => $this->description,
             'is_open' => (bool) $this->is_open,
             'is_visible' => (bool) ($this->is_visible ?? true),
+            // 1人当たりの待ち時間（分）
             'current_wait_min' => (int) $this->current_wait_min,
             'current_queue_count' => (int) $this->current_queue_count,
+            // 合計の待ち時間の目安（分） = 待ち人数 × 1人当たりの分数。
+            // 文字表示モード（wait_display_mode = 'text'）のときは、画面側で wait_display_text を優先して表示する。
+            'estimated_wait_min' => (int) $this->current_queue_count * (int) $this->current_wait_min,
             'wait_time' => (int) $this->current_wait_min,
             'wait_display_mode' => $this->wait_display_mode ?? 'minutes',
             'wait_display_text' => $this->wait_display_text,
