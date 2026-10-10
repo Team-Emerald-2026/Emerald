@@ -15,7 +15,7 @@ export default function StoreWaiting() {
 
   const syncVisitorWait = (nextCount: number) => {
     if (!session) return;
-    void updateWaitTime(session.token, session.storeId, {
+    void updateWaitTime(session.token, {
       current_wait_min: nextCount * waitMinPerPerson,
       current_queue_count: nextCount,
     }).catch((error) => {

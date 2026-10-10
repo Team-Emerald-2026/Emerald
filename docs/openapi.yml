@@ -130,16 +130,14 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
 
-  /store/{id}/wait-time:
+  /booth/wait-time:
     patch:
       tags: [store]
       summary: 待ち時間更新
-      description: 店舗側が待ち時間や待ち人数を更新する。時間開始型ブースは wait_display_mode=text を利用できる。
+      description: ログイン中の店舗が待ち時間や待ち人数を更新する。時間開始型ブースは wait_display_mode=text を利用できる。
       operationId: updateWaitTime
       security:
         - BearerAuth: []
-      parameters:
-        - $ref: "#/components/parameters/StoreId"
       requestBody:
         required: true
         content:
@@ -258,6 +256,35 @@ paths:
       responses:
         "200":
           description: 成功
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /admin/stores/{id}/wait-time:
+    patch:
+      tags: [store]
+      summary: 管理者向け待ち時間更新
+      operationId: updateAdminStoreWaitTime
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/StoreId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WaitTimeUpdateRequest"
+      responses:
+        "200":
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WaitTimeUpdateResponse"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
