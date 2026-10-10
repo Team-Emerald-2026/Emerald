@@ -115,7 +115,7 @@ export default function StoreProfile() {
       });
       setWaitMinPerPerson(waitMin);
       if (session.storeId) {
-        await updateWaitTime(session.token, session.storeId, {
+        await updateWaitTime(session.token, {
           current_wait_min: waitingPeople * waitMin,
           current_queue_count: waitingPeople,
         });
