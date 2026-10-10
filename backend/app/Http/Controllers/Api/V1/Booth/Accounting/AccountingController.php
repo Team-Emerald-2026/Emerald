@@ -100,16 +100,7 @@ class AccountingController extends Controller
 
         $orders = Order::query()
             ->forStore($storeId)
-            ->with(['items' => function ($query) {
-                $query->select([
-                    'id',
-                    'order_id',
-                    'menu_item_id',
-                    'quantity',
-                    'unit_price',
-                    'subtotal',
-                ]);
-            }])
+            ->with(['items' => $this->itemsWithNames()])
             ->when(isset($validated['status']), function ($query) use ($validated) {
                 $query->where('status', $validated['status']);
             })
@@ -127,16 +118,7 @@ class AccountingController extends Controller
 
         $order = Order::query()
             ->forStore($storeId)
-            ->with(['items' => function ($query) {
-                $query->select([
-                    'id',
-                    'order_id',
-                    'menu_item_id',
-                    'quantity',
-                    'unit_price',
-                    'subtotal',
-                ]);
-            }])
+            ->with(['items' => $this->itemsWithNames()])
             ->find($id);
 
         if (!$order) {
@@ -160,16 +142,7 @@ class AccountingController extends Controller
 
         $order = Order::query()
             ->forStore($storeId)
-            ->with(['items' => function ($query) {
-                $query->select([
-                    'id',
-                    'order_id',
-                    'menu_item_id',
-                    'quantity',
-                    'unit_price',
-                    'subtotal',
-                ]);
-            }])
+            ->with(['items' => $this->itemsWithNames()])
             ->where('ticket_number', strtoupper($ticketNumber))
             ->first();
 
@@ -202,7 +175,10 @@ class AccountingController extends Controller
                 }),
             ],
             'items.*.quantity' => ['required', 'integer', 'min:1'],
+            // true の場合、注文の作成と同じ処理の中で精算済みにする（レジで会計と同時に番号を出す用）
+            'settle' => ['sometimes', 'boolean'],
         ]);
+        $settleNow = (bool) ($validated['settle'] ?? false);
 
         $requestedItems = collect($validated['items'])
             ->groupBy('menu_item_id')
@@ -226,7 +202,7 @@ class AccountingController extends Controller
             ->get()
             ->keyBy('id');
 
-        $result = DB::transaction(function () use ($requestedItems, $storeId, $menuItems) {
+        $result = DB::transaction(function () use ($requestedItems, $storeId, $menuItems, $settleNow) {
             $ticketNumber = $this->generateNextTicketNumber($storeId);
             $totalPrice = 0;
 
@@ -248,8 +224,9 @@ class AccountingController extends Controller
                 'store_id' => $storeId,
                 'ticket_number' => $ticketNumber,
                 'total_price' => $totalPrice,
-                'status' => 'issued',
+                'status' => $settleNow ? 'settled' : 'issued',
                 'ordered_at' => now(),
+                'settled_at' => $settleNow ? now() : null,
             ]);
 
             foreach ($normalizedItems as $normalizedItem) {
@@ -258,16 +235,7 @@ class AccountingController extends Controller
 
             Store::query()->whereKey($storeId)->increment('current_queue_count');
 
-            return $order->load(['items' => function ($query) {
-                $query->select([
-                    'id',
-                    'order_id',
-                    'menu_item_id',
-                    'quantity',
-                    'unit_price',
-                    'subtotal',
-                ]);
-            }]);
+            return $order->load(['items' => $this->itemsWithNames()]);
         });
 
         return OrderResource::make($result)
@@ -374,21 +342,62 @@ class AccountingController extends Controller
             ->setEncodingOptions(JSON_UNESCAPED_UNICODE);
     }
 
+    /**
+     * 提供済みを取り消して、提供待ちに戻す（誤操作の取り消し用）。
+     * 呼び出し済みの状態も戻し、待ち人数を1人分戻す。
+     */
+    public function unserve(int $id)
+    {
+        $order = $this->findStoreOrder($id);
+
+        if (! $order) {
+            return $this->orderNotFound();
+        }
+
+        if ($order->served_at === null || $order->status === 'canceled') {
+            return response()->json([
+                'error' => [
+                    'code' => 'CONFLICT',
+                    'message' => 'この会計は提供済みではないため、戻せません',
+                    'details' => ['status' => $order->status],
+                ],
+            ], 409, [], JSON_UNESCAPED_UNICODE);
+        }
+
+        DB::transaction(function () use ($order) {
+            $order->served_at = null;
+            $order->called_at = null;
+            $order->save();
+
+            Store::query()
+                ->whereKey($this->currentStoreId())
+                ->increment('current_queue_count');
+        });
+
+        return OrderResource::make($order)
+            ->response()
+            ->setEncodingOptions(JSON_UNESCAPED_UNICODE);
+    }
+
     private function findStoreOrder(int $id): ?Order
     {
         return Order::query()
             ->forStore($this->currentStoreId())
-            ->with(['items' => function ($query) {
-                $query->select([
-                    'id',
-                    'order_id',
-                    'menu_item_id',
-                    'quantity',
-                    'unit_price',
-                    'subtotal',
-                ]);
-            }])
+            ->with(['items' => $this->itemsWithNames()])
             ->find($id);
+    }
+
+    /**
+     * 注文の明細を、商品名つきで読み込むための条件。
+     * 販売停止にしたメニューは削除されず非表示になるだけなので、過去の注文でも商品名を引ける。
+     */
+    private function itemsWithNames(): \Closure
+    {
+        return function ($query) {
+            $query
+                ->select(['id', 'order_id', 'menu_item_id', 'quantity', 'unit_price', 'subtotal'])
+                ->with('menuItem:id,name');
+        };
     }
 
     private function orderNotFound()
