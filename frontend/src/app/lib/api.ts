@@ -109,6 +109,8 @@ export interface BackendMapFacility {
   id: string;
   store_id: string | null;
   name: string;
+  /** 場所の名前（部屋番号など）。店舗が入った枠でも、同じ位置の空き枠の名前が入る。なければ null */
+  label?: string | null;
   type: string;
   floor: number;
   x: number;
@@ -394,6 +396,8 @@ export interface AdminMapFacility {
   /** 紐づいている店舗が来場者画面に表示中か（空き枠なら null） */
   store_visible: boolean | null;
   name: string;
+  /** 場所の名前（部屋番号など）。店舗が入った枠は同じ位置の空き枠の名前。なければ null */
+  label: string | null;
   type: string;
   floor: number;
   x: number;

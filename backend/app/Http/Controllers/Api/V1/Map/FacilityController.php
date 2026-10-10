@@ -12,6 +12,9 @@ class FacilityController extends Controller
 {
     public function index(): JsonResponse
     {
+        // 場所の名前（部屋番号など）。店舗が入った枠でも、同じ位置にある空き枠の名前を引けるようにする
+        $slotLabels = MapFacilities::slotLabels();
+
         $facilities = MapFacilities::query()
             ->leftJoin('stores', 'map_facilities.store_id', '=', 'stores.id')
             ->when(Schema::hasColumn('stores', 'is_visible'), function ($query) {
@@ -35,7 +38,15 @@ class FacilityController extends Controller
             ->unique(function ($facility) {
                 return $facility->floor . ':' . (int) $facility->x . ':' . (int) $facility->y;
             })
-            ->values();
+            ->values()
+            ->each(function ($facility) use ($slotLabels) {
+                $facility->setAttribute(
+                    'label',
+                    $facility->store_id === null
+                        ? $facility->name
+                        : ($slotLabels[MapFacilities::positionKey($facility->floor, $facility->x, $facility->y)] ?? null),
+                );
+            });
 
         return MapFacilityResource::collection($facilities)
             ->response()

@@ -218,6 +218,8 @@ export default function AdminStoreForm({
           <input
             value={input.login_id}
             onChange={(event) => update('login_id', event.target.value)}
+            // ブラウザが保存済みの管理者のログインIDを勝手に入れないようにする
+            autoComplete="off"
             className="w-full rounded-lg border border-input bg-background px-3 py-2.5 text-foreground outline-none"
           />
         </label>
@@ -229,6 +231,8 @@ export default function AdminStoreForm({
             type="password"
             value={input.password}
             onChange={(event) => update('password', event.target.value)}
+            // 保存済みのパスワードを自動入力させない（店舗のパスワードを上書きしてしまうため）
+            autoComplete="new-password"
             className="w-full rounded-lg border border-input bg-background px-3 py-2.5 text-foreground outline-none"
           />
         </label>

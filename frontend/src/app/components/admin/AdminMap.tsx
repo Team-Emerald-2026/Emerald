@@ -371,7 +371,7 @@ export default function AdminMap() {
               }}
               onClick={(event) => event.stopPropagation()}
               title={linked ? `${item.store_name}（店舗）` : item.name}
-              className={`absolute -translate-x-1/2 -translate-y-1/2 cursor-grab whitespace-nowrap rounded-md px-1.5 py-1 text-[10px] font-bold leading-none text-white shadow-md active:cursor-grabbing ${
+              className={`absolute max-w-[20%] -translate-x-1/2 -translate-y-1/2 cursor-grab truncate whitespace-nowrap rounded-md px-1.5 py-1 text-[10px] font-bold leading-none text-white shadow-md active:cursor-grabbing ${
                 isSelected ? 'z-30 scale-110 ring-2 ring-white' : linked ? 'z-10' : covered ? 'z-0 opacity-40' : 'z-0'
               } ${linked && item.store_visible === false ? 'opacity-50' : ''}`}
               style={{
@@ -382,7 +382,8 @@ export default function AdminMap() {
                 outline: linked ? '2px solid rgba(0,0,0,0.55)' : undefined,
               }}
             >
-              {linked ? (item.store_name ?? item.name) : item.name}
+              {/* 来場者マップと同じ表示ルール: 場所の名前（部屋番号など）を優先する */}
+              {item.label ?? (linked ? (item.store_name ?? item.name) : item.name)}
             </button>
           );
         })}
@@ -595,6 +596,7 @@ export default function AdminMap() {
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-sm font-medium text-foreground">{item.name}</span>
                     <span className="block text-xs text-muted-foreground">
+                      {item.label && item.label !== item.name ? `${item.label} / ` : ''}
                       {facilityTypeInfo(item.type).label} / X:{item.x}% Y:{item.y}%
                     </span>
                   </span>
