@@ -1,9 +1,14 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Minus, Plus, Receipt } from 'lucide-react';
 import StoreShell from './StoreShell';
-import { issueOrder, adjustWaiting, useFestival } from '../../lib/festivalStore';
-import { fetchBoothMenuItems } from '../../lib/api';
+import { logoutStore, useFestival } from '../../lib/festivalStore';
+import {
+  ApiError,
+  createBoothOrder,
+  describeOrderError,
+  fetchBoothMenuItems,
+} from '../../lib/api';
 
 interface Product {
   id: string;
@@ -20,8 +25,36 @@ export default function StorePos() {
   const [loadError, setLoadError] = useState('');
   const [cart, setCart] = useState<Record<string, number>>({});
   const [issued, setIssued] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState('');
+  // 連打しても二重に送らないための目印（state は次の描画まで変わらないため ref も使う）
+  const submittingRef = useRef(false);
 
   // ログイン中の店舗が「店舗情報」で登録したメニューを読み込む
+  const loadProducts = useCallback(
+    (token: string, signal?: AbortSignal) => {
+      setLoading(true);
+      setLoadError('');
+      return fetchBoothMenuItems(token, signal)
+        .then((items) => {
+          setProducts(
+            items
+              .filter((item) => item.is_available !== false)
+              .map((item) => ({ id: String(item.id), name: item.name, price: Number(item.price) })),
+          );
+          setCart({});
+        })
+        .catch((err: unknown) => {
+          if (signal?.aborted) return;
+          setLoadError(err instanceof Error ? err.message : 'メニューを取得できませんでした。');
+        })
+        .finally(() => {
+          if (!signal?.aborted) setLoading(false);
+        });
+    },
+    [],
+  );
+
   useEffect(() => {
     if (!session?.token) {
       setLoading(false);
@@ -29,27 +62,9 @@ export default function StorePos() {
     }
 
     const controller = new AbortController();
-    setLoading(true);
-    setLoadError('');
-    fetchBoothMenuItems(session.token, controller.signal)
-      .then((items) => {
-        setProducts(
-          items
-            .filter((item) => item.is_available !== false)
-            .map((item) => ({ id: String(item.id), name: item.name, price: Number(item.price) })),
-        );
-        setCart({});
-      })
-      .catch((err: unknown) => {
-        if (controller.signal.aborted) return;
-        setLoadError(err instanceof Error ? err.message : 'メニューを取得できませんでした。');
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setLoading(false);
-      });
-
+    void loadProducts(session.token, controller.signal);
     return () => controller.abort();
-  }, [session?.token]);
+  }, [session?.token, loadProducts]);
 
   const setQty = (id: string, qty: number) =>
     setCart((c) => {
@@ -66,17 +81,51 @@ export default function StorePos() {
   });
   const total = lineItems.reduce((sum, item) => sum + item.subtotal, 0);
 
-  const checkout = () => {
-    if (lineItems.length === 0) return;
-    const items = lineItems.map((item) => ({
-      name: item.name,
-      qty: item.qty,
-      store: 'レジ会計',
-    }));
-    const number = issueOrder(items, total);
-    adjustWaiting(1);
-    setIssued(number);
-    setCart({});
+  // 会計と同時に、サーバーへ注文を登録（精算も同じ処理で行う）。成功してはじめて受付番号を出す。
+  const checkout = async () => {
+    if (!session?.token || lineItems.length === 0) return;
+    if (submittingRef.current) return;
+
+    submittingRef.current = true;
+    setSubmitting(true);
+    setSubmitError('');
+    setIssued(null);
+
+    try {
+      const order = await createBoothOrder(session.token, {
+        items: lineItems.map((item) => ({
+          menu_item_id: Number(item.id),
+          quantity: item.qty,
+        })),
+        settle: true,
+      });
+      setIssued(order.ticket_number);
+      setCart({});
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) {
+        logoutStore();
+        return;
+      }
+      if (err instanceof ApiError && err.status === 422) {
+        // 販売停止や削除でメニューが変わっていた場合は、読み込み直して選び直してもらう
+        await loadProducts(session.token);
+        setSubmitError(
+          'メニューの内容が変わっていたため、カートを空にしました。もう一度選んでください。',
+        );
+        return;
+      }
+      if (err instanceof ApiError) {
+        setSubmitError(describeOrderError(err, '会計を登録できませんでした。もう一度お試しください。'));
+      } else {
+        // 通信が途中で切れた場合は、サーバー側で登録済みの可能性がある（二重登録を避けたい）
+        setSubmitError(
+          '通信に失敗しました。注文が登録されたかもしれません。「受付番号の呼び出し」で確認してから、必要ならもう一度会計してください。',
+        );
+      }
+    } finally {
+      submittingRef.current = false;
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -90,6 +139,14 @@ export default function StorePos() {
             <p className="text-sm">受付番号を発行しました</p>
             <p className="font-display text-4xl font-bold">{issued}</p>
           </div>
+        )}
+        {submitError && (
+          <p
+            role="alert"
+            className="rounded-2xl border border-border bg-card p-4 text-sm text-red-500"
+          >
+            {submitError}
+          </p>
         )}
 
         <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start">
@@ -179,13 +236,13 @@ export default function StorePos() {
             </div>
             <button
               type="button"
-              onClick={checkout}
-              disabled={lineItems.length === 0}
+              onClick={() => void checkout()}
+              disabled={lineItems.length === 0 || submitting}
               className="mt-3 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl py-3 font-bold text-white disabled:opacity-40"
               style={{ backgroundColor: 'var(--primary)' }}
             >
               <Receipt className="h-5 w-5" />
-              会計して受付番号を発行
+              {submitting ? '送信中...' : '会計して受付番号を発行'}
             </button>
           </aside>
         </div>

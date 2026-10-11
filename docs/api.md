@@ -44,6 +44,7 @@
 | /booth/accounting/orders/{id}/settle | PATCH | Bearer Token | 会計清算 |
 | /booth/accounting/orders/{id}/call | PATCH | Bearer Token | 会計を呼び出し中にする |
 | /booth/accounting/orders/{id}/serve | PATCH | Bearer Token | 会計を提供完了にする |
+| /booth/accounting/orders/{id}/unserve | PATCH | Bearer Token | 提供完了を取り消して、提供待ちに戻す |
 | /booth/sales | GET | Bearer Token | 当日売上記録一覧 |
 | /booth/sales | POST | Bearer Token | 当日売上入力 |
 | /booth/sales/{id} | PATCH | Bearer Token | 当日売上記録の編集 |
@@ -154,6 +155,7 @@ GET /api/v1/restaurants/{id}
 	"wait_time": 10,
 	"current_wait_min": 10,
 	"current_queue_count": 5,
+	"estimated_wait_min": 50,
 	"wait_display_mode": "minutes",
 	"wait_display_text": null,
 	"map_facility_id": "1",
@@ -169,6 +171,12 @@ GET /api/v1/restaurants/{id}
 	"ticket_numbers": ["C-120"]
 }
 ```
+
+#### 待ち時間・待ち人数の項目
+- `current_queue_count`: 待ち人数（提供待ち + 呼び出し中の注文数。レジの会計で +1、提供完了で -1 される）。来場者画面はこの値を「待ち○人」と表示する
+- `current_wait_min`: **1人当たり**の待ち時間（分）
+- `estimated_wait_min`: 合計の待ち時間の目安（分）。`current_queue_count × current_wait_min`。現在の画面では使っていない
+- `wait_display_mode` が `text` のときは、`wait_display_text` を優先して表示する
 
 #### エラー例
 - 404 Not Found: 指定した飲食店IDが存在しない場合
@@ -231,12 +239,25 @@ PATCH /api/v1/booth/wait-time
 #### 説明
 店舗側がログイン中の自店舗について、待ち時間や待ち人数を更新する。
 対象店舗は認証トークンに紐づく `store_id` から決定されるため、URLに店舗IDを指定しない。
+送った項目だけが更新される（すべて任意）。
+
+- `current_wait_min`: 1人当たりの待ち時間（分。0〜180）
+- `current_queue_count`: 待ち人数を、この値にそろえる（0〜999）
+- `current_queue_delta`: 待ち人数を、いまの値から増減する（例: `1` / `-1`）。サーバーが最新の値に足し引きするため、レジの会計・提供と同時に操作しても数え違いが起きない。0未満・999超にはならない。`current_queue_count` とは同時に送れない（422）
 
 #### リクエストボディ
 ```json
 {
 	"current_wait_min": 20,
 	"current_queue_count": 10
+}
+```
+
+待ち人数を1人増やす場合:
+
+```json
+{
+	"current_queue_delta": 1
 }
 ```
 
@@ -376,11 +397,15 @@ POST /api/v1/booth/accounting/orders
 {
   "items": [
     { "menu_item_id": 1, "quantity": 2 }
-  ]
+  ],
+  "settle": true
 }
 ```
 
-会計を作成し、店舗ごとの `ticket_prefix` を使って `C-101` のような電子呼び出し番号を発行する。
+会計を作成し、店舗ごとの `ticket_prefix` を使って `C-101` のような電子呼び出し番号を発行する。待ち人数が +1 される。
+
+- `settle`（任意）: `true` にすると、注文の作成と同じ処理の中で精算済みにする（レジで会計と同時に番号を出す用）。途中で失敗した場合は、注文も売上も残らない。省略時は未精算（`issued`）
+- レスポンスの `items[]` には、商品名 `name` が含まれる（販売停止にしたメニューも、過去の注文では名前を取得できる）
 
 #### 会計清算
 ```javascript
@@ -402,6 +427,13 @@ PATCH /api/v1/booth/accounting/orders/{id}/serve
 ```
 
 提供完了として記録し、待ち人数を 1 減らす。
+
+#### 提供完了の取り消し（未提供に戻す）
+```javascript
+PATCH /api/v1/booth/accounting/orders/{id}/unserve
+```
+
+提供完了を取り消して、提供待ちに戻す（`called_at` と `served_at` を空にする）。待ち人数を 1 増やす。精算の状態や売上は変わらない。提供済みでない会計に使うと 409 を返す。
 
 ### 4.8 当日売上入力
 

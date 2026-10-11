@@ -34,7 +34,8 @@ class DashboardController extends Controller
         $rules = [
             'name' => ['required', 'string', 'max:255'],
             'description' => ['required', 'string', 'max:1000'],
-            'current_wait_min' => ['required', 'integer', 'min:0', 'max:180'],
+            // 1人当たりの待ち時間（分）。来場者画面は待ち人数の表示になったため、送らなくてもよい
+            'current_wait_min' => ['sometimes', 'integer', 'min:0', 'max:180'],
             'is_open' => ['required', 'boolean'],
             'type' => ['sometimes', 'string', 'in:booth,food,stage'],
         ];

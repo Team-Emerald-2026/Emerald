@@ -642,11 +642,17 @@ export function deleteBoothSale(token: string, id: string, signal?: AbortSignal)
   });
 }
 
+/**
+ * 待ち時間・待ち人数の更新。送った項目だけが更新される。
+ * - current_queue_delta: 待ち人数を +1 / -1 のように増減する（注文の登録・提供と同時でも数え違いが起きない）
+ * - current_queue_count: 待ち人数をその値にそろえる（current_queue_delta とは同時に送れない）
+ */
 export function updateWaitTime(
   token: string,
   input: {
-    current_wait_min: number;
-    current_queue_count: number;
+    current_wait_min?: number;
+    current_queue_count?: number;
+    current_queue_delta?: number;
     wait_display_mode?: 'minutes' | 'text';
     wait_display_text?: string | null;
   },
@@ -675,20 +681,127 @@ export function updateWaitTime(
   });
 }
 
-export function callBoothOrder(token: string, orderId: number, signal?: AbortSignal) {
-  return request(`/v1/booth/accounting/orders/${orderId}/call`, {
-    method: 'PATCH',
-    token,
-    signal,
-  });
+// ---------------------------------------------------------------------------
+// 注文（レジ・呼び出し・提供）
+// ---------------------------------------------------------------------------
+
+export interface BoothOrderItem {
+  id: string;
+  menu_item_id: number;
+  /** 商品名。販売停止にしたメニューでも取得できる */
+  name: string | null;
+  quantity: number;
+  unit_price: number;
+  subtotal: number;
 }
 
-export function serveBoothOrder(token: string, orderId: number, signal?: AbortSignal) {
-  return request(`/v1/booth/accounting/orders/${orderId}/serve`, {
+export type BoothOrderStatus = 'issued' | 'settled' | 'canceled';
+
+export interface BoothOrder {
+  /** 注文のID。API のパスに使う値（表示用の番号は ticket_number） */
+  id: string;
+  /** 表示用の番号（例: C-101） */
+  ticket_number: string;
+  total_price: number;
+  status: BoothOrderStatus;
+  ordered_at: string | null;
+  called_at: string | null;
+  served_at: string | null;
+  settled_at: string | null;
+  items: BoothOrderItem[];
+}
+
+/** 画面上の進み具合。提供済み → 呼び出し済み → 提供待ち の順で判定する */
+export type BoothOrderStage = 'waiting' | 'called' | 'served' | 'canceled';
+
+export function getBoothOrderStage(order: BoothOrder): BoothOrderStage {
+  if (order.status === 'canceled') return 'canceled';
+  if (order.served_at) return 'served';
+  if (order.called_at) return 'called';
+  return 'waiting';
+}
+
+export interface BoothOrderInput {
+  items: { menu_item_id: number; quantity: number }[];
+  /** true にすると、注文の作成と同じ処理の中で精算まで行う（レジの会計と同時） */
+  settle?: boolean;
+}
+
+function toBoothOrder(payload: unknown, errorMessage: string): BoothOrder {
+  const order = normalizeItem<BoothOrder>(payload);
+  if (!order || !order.id) {
+    throw new Error(errorMessage);
+  }
+  return { ...order, items: Array.isArray(order.items) ? order.items : [] };
+}
+
+export function fetchBoothOrders(
+  token: string,
+  signal?: AbortSignal,
+  status?: BoothOrderStatus,
+) {
+  const query = status ? `?status=${encodeURIComponent(status)}` : '';
+  return request(`/v1/booth/accounting/orders${query}`, { signal, token }).then((payload) =>
+    normalizeCollection<BoothOrder>(payload).map((order) => ({
+      ...order,
+      items: Array.isArray(order.items) ? order.items : [],
+    })),
+  );
+}
+
+export function createBoothOrder(token: string, input: BoothOrderInput, signal?: AbortSignal) {
+  return request('/v1/booth/accounting/orders', {
+    method: 'POST',
+    token,
+    body: input,
+    signal,
+  }).then((payload) => toBoothOrder(payload, '注文を登録できませんでした。'));
+}
+
+export function callBoothOrder(token: string, orderId: number | string, signal?: AbortSignal) {
+  return request(`/v1/booth/accounting/orders/${encodeURIComponent(String(orderId))}/call`, {
     method: 'PATCH',
     token,
     signal,
-  });
+  }).then((payload) => toBoothOrder(payload, '呼び出しに失敗しました。'));
+}
+
+export function serveBoothOrder(token: string, orderId: number | string, signal?: AbortSignal) {
+  return request(`/v1/booth/accounting/orders/${encodeURIComponent(String(orderId))}/serve`, {
+    method: 'PATCH',
+    token,
+    signal,
+  }).then((payload) => toBoothOrder(payload, '提供済みにできませんでした。'));
+}
+
+/**
+ * 注文の操作（作成・呼び出し・提供・戻す）が失敗したときに、画面に出すメッセージ。
+ * ログインの期限切れ（401）は、呼び出し側で先に判定すること。
+ * 409 は「他の端末などで、すでに状態が変わっていた」場合。
+ */
+export function describeOrderError(error: unknown, fallback: string): string {
+  if (error instanceof ApiError) {
+    if (error.status === 409) {
+      return 'すでに状態が変わっていました。最新の状態に更新しました。';
+    }
+    if (error.status === 404) {
+      return '注文が見つかりませんでした。最新の状態に更新しました。';
+    }
+    if (error.status >= 500) {
+      return 'サーバーでエラーが起きました。少し待ってから、もう一度お試しください。';
+    }
+    return fallback;
+  }
+  return '通信に失敗しました。通信状況を確認して、もう一度お試しください。';
+}
+
+/** 提供済みを取り消して、提供待ちに戻す（待ち人数も戻る） */
+export function unserveBoothOrder(token: string, orderId: number | string, signal?: AbortSignal) {
+  return request(`/v1/booth/accounting/orders/${encodeURIComponent(String(orderId))}/unserve`, {
+    method: 'PATCH',
+    token,
+    signal,
+  }).then((payload) => toBoothOrder(payload, '未提供に戻せませんでした。'));
 }
 
 export interface AuthResponse {
@@ -762,7 +875,7 @@ export function updateStoreProfile(
   input: {
     name: string;
     description: string;
-    current_wait_min: number;
+    current_wait_min?: number;
     is_open: boolean;
     type?: BoothKind;
   },

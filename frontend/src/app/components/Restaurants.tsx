@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, Hash, Info, Megaphone } from 'lucide-react';
 import { fetchRestaurants, type BackendStore } from '../lib/api';
+import { getWaitDisplay, type WaitDisplay } from '../lib/waitDisplay';
 import { Skeleton, SkeletonText } from './Skeleton';
 
 type TicketStatus = 'waiting' | 'called' | 'served';
@@ -11,7 +12,7 @@ type Store = {
   name: string;
   description: string;
   isOpen: boolean;
-  waitMin: number;
+  wait: WaitDisplay;
 };
 
 type Ticket = {
@@ -38,7 +39,7 @@ function toStore(store: BackendStore): Store {
     name: store.name,
     description: store.description ?? '店舗説明は未設定です',
     isOpen: store.is_open,
-    waitMin: Number(store.current_wait_min) || 0,
+    wait: getWaitDisplay(store),
   };
 }
 
@@ -252,7 +253,7 @@ export default function Restaurants() {
                     <h2 className="truncate font-bold text-foreground">{store.name}</h2>
                     <p className="text-xs text-muted-foreground">{store.description}</p>
                     <p className="mt-0.5 text-xs text-muted-foreground">
-                      待ち時間目安: {store.waitMin}分
+                      待ち状況: {store.wait.label}
                     </p>
                   </div>
                   <span

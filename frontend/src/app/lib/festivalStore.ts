@@ -3,38 +3,16 @@ import { useSyncExternalStore } from 'react';
 /**
  * 京都TECH学園祭 — 簡易データストア
  *
- * 注文（受付番号）など一部機能は localStorage に保持する。
- * 店舗ログインとダッシュボードはバックエンド API を利用する。
- * 来場者の「注文を決定」で受付番号を発行し、店舗側の提供待ち一覧・受付番号表示・
- * ダッシュボードがその番号を共有する。
+ * ブラウザの localStorage に残すのは、次の「この端末だけの状態」だけ。
+ * - 店舗ログイン／管理者ログインのセッション
+ * - 呼び出し画面で「大きく表示」している番号
  *
- * 仕様（docs/frontend.md「現在の制約」）どおり、永続DB・WebSocket同期は未実装。
- * 同一ブラウザ内での状態共有のみをサポートする。
+ * 注文（受付番号）・待ち人数・売上などは、すべてバックエンド API が正で、ここには持たない。
+ * （以前は注文や待ち人数もここに保存していたが、サーバーに移した。古いデータは起動時に消す）
  */
 
-export type OrderStatus = 'waiting' | 'called' | 'served';
-
-export interface OrderItem {
-  name: string;
-  qty: number;
-  store: string;
-}
-
-export interface Order {
-  number: string; // 例: A-101
-  items: OrderItem[];
-  total: number;
-  status: OrderStatus;
-  createdAt: number;
-  servedAt?: number;
-}
-
 interface FestivalState {
-  orders: Order[];
-  counter: number; // 直近に発行した番号の連番（初期 100）
-  bigNumber: string | null; // 「大きく表示」対象の番号
-  waiting: number; // 店舗側の手動待ち人数カウンタ
-  waitMinPerPerson: number; // 来場者画面の待ち時間計算に使う 1人あたり分数
+  bigNumber: string | null; // 「大きく表示」対象の受付番号（この端末の表示だけ）
   session: {
     storeId: string;
     token: string;
@@ -47,12 +25,11 @@ interface FestivalState {
 
 const KEY = 'kt_festival_state_v1';
 
+/** 以前、この端末に保存していた注文・待ち人数などのキー（いまはサーバーが持つ） */
+const LEGACY_KEYS = ['orders', 'counter', 'waiting', 'waitMinPerPerson'] as const;
+
 const initialState: FestivalState = {
-  orders: [],
-  counter: 100,
   bigNumber: null,
-  waiting: 0,
-  waitMinPerPerson: 5,
   session: null,
   adminSession: null,
 };
@@ -63,17 +40,35 @@ function read(): FestivalState {
     if (!raw) return initialState;
     const parsed = JSON.parse(raw) as Partial<FestivalState>;
     return {
-      ...initialState,
-      ...parsed,
-      waitMinPerPerson:
-        typeof parsed.waitMinPerPerson === 'number' && parsed.waitMinPerPerson >= 0
-          ? parsed.waitMinPerPerson
-          : initialState.waitMinPerPerson,
+      bigNumber: typeof parsed.bigNumber === 'string' ? parsed.bigNumber : null,
+      session: parsed.session ?? null,
+      adminSession: parsed.adminSession ?? null,
     };
   } catch {
     return initialState;
   }
 }
+
+/**
+ * 古い注文・待ち人数のデータが残っていたら消す。
+ * 古い「大きく表示」の番号（A-101 など）も、いまの注文には存在しないので一緒に消す。
+ */
+function cleanLegacyData() {
+  try {
+    const raw = localStorage.getItem(KEY);
+    if (!raw) return;
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    if (!LEGACY_KEYS.some((key) => key in parsed)) return;
+
+    for (const key of LEGACY_KEYS) delete parsed[key];
+    parsed.bigNumber = null;
+    localStorage.setItem(KEY, JSON.stringify(parsed));
+  } catch {
+    /* 壊れたデータは read() が初期値として扱う */
+  }
+}
+
+if (typeof localStorage !== 'undefined') cleanLegacyData();
 
 let cache: FestivalState = typeof localStorage !== 'undefined' ? read() : initialState;
 const listeners = new Set<() => void>();
@@ -111,11 +106,6 @@ function getSnapshot() {
   return cache;
 }
 
-const selectorCache = new Map<
-  (state: FestivalState) => unknown,
-  { state: FestivalState; result: unknown }
->();
-
 /** コンポーネントから状態を購読する */
 export function useFestival<T>(selector: (s: FestivalState) => T): T {
   const state = useSyncExternalStore(subscribe, getSnapshot, () => initialState);
@@ -124,60 +114,9 @@ export function useFestival<T>(selector: (s: FestivalState) => T): T {
 
 /* ---- 操作（actions） ---- */
 
-/** 受付番号を発行して提供待ちに追加。発行した番号を返す。 */
-export function issueOrder(items: OrderItem[], total: number): string {
-  const s = read();
-  const next = s.counter + 1;
-  const number = `A-${next}`;
-  const order: Order = {
-    number,
-    items,
-    total,
-    status: 'waiting',
-    createdAt: Date.now(),
-  };
-  write({ ...s, counter: next, orders: [...s.orders, order] });
-  return number;
-}
-
-export function setOrderStatus(number: string, status: OrderStatus) {
-  const s = read();
-  const current = s.orders.find((o) => o.number === number);
-  const wasServed = current?.status === 'served';
-  const nowServed = status === 'served';
-  let waiting = s.waiting;
-  if (!wasServed && nowServed) waiting = Math.max(0, waiting - 1);
-  if (wasServed && !nowServed) waiting += 1;
-
-  write({
-    ...s,
-    waiting,
-    orders: s.orders.map((o) =>
-      o.number === number
-        ? { ...o, status, servedAt: status === 'served' ? Date.now() : undefined }
-        : o,
-    ),
-  });
-}
-
-/** 提供済みを受付待ちに戻す（誤操作の取り消し）。 */
-export function revertServedOrder(number: string) {
-  setOrderStatus(number, 'waiting');
-}
-
-export function setWaitMinPerPerson(min: number) {
-  const s = read();
-  write({ ...s, waitMinPerPerson: Math.max(0, Math.floor(min)) });
-}
-
 export function setBigNumber(number: string | null) {
   const s = read();
   write({ ...s, bigNumber: number });
-}
-
-export function adjustWaiting(delta: number) {
-  const s = read();
-  write({ ...s, waiting: Math.max(0, s.waiting + delta) });
 }
 
 export function loginStore(storeId: string, token: string) {
@@ -187,7 +126,7 @@ export function loginStore(storeId: string, token: string) {
 
 export function logoutStore() {
   const s = read();
-  write({ ...s, session: null });
+  write({ ...s, session: null, bigNumber: null });
 }
 
 export function loginAdminSession(loginId: string, token: string) {
@@ -199,11 +138,3 @@ export function logoutAdminSession() {
   const s = read();
   write({ ...s, adminSession: null });
 }
-
-/* ---- セレクタ ---- */
-export const selectWaitingOrders = (s: FestivalState) =>
-  s.orders.filter((o) => o.status !== 'served');
-export const selectServedOrders = (s: FestivalState) =>
-  s.orders.filter((o) => o.status === 'served');
-export const selectLatestNumber = (s: FestivalState) =>
-  s.orders.length ? s.orders[s.orders.length - 1].number : null;
