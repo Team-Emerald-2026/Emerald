@@ -289,11 +289,11 @@ export default function StoreProfile() {
                 style={{ backgroundColor: isOpen ? 'var(--ok)' : 'var(--muted)' }}
               >
                 <span
-                  className={`absolute top-1 h-6 w-6 rounded-full bg-white shadow transition-transform ${
+                  className={`absolute left-0 top-1 h-6 w-6 rounded-full bg-white shadow transition-transform ${
                     isOpen ? 'translate-x-7' : 'translate-x-1'
                   }`}
                 />
-                <span className="sr-only">{isOpen ? '営業中' : '準備中'}</span>
+                <span className="sr-only">{isOpen ? '営業中' : '受付停止中'}</span>
               </button>
             </div>
 
