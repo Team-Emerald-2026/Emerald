@@ -7,6 +7,7 @@ import {
   type BackendMapFacility,
   type BackendStore,
 } from '../lib/api';
+import { BUSY_QUEUE_COUNT, getWaitDisplay, waitLevelStyle, type WaitDisplay } from '../lib/waitDisplay';
 import { Skeleton, SkeletonText } from './Skeleton';
 
 type Category = '体験' | 'フード' | 'ステージ';
@@ -15,7 +16,7 @@ interface Booth {
   id: string;
   name: string;
   area: string;
-  wait: number; // 待ち分数
+  wait: WaitDisplay; // 待ち人数の表示（文字表示モードのときは文字）
   category: Category;
   ticket?: boolean; // 整理券対応
   popular?: boolean; // 人気ブース
@@ -47,24 +48,16 @@ function toArea(store: BackendStore, facility?: BackendMapFacility): string {
 }
 
 function toBooth(store: BackendStore, facility?: BackendMapFacility): Booth {
-  const wait = Number(store.current_wait_min);
-  const queueCount = Number(store.current_queue_count);
+  const wait = getWaitDisplay(store);
 
   return {
     id: store.id,
     name: store.name,
     area: toArea(store, facility),
-    wait: store.is_open && Number.isFinite(wait) ? wait : 0,
+    wait,
     category: toCategory(facility?.type),
-    popular: queueCount >= 8 || wait >= 15,
+    popular: store.is_open && wait.queueCount >= BUSY_QUEUE_COUNT,
   };
-}
-
-function waitStyle(min: number) {
-  if (min <= 0) return { label: '待ち0分', bg: 'var(--ok-soft)', fg: 'var(--ok)' };
-  if (min < 15) return { label: `待ち約${min}分`, bg: 'var(--ok-soft)', fg: 'var(--ok)' };
-  if (min < 30) return { label: `待ち約${min}分`, bg: 'var(--warn-soft)', fg: 'var(--warn)' };
-  return { label: `待ち約${min}分`, bg: 'var(--busy-soft)', fg: 'var(--busy)' };
 }
 
 function BoothCardSkeleton() {
@@ -137,7 +130,7 @@ export default function Attractions() {
 
   return (
     <div className="space-y-4 p-4">
-      <h1 className="font-display text-2xl font-bold text-foreground">ブース待ち時間</h1>
+      <h1 className="font-display text-2xl font-bold text-foreground">ブース待ち状況</h1>
 
       {/* カテゴリフィルタ（チップ） */}
       <div className="flex flex-wrap gap-2" role="tablist" aria-label="カテゴリ">
@@ -186,7 +179,7 @@ export default function Attractions() {
       {!loading && !error && list.length > 0 && (
         <ul className="space-y-3">
           {list.map((b) => {
-            const w = waitStyle(b.wait);
+            const w = waitLevelStyle(b.wait.level);
             return (
               <li
                 key={b.id}
@@ -209,9 +202,9 @@ export default function Attractions() {
                       className="inline-block rounded-lg px-2.5 py-1 text-sm font-bold"
                       style={{ backgroundColor: w.bg, color: w.fg }}
                     >
-                      {w.label}
+                      {b.wait.label}
                     </span>
-                    <p className="mt-1 text-[11px] text-muted-foreground">待ち時間</p>
+                    <p className="mt-1 text-[11px] text-muted-foreground">待ち状況</p>
                   </div>
                 </button>
 
@@ -235,8 +228,8 @@ export default function Attractions() {
                 {detailId === b.id && (
                   <div className="mt-3 rounded-xl bg-muted p-3 text-sm text-muted-foreground">
                     <p>
-                      {b.name} は {b.area} の{b.category}ブースです。待ち時間の目安は
-                      {b.wait <= 0 ? '待ちなし' : `${b.wait}分`}です。
+                      {b.name} は {b.area} の{b.category}ブースです。現在の待ち状況は
+                      「{b.wait.label}」です。
                     </p>
                   </div>
                 )}
@@ -279,7 +272,7 @@ export default function Attractions() {
       >
         <Info className="mt-0.5 h-4 w-4 shrink-0" />
         <p>
-          待ち時間はおよそ5分ごとに更新される目安です。当日の状況により前後する場合があります。
+          待ち人数は、ページを開いた時点の目安です。最新の状況は、画面を更新してご確認ください。
         </p>
       </div>
     </div>

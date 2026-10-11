@@ -1,33 +1,84 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import StoreShell from './StoreShell';
+import { useFestival, setBigNumber, logoutStore } from '../../lib/festivalStore';
 import {
-  useFestival,
-  selectWaitingOrders,
-  setOrderStatus,
-  setBigNumber,
-} from '../../lib/festivalStore';
+  ApiError,
+  callBoothOrder,
+  describeOrderError,
+  getBoothOrderStage,
+  serveBoothOrder,
+  type BoothOrder,
+} from '../../lib/api';
+import { useBoothOrders } from '../../lib/useBoothOrders';
 import { Megaphone, Check, Maximize2, X } from 'lucide-react';
 
 const pipeline = ['受付', '提供待ち', '呼び出し中', '提供済み'] as const;
 
-function pipelineIndex(status: 'waiting' | 'called' | 'served') {
-  if (status === 'called') return 2;
-  if (status === 'served') return 3;
+function pipelineIndex(order: BoothOrder) {
+  const stage = getBoothOrderStage(order);
+  if (stage === 'called') return 2;
+  if (stage === 'served') return 3;
   return 1;
 }
 
 export default function StoreTicket() {
-  const orders = useFestival(selectWaitingOrders);
+  const session = useFestival((s) => s.session);
   const bigNumber = useFestival((s) => s.bigNumber);
-  const [confirmNumber, setConfirmNumber] = useState<string | null>(null);
-  const [fullscreen, setFullscreen] = useState(false);
+  const {
+    unservedOrders: orders,
+    loading,
+    error: fetchError,
+    refresh,
+    upsertOrder,
+  } = useBoothOrders(session?.token, { onUnauthorized: logoutStore });
 
-  const completeServe = (number: string) => {
-    setOrderStatus(number, 'served');
-    if (bigNumber === number) setBigNumber(null);
-    setConfirmNumber(null);
-    setFullscreen(false);
+  const [confirmId, setConfirmId] = useState<string | null>(null);
+  const [fullscreen, setFullscreen] = useState(false);
+  // 操作中の注文（連打しても、同じ注文に二重に送らない）
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const busyRef = useRef<string | null>(null);
+  const [actionError, setActionError] = useState('');
+
+  /** 1件ずつ操作する。失敗したときは、画面に理由を出して最新の状態に取り直す */
+  const runAction = async (orderId: string, action: () => Promise<void>) => {
+    if (!session?.token || busyRef.current) return;
+    busyRef.current = orderId;
+    setBusyId(orderId);
+    setActionError('');
+
+    try {
+      await action();
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) {
+        logoutStore();
+        return;
+      }
+      setActionError(describeOrderError(err, '操作に失敗しました。もう一度お試しください。'));
+      if (err instanceof ApiError && (err.status === 409 || err.status === 404)) {
+        setConfirmId(null);
+        void refresh();
+      }
+    } finally {
+      busyRef.current = null;
+      setBusyId(null);
+    }
   };
+
+  const callOrder = (order: BoothOrder) =>
+    runAction(order.id, async () => {
+      const updated = await callBoothOrder(session!.token, order.id);
+      upsertOrder(updated);
+      setBigNumber(updated.ticket_number);
+    });
+
+  const completeServe = (order: BoothOrder) =>
+    runAction(order.id, async () => {
+      const updated = await serveBoothOrder(session!.token, order.id);
+      upsertOrder(updated);
+      if (bigNumber === order.ticket_number) setBigNumber(null);
+      setConfirmId(null);
+      setFullscreen(false);
+    });
 
   return (
     <StoreShell title="受付番号の呼び出し">
@@ -71,20 +122,42 @@ export default function StoreTicket() {
       </div>
 
       <h2 className="mb-2 mt-5 font-display text-base font-bold text-foreground">提供待ち</h2>
-      {orders.length === 0 ? (
+
+      {actionError && (
+        <p
+          role="alert"
+          className="mb-3 rounded-xl border border-border bg-card p-3 text-sm text-red-500"
+        >
+          {actionError}
+        </p>
+      )}
+      {fetchError && (
+        <p className="mb-3 rounded-xl border border-border bg-card p-3 text-sm text-red-500">
+          {fetchError}（最後に取得した内容を表示しています）
+        </p>
+      )}
+
+      {loading ? (
+        <p className="rounded-xl border border-border bg-card p-6 text-center text-muted-foreground">
+          読み込み中...
+        </p>
+      ) : orders.length === 0 ? (
         <p className="rounded-xl border border-border bg-card p-6 text-center text-muted-foreground">
           提供待ちはありません。
         </p>
       ) : (
         <ul className="space-y-2">
           {orders.map((o) => {
-            const called = o.status === 'called';
-            const confirming = confirmNumber === o.number;
+            const called = getBoothOrderStage(o) === 'called';
+            const confirming = confirmId === o.id;
+            const busy = busyId === o.id;
             return (
-              <li key={o.number} className="rounded-2xl border border-border bg-card p-4">
+              <li key={o.id} className="rounded-2xl border border-border bg-card p-4">
                 <div className="flex items-center justify-between gap-2">
                   <div>
-                    <span className="font-display text-xl font-bold text-foreground">{o.number}</span>
+                    <span className="font-display text-xl font-bold text-foreground">
+                      {o.ticket_number}
+                    </span>
                     <span
                       className="ml-2 rounded-md px-2 py-0.5 text-xs"
                       style={{
@@ -98,7 +171,7 @@ export default function StoreTicket() {
                   <button
                     type="button"
                     onClick={() => {
-                      setBigNumber(o.number);
+                      setBigNumber(o.ticket_number);
                       setFullscreen(true);
                     }}
                     className="flex min-h-11 items-center gap-1 rounded-lg border border-border px-2.5 py-1.5 text-xs text-foreground hover:bg-muted"
@@ -110,7 +183,7 @@ export default function StoreTicket() {
 
                 <p className="mt-2 text-[11px] text-muted-foreground">
                   {pipeline.map((label, index) => {
-                    const active = index === pipelineIndex(o.status);
+                    const active = index === pipelineIndex(o);
                     return (
                       <span key={label}>
                         {index > 0 ? ' → ' : ''}
@@ -121,13 +194,13 @@ export default function StoreTicket() {
                 </p>
 
                 <p className="mt-1 text-sm text-muted-foreground">
-                  {o.items.map((it) => `${it.name}×${it.qty}`).join('・')}
+                  {o.items.map((it) => `${it.name ?? '商品'}×${it.quantity}`).join('・')}
                 </p>
 
                 {confirming ? (
                   <div className="mt-3 rounded-xl border border-border bg-muted/50 p-3">
                     <p className="text-sm font-bold text-foreground">
-                      {o.number} を提供済みにしますか？
+                      {o.ticket_number} を提供済みにしますか？
                     </p>
                     <p className="mt-1 text-xs text-muted-foreground">
                       提供済み画面から「未提供に戻す」で取り消せます。
@@ -135,19 +208,21 @@ export default function StoreTicket() {
                     <div className="mt-3 flex gap-2">
                       <button
                         type="button"
-                        onClick={() => setConfirmNumber(null)}
-                        className="flex min-h-11 flex-1 items-center justify-center rounded-lg border border-border py-2 text-sm font-bold text-foreground hover:bg-muted"
+                        onClick={() => setConfirmId(null)}
+                        disabled={busy}
+                        className="flex min-h-11 flex-1 items-center justify-center rounded-lg border border-border py-2 text-sm font-bold text-foreground hover:bg-muted disabled:opacity-40"
                       >
                         キャンセル
                       </button>
                       <button
                         type="button"
-                        onClick={() => completeServe(o.number)}
-                        className="flex min-h-11 flex-1 items-center justify-center gap-1 rounded-lg py-2 text-sm font-bold text-white"
+                        onClick={() => void completeServe(o)}
+                        disabled={busy}
+                        className="flex min-h-11 flex-1 items-center justify-center gap-1 rounded-lg py-2 text-sm font-bold text-white disabled:opacity-40"
                         style={{ backgroundColor: 'var(--busy)' }}
                       >
                         <Check className="h-4 w-4" />
-                        提供完了する
+                        {busy ? '送信中...' : '提供完了する'}
                       </button>
                     </div>
                   </div>
@@ -155,20 +230,19 @@ export default function StoreTicket() {
                   <div className="mt-3 flex gap-2">
                     <button
                       type="button"
-                      onClick={() => {
-                        setOrderStatus(o.number, 'called');
-                        setBigNumber(o.number);
-                      }}
-                      className="flex min-h-11 flex-1 items-center justify-center gap-1 rounded-lg py-2 text-sm font-bold text-white"
+                      onClick={() => void callOrder(o)}
+                      disabled={busyId !== null}
+                      className="flex min-h-11 flex-1 items-center justify-center gap-1 rounded-lg py-2 text-sm font-bold text-white disabled:opacity-40"
                       style={{ backgroundColor: 'var(--primary)' }}
                     >
                       <Megaphone className="h-4 w-4" />
-                      {called ? '再呼び出し' : '呼び出し'}
+                      {busy ? '送信中...' : called ? '再呼び出し' : '呼び出し'}
                     </button>
                     <button
                       type="button"
-                      onClick={() => setConfirmNumber(o.number)}
-                      className="flex min-h-11 min-w-28 items-center justify-center gap-1 rounded-lg border border-border py-2 text-sm font-medium text-foreground hover:bg-muted"
+                      onClick={() => setConfirmId(o.id)}
+                      disabled={busyId !== null}
+                      className="flex min-h-11 min-w-28 items-center justify-center gap-1 rounded-lg border border-border py-2 text-sm font-medium text-foreground hover:bg-muted disabled:opacity-40"
                     >
                       提供完了
                     </button>

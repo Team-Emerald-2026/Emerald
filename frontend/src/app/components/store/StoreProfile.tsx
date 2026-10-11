@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Building2, Clock, Pencil, Plus, Power, Trash2, Users } from 'lucide-react';
+import { Building2, Pencil, Plus, Power, Trash2, Users } from 'lucide-react';
 import StoreShell from './StoreShell';
 import {
   createBoothMenuItem,
@@ -8,14 +8,11 @@ import {
   fetchStoreProfile,
   updateBoothMenuItem,
   updateStoreProfile,
-  updateWaitTime,
   type BackendMenuItem,
   type BoothKind,
   type StoreProfile as StoreProfileData,
 } from '../../lib/api';
-import { setWaitMinPerPerson, useFestival } from '../../lib/festivalStore';
-
-const DEFAULT_WAIT_MIN_PER_PERSON = 5;
+import { useFestival } from '../../lib/festivalStore';
 
 const boothTypes: Array<{ value: BoothKind; label: string }> = [
   { value: 'booth', label: '体験ブース' },
@@ -33,13 +30,10 @@ function toBoothKind(type?: string | null): BoothKind {
 
 export default function StoreProfile() {
   const session = useFestival((s) => s.session);
-  const waitingPeople = useFestival((s) => s.waiting);
-  const storedWaitMin = useFestival((s) => s.waitMinPerPerson);
   const [profile, setProfile] = useState<StoreProfileData | null>(null);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [boothType, setBoothType] = useState<BoothKind>('booth');
-  const [waitMin, setWaitMin] = useState(DEFAULT_WAIT_MIN_PER_PERSON);
   const [isOpen, setIsOpen] = useState(true);
   const [menuItems, setMenuItems] = useState<BackendMenuItem[]>([]);
   const [productName, setProductName] = useState('');
@@ -67,7 +61,6 @@ export default function StoreProfile() {
         setDescription(data.description ?? '');
         setBoothType(toBoothKind(data.type));
         setIsOpen(Boolean(data.is_open));
-        setWaitMin(storedWaitMin > 0 ? storedWaitMin : DEFAULT_WAIT_MIN_PER_PERSON);
         setMenuItems(items.filter((item) => item.is_available !== false));
       })
       .catch((err: unknown) => {
@@ -96,11 +89,6 @@ export default function StoreProfile() {
       setError('説明を入力してください。');
       return;
     }
-    if (!Number.isInteger(waitMin) || waitMin < 0) {
-      setError('一人当たりの待ち時間は0以上の整数で入力してください。');
-      return;
-    }
-
     setSaving(true);
     setError('');
     setMessage('');
@@ -109,23 +97,14 @@ export default function StoreProfile() {
       const updated = await updateStoreProfile(session.token, profile.id, {
         name: name.trim(),
         description: description.trim(),
-        current_wait_min: waitingPeople * waitMin,
         is_open: isOpen,
         type: boothType,
       });
-      setWaitMinPerPerson(waitMin);
-      if (session.storeId) {
-        await updateWaitTime(session.token, {
-          current_wait_min: waitingPeople * waitMin,
-          current_queue_count: waitingPeople,
-        });
-      }
       setProfile(updated);
       setName(updated.name);
       setDescription(updated.description ?? '');
       setBoothType(toBoothKind(updated.type));
       setIsOpen(Boolean(updated.is_open));
-      setWaitMin(waitMin);
       setMessage('店舗情報を保存しました。');
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : '保存に失敗しました。');
@@ -318,25 +297,6 @@ export default function StoreProfile() {
               </button>
             </div>
 
-            <label className="block text-sm">
-              <span className="mb-1 block text-muted-foreground">一人当たりの待ち時間</span>
-              <div className="flex items-center gap-2">
-                <input
-                  type="number"
-                  min={0}
-                  max={180}
-                  step={1}
-                  value={waitMin}
-                  onChange={(e) => setWaitMin(Number(e.target.value))}
-                  className="w-full rounded-lg border border-input bg-background px-3 py-2.5 text-foreground outline-none"
-                />
-                <span className="shrink-0 text-sm text-muted-foreground">分</span>
-              </div>
-              <span className="mt-1 block text-xs text-muted-foreground">
-                来場者画面の表示: 待ち人数{waitingPeople}人 × {waitMin}分 = 待ち約{waitingPeople * waitMin}分
-              </span>
-            </label>
-
             <button
               type="button"
               onClick={save}
@@ -446,7 +406,7 @@ export default function StoreProfile() {
             )}
           </section>
 
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <section className="rounded-2xl border border-border bg-card p-4">
               <Power className="h-5 w-5" style={{ color: isOpen ? 'var(--ok)' : 'var(--muted-foreground)' }} />
               <p className="mt-2 text-sm text-muted-foreground">営業状態</p>
@@ -456,22 +416,10 @@ export default function StoreProfile() {
             </section>
 
             <section className="rounded-2xl border border-border bg-card p-4">
-              <Clock className="h-5 w-5" style={{ color: 'var(--primary)' }} />
-              <p className="mt-2 text-sm text-muted-foreground">一人当たり待ち時間</p>
-              <p className="font-display text-2xl font-bold text-foreground">
-                {waitMin}
-                <span className="ml-1 text-sm font-medium">分</span>
-              </p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                表示待ち時間 {waitingPeople * waitMin}分
-              </p>
-            </section>
-
-            <section className="rounded-2xl border border-border bg-card p-4">
               <Users className="h-5 w-5" style={{ color: 'var(--primary)' }} />
               <p className="mt-2 text-sm text-muted-foreground">待ち人数</p>
               <p className="font-display text-2xl font-bold text-foreground">
-                {waitingPeople}
+                {Number(profile.current_queue_count) || 0}
                 <span className="ml-1 text-sm font-medium">人</span>
               </p>
             </section>

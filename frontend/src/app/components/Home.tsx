@@ -7,6 +7,12 @@ import {
   type BackendMapFacility,
   type BackendStore,
 } from '../lib/api';
+import {
+  BUSY_QUEUE_COUNT,
+  getWaitDisplay,
+  waitLevelStyle,
+  type WaitDisplay,
+} from '../lib/waitDisplay';
 import { Skeleton, SkeletonText } from './Skeleton';
 
 /** ヒーロー背景動画（YouTube UI を避けるためローカルファイルを使用） */
@@ -16,8 +22,8 @@ const quickMenu = [
   {
     to: '/attractions',
     icon: Clock,
-    title: '本日の待ち時間',
-    desc: '各ブースの混み具合をチェック',
+    title: '本日の待ち状況',
+    desc: '各ブースの待ち人数をチェック',
     color: 'var(--primary)',
   },
   {
@@ -40,7 +46,7 @@ interface RecommendedBooth {
   id: string;
   name: string;
   area: string;
-  wait: number;
+  wait: WaitDisplay;
   popular: boolean;
 }
 
@@ -49,10 +55,6 @@ function toArea(store: BackendStore, facility?: BackendMapFacility): string {
 
   const floor = Number(facility.floor);
   return Number.isFinite(floor) ? `${floor}F` : '場所未設定';
-}
-
-function toWaitLabel(min: number) {
-  return min <= 0 ? '待ち0分' : `待ち約${min}分`;
 }
 
 function RecommendationSkeleton() {
@@ -87,17 +89,16 @@ export default function Home() {
         const nextBooths = stores
           .filter((store) => store.is_open)
           .map((store) => {
-            const wait = Number(store.current_wait_min);
-            const queueCount = Number(store.current_queue_count);
+            const wait = getWaitDisplay(store);
             return {
               id: store.id,
               name: store.name,
               area: toArea(store, facilityByStoreId.get(store.id)),
-              wait: Number.isFinite(wait) ? wait : 0,
-              popular: queueCount >= 8 || wait >= 15,
+              wait,
+              popular: wait.queueCount >= BUSY_QUEUE_COUNT,
             };
           })
-          .sort((a, b) => a.wait - b.wait)
+          .sort((a, b) => a.wait.queueCount - b.wait.queueCount)
           .slice(0, 3);
 
         setRecommendedBooths(nextBooths);
@@ -158,7 +159,7 @@ export default function Home() {
       <section>
         <div className="mb-3 flex items-center justify-between px-1">
           <h2 className="font-display text-base font-bold text-foreground">
-            待ち時間が短いブース
+            待ち人数が少ないブース
           </h2>
           <Link to="/attractions" className="text-xs font-bold" style={{ color: 'var(--primary)' }}>
             すべて見る
@@ -194,9 +195,12 @@ export default function Home() {
                   </span>
                   <span
                     className="shrink-0 rounded-lg px-2.5 py-1 text-xs font-bold"
-                    style={{ backgroundColor: 'var(--ok-soft)', color: 'var(--ok)' }}
+                    style={{
+                      backgroundColor: waitLevelStyle(booth.wait.level).bg,
+                      color: waitLevelStyle(booth.wait.level).fg,
+                    }}
                   >
-                    {toWaitLabel(booth.wait)}
+                    {booth.wait.label}
                   </span>
                 </Link>
               </li>

@@ -1,24 +1,31 @@
 import { useEffect, useState } from 'react';
 import StoreShell from './StoreShell';
+import { useFestival, logoutStore } from '../../lib/festivalStore';
+import { Users, Hourglass, Hash, Banknote } from 'lucide-react';
 import {
-  useFestival,
-  selectWaitingOrders,
-  logoutStore,
-} from '../../lib/festivalStore';
-import { Users, Clock, Hash, Banknote } from 'lucide-react';
-import { ApiError, type BoothDashboard, fetchBoothDashboard } from '../../lib/api';
+  ApiError,
+  type BoothDashboard,
+  fetchBoothDashboard,
+  getBoothOrderStage,
+} from '../../lib/api';
+import { useBoothOrders } from '../../lib/useBoothOrders';
 
-function statusLabel(status: 'waiting' | 'called' | 'served') {
-  if (status === 'called') return '呼び出し中';
-  if (status === 'served') return '提供済み';
-  return '提供待ち';
+/** 売上や待ち人数を取りに行く間隔（ミリ秒） */
+const POLL_INTERVAL_MS = 5000;
+
+function statusLabel(status: 'waiting' | 'called') {
+  return status === 'called' ? '呼び出し中' : '提供待ち';
 }
 
 export default function StoreDashboard() {
   const session = useFestival((s) => s.session);
-  const waitingOrders = useFestival(selectWaitingOrders);
-  const waitMinPerPerson = useFestival((s) => s.waitMinPerPerson);
-  const waitingPeople = useFestival((s) => s.waiting);
+  const {
+    unservedOrders,
+    waitingOrders,
+    calledOrders,
+    loading: ordersLoading,
+    error: ordersError,
+  } = useBoothOrders(session?.token, { onUnauthorized: logoutStore });
   const [dashboard, setDashboard] = useState<BoothDashboard | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -30,43 +37,55 @@ export default function StoreDashboard() {
     setLoading(true);
     setError('');
 
-    fetchBoothDashboard(session.token, abortController.signal)
-      .then((data) => {
-        if (!data) {
-          setError('ダッシュボード情報を取得できませんでした。');
-          return;
-        }
-        setDashboard(data);
-      })
-      .catch((e) => {
-        if (abortController.signal.aborted) return;
-        if (e instanceof ApiError && e.status === 401) {
-          logoutStore();
-          return;
-        }
-        setError('ダッシュボード情報の取得に失敗しました。');
-      })
-      .finally(() => {
-        if (!abortController.signal.aborted) {
-          setLoading(false);
-        }
-      });
+    const load = () =>
+      fetchBoothDashboard(session.token, abortController.signal)
+        .then((data) => {
+          if (abortController.signal.aborted) return;
+          if (!data) {
+            setError('ダッシュボード情報を取得できませんでした。');
+            return;
+          }
+          setDashboard(data);
+          setError('');
+        })
+        .catch((e) => {
+          if (abortController.signal.aborted) return;
+          if (e instanceof ApiError && e.status === 401) {
+            logoutStore();
+            return;
+          }
+          setError('ダッシュボード情報の取得に失敗しました。');
+        })
+        .finally(() => {
+          if (!abortController.signal.aborted) {
+            setLoading(false);
+          }
+        });
 
-    return () => abortController.abort();
+    void load();
+    // 会計や提供のたびに売上・待ち人数が変わるので、定期的に取り直す
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === 'visible') void load();
+    }, POLL_INTERVAL_MS);
+
+    return () => {
+      abortController.abort();
+      window.clearInterval(timer);
+    };
   }, [session]);
 
-  const waitingCount = waitingOrders.filter((o) => o.status === 'waiting').length;
-  const calledCount = waitingOrders.filter((o) => o.status === 'called').length;
-  const estimatedMin = waitingPeople * waitMinPerPerson;
+  const waitingCount = waitingOrders.length;
+  const calledCount = calledOrders.length;
+  const queueCount = dashboard ? Number(dashboard.current_queue_count) || 0 : null;
   const yen = (value: number) => `¥${value.toLocaleString('ja-JP')}`;
 
   const cards = [
     {
       label: '提供待ち',
-      value: `${waitingOrders.length}`,
-      unit: '件',
+      value: ordersLoading ? '---' : `${unservedOrders.length}`,
+      unit: ordersLoading ? '' : '件',
       hint:
-        waitingOrders.length === 0
+        ordersLoading || unservedOrders.length === 0
           ? '未提供の注文はありません'
           : `受付待ち ${waitingCount}件・呼び出し中 ${calledCount}件`,
       icon: Users,
@@ -74,10 +93,10 @@ export default function StoreDashboard() {
     },
     {
       label: '来場者への待ち表示',
-      value: `${estimatedMin}`,
-      unit: '分',
-      hint: `${waitingPeople}人 × ${waitMinPerPerson}分`,
-      icon: Clock,
+      value: queueCount === null ? '---' : `${queueCount}`,
+      unit: queueCount === null ? '' : '人',
+      hint: '来場者画面に「待ち○人」として表示されます',
+      icon: Hourglass,
       color: 'var(--accent)',
     },
     {
@@ -120,6 +139,11 @@ export default function StoreDashboard() {
       {error && (
         <p className="mb-4 rounded-xl border border-border bg-card p-3 text-sm text-red-500">{error}</p>
       )}
+      {ordersError && (
+        <p className="mb-4 rounded-xl border border-border bg-card p-3 text-sm text-red-500">
+          {ordersError}（最後に取得した内容を表示しています）
+        </p>
+      )}
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {cards.map((c) => (
@@ -142,29 +166,38 @@ export default function StoreDashboard() {
 
       <div className="mt-5">
         <h2 className="mb-2 font-display text-base font-bold text-foreground">提供待ち一覧</h2>
-        {waitingOrders.length === 0 ? (
+        {ordersLoading ? (
+          <p className="rounded-xl border border-border bg-card p-6 text-center text-muted-foreground">
+            読み込み中...
+          </p>
+        ) : unservedOrders.length === 0 ? (
           <p className="rounded-xl border border-border bg-card p-6 text-center text-muted-foreground">
             提供待ちはありません。
           </p>
         ) : (
           <ul className="space-y-2">
-            {waitingOrders.map((o) => (
-              <li
-                key={o.number}
-                className="flex items-center justify-between rounded-xl border border-border bg-card px-4 py-3"
-              >
-                <span className="font-display text-lg font-bold text-foreground">{o.number}</span>
-                <span className="text-sm text-muted-foreground">
-                  {o.items.reduce((a, it) => a + it.qty, 0)}点
-                  <span
-                    className="ml-2"
-                    style={{ color: o.status === 'called' ? 'var(--accent)' : 'var(--primary)' }}
-                  >
-                    {statusLabel(o.status)}
+            {unservedOrders.map((o) => {
+              const stage = getBoothOrderStage(o) === 'called' ? 'called' : 'waiting';
+              return (
+                <li
+                  key={o.id}
+                  className="flex items-center justify-between rounded-xl border border-border bg-card px-4 py-3"
+                >
+                  <span className="font-display text-lg font-bold text-foreground">
+                    {o.ticket_number}
                   </span>
-                </span>
-              </li>
-            ))}
+                  <span className="text-sm text-muted-foreground">
+                    {o.items.reduce((a, it) => a + it.quantity, 0)}点
+                    <span
+                      className="ml-2"
+                      style={{ color: stage === 'called' ? 'var(--accent)' : 'var(--primary)' }}
+                    >
+                      {statusLabel(stage)}
+                    </span>
+                  </span>
+                </li>
+              );
+            })}
           </ul>
         )}
       </div>
