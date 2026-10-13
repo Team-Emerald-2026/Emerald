@@ -262,6 +262,16 @@ class AccountingController extends Controller
             ], 404, [], JSON_UNESCAPED_UNICODE);
         }
 
+        if ($order->status === 'canceled') {
+            return response()->json([
+                'errors' => [[
+                    'status' => '409',
+                    'title' => 'Conflict',
+                    'detail' => 'キャンセル済みの会計は清算できません',
+                ]],
+            ], 409, [], JSON_UNESCAPED_UNICODE);
+        }
+
         if ($order->status === 'settled') {
             return response()->json([
                 'errors' => [[
@@ -373,6 +383,58 @@ class AccountingController extends Controller
                 ->whereKey($this->currentStoreId())
                 ->increment('current_queue_count');
         });
+
+        return OrderResource::make($order)
+            ->response()
+            ->setEncodingOptions(JSON_UNESCAPED_UNICODE);
+    }
+
+    /**
+     * 提供前の注文（提供待ち・呼び出し中）をキャンセルする。
+     * 売上と呼び出し・待ち人数の対象から外れ、待ち人数を1人分減らす。
+     * 返金はアプリの外で行う前提（このAPIは記録だけを変える）。
+     */
+    public function cancel(int $id)
+    {
+        $order = $this->findStoreOrder($id);
+
+        if (! $order) {
+            return $this->orderNotFound();
+        }
+
+        // 同時に2回押されても、待ち人数を二重に減らさないよう、行をロックして状態を確かめ直す
+        $canceled = DB::transaction(function () use ($order) {
+            $locked = Order::query()->lockForUpdate()->find($order->id);
+
+            if (! $locked || $locked->served_at !== null || $locked->status === 'canceled') {
+                return false;
+            }
+
+            $locked->status = 'canceled';
+            $locked->save();
+
+            Store::query()
+                ->whereKey($this->currentStoreId())
+                ->where('current_queue_count', '>', 0)
+                ->decrement('current_queue_count');
+
+            return true;
+        });
+
+        // 最新の状態（商品名つき）を読み直す
+        $order = $this->findStoreOrder($id);
+
+        if (! $canceled) {
+            return response()->json([
+                'error' => [
+                    'code' => 'CONFLICT',
+                    'message' => $order->status === 'canceled'
+                        ? 'この会計はすでにキャンセル済みです'
+                        : '提供済みの会計はキャンセルできません',
+                    'details' => ['status' => $order->status],
+                ],
+            ], 409, [], JSON_UNESCAPED_UNICODE);
+        }
 
         return OrderResource::make($order)
             ->response()

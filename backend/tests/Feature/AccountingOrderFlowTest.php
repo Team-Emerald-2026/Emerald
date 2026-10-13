@@ -383,6 +383,122 @@ class AccountingOrderFlowTest extends TestCase
             ->assertJsonPath('data.ticket_number', 'C-102');
     }
 
+    // ------------------------------------------------------------------
+    // キャンセル（提供前の注文）
+    // ------------------------------------------------------------------
+
+    public function test_waiting_order_can_be_canceled(): void
+    {
+        $store = $this->createStore();
+        $coffee = $this->createMenuItem($store, 'コーヒー', 300);
+        $this->loginAsStore($store);
+
+        $keep = $this->createOrder($store, $coffee);
+        $id = $this->createOrder($store, $coffee);
+        $this->assertSame(2, $store->fresh()->current_queue_count);
+
+        $this->patchJson("/api/v1/booth/accounting/orders/{$id}/cancel")
+            ->assertOk()
+            ->assertJsonPath('data.status', 'canceled')
+            ->assertJsonPath('data.items.0.name', 'コーヒー');
+
+        // 待ち人数が1人分減り、売上からも外れる
+        $this->assertSame(1, $store->fresh()->current_queue_count);
+        $this->getJson('/api/v1/booth/dashboard')
+            ->assertOk()
+            ->assertJsonPath('data.revenue', 300);
+
+        // 呼び出し・提供の対象にもならない
+        $this->patchJson("/api/v1/booth/accounting/orders/{$id}/call")->assertStatus(409);
+        $this->patchJson("/api/v1/booth/accounting/orders/{$id}/serve")->assertStatus(409);
+        $this->patchJson("/api/v1/booth/accounting/orders/{$id}/settle")->assertStatus(409);
+
+        // 他の注文には影響しない
+        $this->assertNull(Order::query()->findOrFail($keep)->served_at);
+        $this->assertSame('settled', Order::query()->findOrFail($keep)->status);
+    }
+
+    public function test_called_order_can_be_canceled_and_disappears_from_call_numbers(): void
+    {
+        $store = $this->createStore();
+        $coffee = $this->createMenuItem($store, 'コーヒー', 300);
+        $this->loginAsStore($store);
+
+        $id = $this->createOrder($store, $coffee);
+        $this->patchJson("/api/v1/booth/accounting/orders/{$id}/call")->assertOk();
+
+        $this->getJson('/api/v1/call-numbers?store_id=store-101')
+            ->assertOk()
+            ->assertJsonCount(1, 'data');
+
+        $this->patchJson("/api/v1/booth/accounting/orders/{$id}/cancel")
+            ->assertOk()
+            ->assertJsonPath('data.status', 'canceled');
+
+        $this->getJson('/api/v1/call-numbers?store_id=store-101')
+            ->assertOk()
+            ->assertJsonCount(0, 'data');
+        $this->assertSame(0, $store->fresh()->current_queue_count);
+    }
+
+    public function test_cancel_twice_does_not_reduce_queue_count_twice(): void
+    {
+        $store = $this->createStore();
+        $coffee = $this->createMenuItem($store, 'コーヒー', 300);
+        $this->loginAsStore($store);
+
+        $this->createOrder($store, $coffee);
+        $id = $this->createOrder($store, $coffee);
+        $this->assertSame(2, $store->fresh()->current_queue_count);
+
+        $this->patchJson("/api/v1/booth/accounting/orders/{$id}/cancel")->assertOk();
+        $this->patchJson("/api/v1/booth/accounting/orders/{$id}/cancel")
+            ->assertStatus(409)
+            ->assertJsonPath('error.code', 'CONFLICT');
+
+        $this->assertSame(1, $store->fresh()->current_queue_count);
+    }
+
+    public function test_served_order_cannot_be_canceled(): void
+    {
+        $store = $this->createStore();
+        $coffee = $this->createMenuItem($store, 'コーヒー', 300);
+        $this->loginAsStore($store);
+
+        $id = $this->createOrder($store, $coffee);
+        $this->patchJson("/api/v1/booth/accounting/orders/{$id}/serve")->assertOk();
+        $this->assertSame(0, $store->fresh()->current_queue_count);
+
+        $this->patchJson("/api/v1/booth/accounting/orders/{$id}/cancel")
+            ->assertStatus(409)
+            ->assertJsonPath('error.code', 'CONFLICT');
+
+        $this->assertSame('settled', Order::query()->findOrFail($id)->status);
+        $this->assertSame(0, $store->fresh()->current_queue_count);
+    }
+
+    public function test_cancel_cannot_be_used_on_other_store_order(): void
+    {
+        $store = $this->createStore();
+        $coffee = $this->createMenuItem($store, 'コーヒー', 300);
+        $other = $this->createStore('store-102', ['name' => '他の店', 'ticket_prefix' => 'B']);
+
+        $this->loginAsStore($store);
+        $id = $this->createOrder($store, $coffee);
+
+        Sanctum::actingAs($this->createStoreUser($other, 'other_admin'));
+
+        $this->patchJson("/api/v1/booth/accounting/orders/{$id}/cancel")->assertStatus(404);
+
+        $this->assertSame('settled', Order::query()->findOrFail($id)->status);
+        $this->assertSame(1, $store->fresh()->current_queue_count);
+    }
+
+    public function test_cancel_requires_authentication(): void
+    {
+        $this->patchJson('/api/v1/booth/accounting/orders/1/cancel')->assertStatus(401);
+    }
+
     public function test_ticket_number_continues_after_existing_orders_when_counter_is_missing(): void
     {
         $store = $this->createStore();
