@@ -78,6 +78,7 @@ Route::prefix('v1/admin')->group(function () {
     Route::post('auth/logout', [AdminAuthController::class, 'logout'])->middleware('auth:sanctum');
     Route::get('analytics', [AdminAnalyticsController::class, 'index']);
     Route::get('revenue', [AdminAnalyticsController::class, 'revenue']);
+    Route::delete('analytics', [AdminAnalyticsController::class, 'reset']);
     Route::get('stores', [AdminStoreController::class, 'index']);
     Route::post('stores', [AdminStoreController::class, 'store']);
     Route::get('stores/{id}', [AdminStoreController::class, 'show']);

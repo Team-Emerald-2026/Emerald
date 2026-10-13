@@ -42,9 +42,6 @@ export default function AdminShell({
     <div className="mx-auto flex min-h-dvh max-w-4xl flex-col bg-background">
       <header className="sticky top-0 z-20 flex h-14 items-center justify-between border-b border-border bg-card px-4">
         <div className="min-w-0">
-          <p className="text-[11px] text-muted-foreground">
-            Admin {adminSession?.loginId ?? (ADMIN_PUBLIC_ACCESS ? '公開アクセス' : '')}
-          </p>
           <h1 className="truncate font-display text-base font-bold text-foreground">{title}</h1>
         </div>
         <button

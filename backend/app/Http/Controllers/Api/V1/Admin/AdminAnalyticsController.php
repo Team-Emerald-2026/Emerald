@@ -4,9 +4,11 @@ namespace App\Http\Controllers\Api\V1\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Order;
+use App\Models\OrderItem;
 use App\Models\SalesEntry;
 use App\Models\Store;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 class AdminAnalyticsController extends Controller
@@ -106,6 +108,44 @@ class AdminAnalyticsController extends Controller
                 'stores' => $stores,
             ],
         ], 200, [], JSON_UNESCAPED_UNICODE);
+    }
+
+    /**
+     * 売上データをすべてリセットする（元に戻せない）。
+     * 会計（注文・明細）・売上入力・受付番号の採番を消し、各店舗の待ち人数を 0 に戻す。
+     * 店舗・メニュー・ログインアカウント・マップ・イベントは消さない。
+     */
+    public function reset(Request $request)
+    {
+        $this->authorizeAdmin($request);
+
+        $deleted = DB::transaction(function () {
+            $orderCount = Order::query()->count();
+
+            // 明細 → 注文の順で消す（order_items は orders に紐づく）
+            OrderItem::query()->delete();
+            Order::query()->delete();
+
+            $salesEntryCount = 0;
+            if (Schema::hasTable('sales_entries')) {
+                $salesEntryCount = SalesEntry::query()->count();
+                SalesEntry::query()->delete();
+            }
+
+            // 受付番号を C-101 から振り直せるようにする
+            if (Schema::hasTable('ticket_counters')) {
+                DB::table('ticket_counters')->delete();
+            }
+
+            Store::query()->update(['current_queue_count' => 0]);
+
+            return [
+                'orders' => $orderCount,
+                'sales_entries' => $salesEntryCount,
+            ];
+        });
+
+        return response()->json(['data' => $deleted], 200, [], JSON_UNESCAPED_UNICODE);
     }
 
     private function authorizeAdmin(Request $request): void

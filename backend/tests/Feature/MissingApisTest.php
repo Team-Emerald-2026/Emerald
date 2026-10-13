@@ -11,6 +11,7 @@ use App\Models\SalesEntry;
 use App\Models\Store;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Schema;
 use Laravel\Sanctum\Sanctum;
@@ -593,5 +594,95 @@ class MissingApisTest extends TestCase
         $this->getJson('/api/v1/admin/stores')
             ->assertOk()
             ->assertJsonPath('data.0.id', 'store-101');
+    }
+
+    public function test_admin_can_reset_sales_data(): void
+    {
+        $store = $this->createStore('store-101', ['current_queue_count' => 3]);
+        $other = $this->createStore('store-102', ['name' => 'やきそば', 'ticket_prefix' => 'Y']);
+        $this->createStoreUser($store);
+        $item = MenuItem::query()->create([
+            'store_id' => $store->id,
+            'name' => 'ブレンドコーヒー',
+            'description' => 'ホット',
+            'price' => 350,
+            'is_available' => true,
+        ]);
+        $order = Order::query()->create([
+            'store_id' => $store->id,
+            'ticket_number' => 'C-101',
+            'total_price' => 350,
+            'status' => 'settled',
+            'ordered_at' => now(),
+            'settled_at' => now(),
+        ]);
+        OrderItem::query()->create([
+            'order_id' => $order->id,
+            'menu_item_id' => $item->id,
+            'quantity' => 1,
+            'unit_price' => 350,
+            'subtotal' => 350,
+        ]);
+        Order::query()->create([
+            'store_id' => $other->id,
+            'ticket_number' => 'Y-101',
+            'total_price' => 500,
+            'status' => 'issued',
+            'ordered_at' => now(),
+        ]);
+        SalesEntry::query()->create([
+            'store_id' => $store->id,
+            'amount' => 1000,
+            'recorded_at' => now(),
+        ]);
+        DB::table('ticket_counters')->insert([
+            'store_id' => $store->id,
+            'last_number' => 101,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        Sanctum::actingAs($this->createAdmin());
+
+        $this->deleteJson('/api/v1/admin/analytics')
+            ->assertOk()
+            ->assertJsonPath('data.orders', 2)
+            ->assertJsonPath('data.sales_entries', 1);
+
+        $this->assertDatabaseCount('orders', 0);
+        $this->assertDatabaseCount('order_items', 0);
+        $this->assertDatabaseCount('sales_entries', 0);
+        $this->assertDatabaseCount('ticket_counters', 0);
+        $this->assertSame(0, (int) Store::query()->find($store->id)->current_queue_count);
+
+        // 店舗・メニュー・ログインアカウントは消さない
+        $this->assertDatabaseHas('stores', ['id' => $store->id]);
+        $this->assertDatabaseHas('stores', ['id' => $other->id]);
+        $this->assertDatabaseHas('menu_items', ['id' => $item->id]);
+        $this->assertDatabaseHas('users', ['login_id' => 'cafe_admin']);
+
+        $this->getJson('/api/v1/admin/analytics')
+            ->assertOk()
+            ->assertJsonPath('data.total_revenue', 0)
+            ->assertJsonPath('data.total_orders', 0)
+            ->assertJsonPath('data.settled_orders', 0);
+    }
+
+    public function test_reset_sales_data_requires_admin_role(): void
+    {
+        config(['admin.public_access' => false]);
+        $store = $this->createStore();
+        Order::query()->create([
+            'store_id' => $store->id,
+            'ticket_number' => 'C-101',
+            'total_price' => 350,
+            'status' => 'settled',
+            'ordered_at' => now(),
+            'settled_at' => now(),
+        ]);
+        Sanctum::actingAs($this->createStoreUser($store));
+
+        $this->deleteJson('/api/v1/admin/analytics')->assertForbidden();
+
+        $this->assertDatabaseCount('orders', 1);
     }
 }

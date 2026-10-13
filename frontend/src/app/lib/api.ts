@@ -460,6 +460,11 @@ export function fetchAdminAnalytics(token?: string, signal?: AbortSignal) {
   );
 }
 
+/** 売上データ（会計・売上入力・受付番号）をすべて消して待ち人数を 0 に戻す。元に戻せない。 */
+export function resetAdminSales(token?: string, signal?: AbortSignal) {
+  return request('/v1/admin/analytics', { method: 'DELETE', signal, token });
+}
+
 export function fetchAdminStore(token: string, id: string, signal?: AbortSignal) {
   return request(`/v1/admin/stores/${encodeURIComponent(id)}`, { signal, token }).then((payload) =>
     isRecord(payload) ? (payload.data as AdminStore) : null,
