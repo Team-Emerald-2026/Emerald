@@ -23,7 +23,8 @@ interface Booth {
   popular?: boolean; // 人気ブース
 }
 
-const categories: Array<'すべて' | Category> = ['すべて', '体験', 'フード', 'ステージ'];
+// 絞り込みのチップ。「ステージ」は出さない（ステージ・イベントもの のブースは「すべて」で表示される）
+const categories: Array<'すべて' | Category> = ['すべて', '体験', 'フード'];
 
 function toCategory(type?: string): Category {
   switch (type) {
