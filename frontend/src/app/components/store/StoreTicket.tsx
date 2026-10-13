@@ -281,7 +281,7 @@ export default function StoreTicket() {
                       type="button"
                       onClick={() => setConfirm({ id: o.id, kind: 'serve' })}
                       disabled={busyId !== null}
-                      className="flex min-h-11 min-w-28 items-center justify-center gap-1 rounded-lg border border-border py-2 text-sm font-medium text-foreground hover:bg-muted disabled:opacity-40"
+                      className="flex min-h-11 flex-1 items-center justify-center gap-1 rounded-lg border border-border py-2 text-sm font-medium text-foreground hover:bg-muted disabled:opacity-40"
                     >
                       提供完了
                     </button>
@@ -290,7 +290,7 @@ export default function StoreTicket() {
                       onClick={() => setConfirm({ id: o.id, kind: 'cancel' })}
                       disabled={busyId !== null}
                       aria-label={`${o.ticket_number} の注文をキャンセル`}
-                      className="flex min-h-11 items-center justify-center gap-1 rounded-lg border border-red-500/60 px-3 py-2 text-sm font-medium text-red-500 hover:bg-red-500/10 disabled:opacity-40"
+                      className="flex min-h-11 shrink-0 items-center justify-center gap-1 rounded-lg border border-red-500/60 px-3 py-2 text-sm font-medium text-red-500 hover:bg-red-500/10 disabled:opacity-40"
                     >
                       <Ban className="h-4 w-4" />
                       注文キャンセル
