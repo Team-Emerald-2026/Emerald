@@ -14,31 +14,13 @@ import {
   type AdminStore,
   type AdminStoreInput,
 } from '../../lib/api';
+import { facilityTypeInfo } from '../../lib/campusMap';
 import { logoutAdminSession, useFestival } from '../../lib/festivalStore';
 import { ADMIN_PUBLIC_ACCESS } from '../../lib/adminAccess';
 
 const yen = (value: number) => `¥${value.toLocaleString('ja-JP')}`;
 
-const typeLabel = (type: string) => {
-  switch (type) {
-    case 'food':
-      return '飲食ブース';
-    case 'stage':
-      return 'イベントもの';
-    case 'shop':
-      return '物販';
-    case 'information':
-      return '案内';
-    case 'toilet':
-      return 'トイレ';
-    case 'first_aid':
-      return '救護室';
-    case 'support':
-      return 'サポート';
-    default:
-      return '体験ブース';
-  }
-};
+const typeLabel = (type: string) => facilityTypeInfo(type).label;
 
 export default function AdminStores() {
   const adminSession = useFestival((s) => s.adminSession);

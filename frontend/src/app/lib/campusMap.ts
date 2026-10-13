@@ -16,16 +16,38 @@ export const mapImageByFloor: Record<MapFloor, string> = {
 
 /** 管理画面で選べる種類（value はバックエンドに保存される値） */
 export const FACILITY_TYPES = [
-  { value: 'booth', label: '体験ブース', color: 'var(--primary)' },
-  { value: 'food', label: '飲食ブース', color: 'var(--accent)' },
-  { value: 'stage', label: 'イベントもの', color: 'var(--primary)' },
-  { value: 'shop', label: '物販', color: '#7c5cff' },
+  { value: 'booth', label: '体験', color: 'var(--primary)' },
+  { value: 'food', label: 'フード', color: 'var(--accent)' },
   { value: 'information', label: '案内', color: '#0ea5a3' },
+  { value: 'shop', label: '金券販売', color: '#7c5cff' },
+] as const;
+
+/**
+ * 以前は選べた種類。今は新しく選べないが、すでに登録済みの場所が持っていることがあるので、
+ * 表示（ラベル・色）のためだけに残す。
+ */
+export const LEGACY_FACILITY_TYPES = [
+  { value: 'stage', label: 'イベントもの', color: 'var(--primary)' },
   { value: 'toilet', label: 'トイレ', color: '#3b82f6' },
   { value: 'first_aid', label: '救護室', color: '#e11d48' },
   { value: 'support', label: 'サポート', color: '#d97706' },
 ] as const;
 
 export function facilityTypeInfo(type: string) {
-  return FACILITY_TYPES.find((item) => item.value === type) ?? FACILITY_TYPES[0];
+  return (
+    FACILITY_TYPES.find((item) => item.value === type) ??
+    LEGACY_FACILITY_TYPES.find((item) => item.value === type) ??
+    FACILITY_TYPES[0]
+  );
+}
+
+/**
+ * 種類の選択肢。通常は FACILITY_TYPES だけ。
+ * 登録済みの種類が旧種類のときは、画面で空欄にならないよう、その種類も（旧）として足す。
+ */
+export function facilityTypeOptions(currentType?: string | null) {
+  const legacy = LEGACY_FACILITY_TYPES.find((item) => item.value === currentType);
+  return legacy
+    ? [...FACILITY_TYPES, { value: legacy.value, label: `${legacy.label}（旧）`, color: legacy.color }]
+    : [...FACILITY_TYPES];
 }
