@@ -17,6 +17,8 @@ class EventNoticeResource extends JsonResource
             'starts_at' => optional($this->starts_at)->toISOString(),
             'ends_at' => optional($this->ends_at)->toISOString(),
             'is_published' => (bool) $this->is_published,
+            'ticker_lead_minutes' => $this->ticker_lead_minutes,
+            'ticker_after_minutes' => $this->ticker_after_minutes,
         ];
 
         return [

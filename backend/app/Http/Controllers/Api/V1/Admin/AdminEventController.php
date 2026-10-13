@@ -76,6 +76,9 @@ class AdminEventController extends Controller
             'starts_at' => ['nullable', 'date'],
             'ends_at' => ['nullable', 'date', 'after_or_equal:starts_at'],
             'is_published' => ['sometimes', 'boolean'],
+            // 電光掲示板に流す設定。ticker_lead_minutes が null なら流さない
+            'ticker_lead_minutes' => ['nullable', 'integer', 'min:0', 'max:180'],
+            'ticker_after_minutes' => ['nullable', 'integer', 'min:0', 'max:180'],
         ]);
     }
 

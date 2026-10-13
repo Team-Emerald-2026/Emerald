@@ -500,6 +500,10 @@ export interface EventNotice {
   starts_at: string | null;
   ends_at: string | null;
   is_published?: boolean;
+  /** 開始の何分前からホームの電光掲示板に流すか。null は流さない */
+  ticker_lead_minutes?: number | null;
+  /** 開始の何分後まで流すか。null は 20 分 */
+  ticker_after_minutes?: number | null;
 }
 
 export interface EventNoticeInput {
@@ -509,6 +513,22 @@ export interface EventNoticeInput {
   starts_at?: string | null;
   ends_at?: string | null;
   is_published?: boolean;
+  ticker_lead_minutes?: number | null;
+  ticker_after_minutes?: number | null;
+}
+
+/** ホームの電光掲示板に、いま流すお知らせ */
+export interface TickerItem {
+  id: string;
+  title: string;
+  body: string;
+  starts_at: string;
+}
+
+export function fetchTicker(signal?: AbortSignal) {
+  return request('/v1/ticker', { signal }).then((payload) =>
+    normalizeCollection<TickerItem>(payload),
+  );
 }
 
 export function fetchEvents(signal?: AbortSignal) {
