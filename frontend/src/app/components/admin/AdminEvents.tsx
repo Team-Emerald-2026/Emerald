@@ -38,7 +38,16 @@ type FormState = {
   /** HH:MM（イベントのみ） */
   time: string;
   is_published: boolean;
+  /** ホームの電光掲示板に流すか（イベントのみ） */
+  ticker: boolean;
+  /** 開始の何分前から流すか */
+  tickerLead: string;
+  /** 開始の何分後まで流すか */
+  tickerAfter: string;
 };
+
+const TICKER_DEFAULT_LEAD = '10';
+const TICKER_DEFAULT_AFTER = '20';
 
 const emptyForm = (day: EventDayKey): FormState => ({
   title: '',
@@ -47,7 +56,26 @@ const emptyForm = (day: EventDayKey): FormState => ({
   day,
   time: '12:00',
   is_published: true,
+  ticker: false,
+  tickerLead: TICKER_DEFAULT_LEAD,
+  tickerAfter: TICKER_DEFAULT_AFTER,
 });
+
+function tickerFields(item: EventNotice) {
+  return {
+    ticker: item.ticker_lead_minutes != null,
+    tickerLead: String(item.ticker_lead_minutes ?? TICKER_DEFAULT_LEAD),
+    tickerAfter: String(item.ticker_after_minutes ?? TICKER_DEFAULT_AFTER),
+  };
+}
+
+/** 0〜180 の整数ならその値、それ以外は null */
+function toMinutes(value: string): number | null {
+  const trimmed = value.trim();
+  if (!/^\d+$/.test(trimmed)) return null;
+  const minutes = Number(trimmed);
+  return minutes <= 180 ? minutes : null;
+}
 
 function toForm(item: EventNotice, fallbackDay: EventDayKey): FormState {
   const parts = jstParts(item.starts_at);
@@ -61,6 +89,7 @@ function toForm(item: EventNotice, fallbackDay: EventDayKey): FormState {
       day: knownDay,
       time: '12:00',
       is_published: item.is_published ?? true,
+      ...tickerFields(item),
     };
   }
 
@@ -71,6 +100,7 @@ function toForm(item: EventNotice, fallbackDay: EventDayKey): FormState {
     day: knownDay || fallbackDay,
     time: parts ? minutesToTime(parts.minutes) : '12:00',
     is_published: item.is_published ?? true,
+    ...tickerFields(item),
   };
 }
 
@@ -213,6 +243,15 @@ export default function AdminEvents() {
       startsAt = toStartsAt(form.day, '00:00');
     }
 
+    // 電光掲示板は開始時刻のあるイベントだけ。お知らせは流さない
+    const useTicker = form.type === 'event' && form.ticker;
+    const tickerLead = useTicker ? toMinutes(form.tickerLead) : null;
+    const tickerAfter = useTicker ? toMinutes(form.tickerAfter) : null;
+    if (useTicker && (tickerLead == null || tickerAfter == null)) {
+      setError('電光掲示板の「何分前から」「何分後まで」は 0〜180 の数字で入力してください。');
+      return;
+    }
+
     // 終了時刻は付けない（公開は「公開する」のチェックで切り替える）
     const input: EventNoticeInput = {
       title: form.title.trim(),
@@ -221,6 +260,8 @@ export default function AdminEvents() {
       starts_at: startsAt,
       ends_at: null,
       is_published: form.is_published,
+      ticker_lead_minutes: tickerLead,
+      ticker_after_minutes: useTicker ? tickerAfter : null,
     };
 
     setSaving(true);
@@ -278,6 +319,14 @@ export default function AdminEvents() {
           {item.title}
           {!item.is_published && (
             <span className="ml-2 text-xs font-medium text-muted-foreground">（非公開）</span>
+          )}
+          {item.ticker_lead_minutes != null && (
+            <span
+              className="ml-2 rounded-md px-1.5 py-0.5 text-[10px] font-bold text-white"
+              style={{ backgroundColor: 'var(--accent)' }}
+            >
+              掲示板
+            </span>
           )}
         </p>
         {item.body && <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{item.body}</p>}
@@ -499,6 +548,53 @@ export default function AdminEvents() {
                 />
                 公開する（オフだと来場者には見えません）
               </label>
+
+              {form.type === 'event' && (
+                <div className="rounded-xl border border-border p-3">
+                  <label className="flex items-center gap-2 text-sm font-medium text-foreground">
+                    <input
+                      type="checkbox"
+                      checked={form.ticker}
+                      onChange={(e) => updateField('ticker', e.target.checked)}
+                    />
+                    ホームの電光掲示板に流す
+                  </label>
+                  {form.ticker && (
+                    <>
+                      <div className="mt-3 grid grid-cols-2 gap-2">
+                        <label className="block text-sm">
+                          <span className="mb-1 block text-muted-foreground">開始の何分前から</span>
+                          <input
+                            type="number"
+                            inputMode="numeric"
+                            min={0}
+                            max={180}
+                            value={form.tickerLead}
+                            onChange={(e) => updateField('tickerLead', e.target.value)}
+                            className="w-full rounded-lg border border-input bg-background px-3 py-2.5 text-foreground"
+                          />
+                        </label>
+                        <label className="block text-sm">
+                          <span className="mb-1 block text-muted-foreground">開始の何分後まで</span>
+                          <input
+                            type="number"
+                            inputMode="numeric"
+                            min={0}
+                            max={180}
+                            value={form.tickerAfter}
+                            onChange={(e) => updateField('tickerAfter', e.target.value)}
+                            className="w-full rounded-lg border border-input bg-background px-3 py-2.5 text-foreground"
+                          />
+                        </label>
+                      </div>
+                      <p className="mt-2 text-xs text-muted-foreground">
+                        例: 14:00開始で「10分前から・20分後まで」なら、13:50〜14:20 にホームの動画の上で右から左へ流れます。
+                        公開がオフのときは流れません。
+                      </p>
+                    </>
+                  )}
+                </div>
+              )}
 
               {error && <p className="text-sm text-red-500">{error}</p>}
             </div>

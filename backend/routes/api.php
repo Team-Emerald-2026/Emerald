@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\V1\Admin\AdminMapFacilityController;
 use App\Http\Controllers\Api\V1\Admin\AdminStoreController;
 use App\Http\Controllers\Api\V1\CallNumber\CallNumberController;
 use App\Http\Controllers\Api\V1\Event\EventController;
+use App\Http\Controllers\Api\V1\Event\TickerController;
 use App\Http\Controllers\Api\V1\Map\FacilityController;
 use App\Http\Controllers\Api\V1\Monitor\MonitorCallNumberController;
 use App\Http\Controllers\Api\V1\Store\StoreController;
@@ -37,6 +38,7 @@ Route::prefix('v1')->group(function () {
     Route::get('monitor/call-numbers', [MonitorCallNumberController::class, 'index']);
     Route::get('events', [EventController::class, 'index']);
     Route::get('events/{id}', [EventController::class, 'show']);
+    Route::get('ticker', [TickerController::class, 'index']);
     Route::post('auth/login', [AuthController::class, 'login']);
     Route::post('auth/register', [AuthController::class, 'register']);
 

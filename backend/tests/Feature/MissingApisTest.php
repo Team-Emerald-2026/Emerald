@@ -685,4 +685,84 @@ class MissingApisTest extends TestCase
 
         $this->assertDatabaseCount('orders', 1);
     }
+
+    private function createTickerEvent(string $title, $startsAt, ?int $lead, ?int $after = null, bool $published = true): EventNotice
+    {
+        return EventNotice::query()->create([
+            'title' => $title,
+            'body' => '詳細',
+            'type' => 'event',
+            'starts_at' => $startsAt,
+            'is_published' => $published,
+            'ticker_lead_minutes' => $lead,
+            'ticker_after_minutes' => $after,
+        ]);
+    }
+
+    public function test_ticker_returns_events_inside_their_window(): void
+    {
+        $this->travelTo(now()->setTime(5, 0)); // 14:00 JST の開始 = 05:00 UTC
+
+        // 開始の10分前〜開始の20分後（既定）
+        $this->createTickerEvent('ゲスト登壇', now(), 10);
+        // まだ早い（開始の1時間後が開始、10分前から）
+        $this->createTickerEvent('まだ先', now()->addHour(), 10);
+        // 終わった（開始の1時間前、流すのは開始20分後まで）
+        $this->createTickerEvent('終了済み', now()->subHour(), 10);
+        // 掲示板に流さない設定
+        $this->createTickerEvent('流さない', now(), null);
+        // 非公開
+        $this->createTickerEvent('非公開', now(), 10, null, false);
+
+        $this->getJson('/api/v1/ticker')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.title', 'ゲスト登壇');
+    }
+
+    public function test_ticker_window_edges_and_custom_after_minutes(): void
+    {
+        $this->travelTo(now()->setTime(5, 0));
+        $this->createTickerEvent('10分前から', now()->addMinutes(10), 10);
+        $this->createTickerEvent('11分前から', now()->addMinutes(11), 10);
+        $this->createTickerEvent('5分後まで', now()->subMinutes(5), 0, 5);
+        $this->createTickerEvent('6分後まで', now()->subMinutes(6), 0, 5);
+
+        $titles = collect($this->getJson('/api/v1/ticker')->assertOk()->json('data'))->pluck('title');
+
+        $this->assertEqualsCanonicalizing(['10分前から', '5分後まで'], $titles->all());
+    }
+
+    public function test_ticker_is_empty_without_active_events(): void
+    {
+        $this->getJson('/api/v1/ticker')
+            ->assertOk()
+            ->assertExactJson(['data' => []]);
+    }
+
+    public function test_admin_can_save_ticker_settings_on_event(): void
+    {
+        Sanctum::actingAs($this->createAdmin());
+
+        $response = $this->postJson('/api/v1/admin/events', [
+            'title' => 'YouTubeゲスト',
+            'body' => '14:00から登壇',
+            'type' => 'event',
+            'starts_at' => '2026-10-24T05:00:00Z',
+            'ticker_lead_minutes' => 10,
+            'ticker_after_minutes' => 30,
+        ])->assertCreated()
+            ->assertJsonPath('data.attributes.ticker_lead_minutes', 10);
+
+        $id = $response->json('data.id') ?? $response->json('id');
+
+        $this->patchJson("/api/v1/admin/events/{$id}", ['ticker_lead_minutes' => null])
+            ->assertOk();
+
+        $this->assertDatabaseHas('event_notices', [
+            'id' => $id,
+            'ticker_lead_minutes' => null,
+            'ticker_after_minutes' => 30,
+        ]);
+    }
 }

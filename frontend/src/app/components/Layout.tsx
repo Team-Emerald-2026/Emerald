@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { Home, Tent, Hash, CalendarDays, MapPin, Sun, Moon } from 'lucide-react';
+import HomeTicker from './HomeTicker';
 
 /** ライト/ダークの切替ボタン。選択は localStorage('theme') に保存。 */
 function ThemeToggle() {
@@ -55,6 +56,9 @@ export default function Layout() {
         </span>
         <ThemeToggle />
       </header>
+
+      {/* 電光掲示板：ホームだけ。main の外に置くので、スクロールしてもヘッダーの下に残る */}
+      {pathname === '/' && <HomeTicker />}
 
       {/* メイン：下部ナビは文書フローに置くので、ここでは余白で隠さない */}
       <main className="min-h-0 flex-1 overflow-y-auto">
