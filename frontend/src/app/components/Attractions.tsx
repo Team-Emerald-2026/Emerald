@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Ticket, Flame, MapPin, Info, ShoppingBag } from 'lucide-react';
+import { Ticket, Flame, MapPin, Info, ShoppingBag, ChevronDown, ChevronUp } from 'lucide-react';
 import {
   fetchMapFacilities,
+  fetchRestaurant,
   fetchRestaurants,
   type BackendMapFacility,
   type BackendStore,
@@ -60,6 +61,81 @@ function toBooth(store: BackendStore, facility?: BackendMapFacility): Booth {
   };
 }
 
+/** 詳細（説明・メニュー）の取得状況。開いたブースだけ、サーバーから取りに行く */
+type DetailState =
+  | { status: 'loading' }
+  | { status: 'error' }
+  | { status: 'ready'; store: BackendStore };
+
+function formatPrice(price: number) {
+  return `¥${Number(price).toLocaleString('ja-JP')}`;
+}
+
+/** カードを開いたときに出す、ブースの説明・メニュー・待ち状況 */
+function BoothDetail({ booth, detail }: { booth: Booth; detail?: DetailState }) {
+  if (!detail || detail.status === 'loading') {
+    return (
+      <div className="mt-3 space-y-2 rounded-xl bg-muted p-3" aria-label="詳細を読み込み中">
+        <SkeletonText className="w-4/5" />
+        <SkeletonText className="w-2/3" />
+        <SkeletonText className="w-1/2" />
+      </div>
+    );
+  }
+
+  if (detail.status === 'error') {
+    return (
+      <div className="mt-3 rounded-xl bg-muted p-3 text-sm text-muted-foreground">
+        詳細を取得できませんでした。通信を確認して、もう一度開いてください。
+      </div>
+    );
+  }
+
+  const description = detail.store.description?.trim();
+  const menuItems = detail.store.menu_items ?? [];
+  // 体験ブースなどは、メニューがなくて普通なので、メニューがあるときだけ出す（フードは未登録の案内も出す）
+  const showMenu = menuItems.length > 0 || booth.category === 'フード';
+
+  return (
+    <div className="mt-3 space-y-3 rounded-xl bg-muted p-3 text-sm">
+      <div>
+        <p className="text-xs font-bold text-muted-foreground">ブースの説明</p>
+        <p className="mt-1 whitespace-pre-line text-foreground">
+          {description ? description : 'ブースの説明は、まだ登録されていません。'}
+        </p>
+      </div>
+
+      {showMenu && (
+        <div>
+          <p className="text-xs font-bold text-muted-foreground">メニュー</p>
+          {menuItems.length === 0 ? (
+            <p className="mt-1 text-muted-foreground">メニューは、まだ登録されていません。</p>
+          ) : (
+            <ul className="mt-1 divide-y divide-border">
+              {menuItems.map((item) => (
+                <li key={item.id} className="flex items-start justify-between gap-3 py-1.5">
+                  <div className="min-w-0">
+                    <p className="text-foreground">{item.name}</p>
+                    {item.description && (
+                      <p className="text-xs text-muted-foreground">{item.description}</p>
+                    )}
+                  </div>
+                  <p className="shrink-0 font-bold text-foreground">{formatPrice(item.price)}</p>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+
+      <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+        <span>場所: {booth.area}</span>
+        <span>待ち状況: {booth.wait.label}</span>
+      </div>
+    </div>
+  );
+}
+
 function BoothCardSkeleton() {
   return (
     <li className="rounded-2xl border border-border bg-card p-4">
@@ -90,6 +166,35 @@ export default function Attractions() {
   const detailId = searchParams.get('detail');
   const list = booths.filter((b) => filter === 'すべて' || b.category === filter);
   const selectedBooth = booths.find((b) => b.id === detailId) ?? null;
+
+  // 開いたブースの詳細（説明・メニュー）。一度取ったものは、閉じても使い回す
+  const [details, setDetails] = useState<Record<string, DetailState>>({});
+  const requestedRef = useRef<Set<string>>(new Set());
+  const detailPanelRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!detailId || !selectedBooth) return;
+    if (requestedRef.current.has(detailId)) return;
+    requestedRef.current.add(detailId);
+
+    setDetails((current) => ({ ...current, [detailId]: { status: 'loading' } }));
+    fetchRestaurant(detailId)
+      .then((store) => {
+        if (!store) throw new Error('empty response');
+        setDetails((current) => ({ ...current, [detailId]: { status: 'ready', store } }));
+      })
+      .catch(() => {
+        // 失敗したら、次に開いたときにもう一度取りに行けるようにする
+        requestedRef.current.delete(detailId);
+        setDetails((current) => ({ ...current, [detailId]: { status: 'error' } }));
+      });
+  }, [detailId, selectedBooth]);
+
+  // 詳細を開いたら、その位置までスクロールして見える場所に出す
+  useEffect(() => {
+    if (!detailId || !selectedBooth) return;
+    detailPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }, [detailId, selectedBooth]);
 
   const showDetail = (id: string) => {
     const next = new URLSearchParams(searchParams);
@@ -226,15 +331,25 @@ export default function Attractions() {
                 )}
 
                 {detailId === b.id && (
-                  <div className="mt-3 rounded-xl bg-muted p-3 text-sm text-muted-foreground">
-                    <p>
-                      {b.name} は {b.area} の{b.category}ブースです。現在の待ち状況は
-                      「{b.wait.label}」です。
-                    </p>
+                  <div ref={detailPanelRef}>
+                    <BoothDetail booth={b} detail={details[b.id]} />
                   </div>
                 )}
 
                 <div className="mt-4 flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => (detailId === b.id ? hideDetail() : showDetail(b.id))}
+                    aria-expanded={detailId === b.id}
+                    className="inline-flex min-h-11 flex-1 items-center justify-center gap-1 rounded-xl border border-border px-3 py-2 text-xs font-bold text-foreground hover:bg-muted"
+                  >
+                    {detailId === b.id ? (
+                      <ChevronUp className="h-3.5 w-3.5" />
+                    ) : (
+                      <ChevronDown className="h-3.5 w-3.5" />
+                    )}
+                    {detailId === b.id ? '閉じる' : '詳細を見る'}
+                  </button>
                   <Link
                     to={`/map?store=${encodeURIComponent(b.id)}`}
                     className="inline-flex min-h-11 flex-1 items-center justify-center gap-1 rounded-xl border border-border px-3 py-2 text-xs font-bold text-foreground hover:bg-muted"
