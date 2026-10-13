@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { AdminMapFacility, AdminStore, AdminStoreInput } from '../../lib/api';
+import { facilityTypeOptions } from '../../lib/campusMap';
 
 interface Props {
   store: AdminStore | null;
@@ -31,17 +32,6 @@ const emptyInput: AdminStoreInput = {
   current_wait_min: 5,
   current_queue_count: 0,
 };
-
-const storeTypes = [
-  { value: 'booth', label: '体験ブース' },
-  { value: 'food', label: '飲食ブース' },
-  { value: 'stage', label: 'イベントもの' },
-  { value: 'shop', label: '物販' },
-  { value: 'information', label: '案内' },
-  { value: 'toilet', label: 'トイレ' },
-  { value: 'first_aid', label: '救護室' },
-  { value: 'support', label: 'サポート' },
-] as const;
 
 interface LocationOption {
   key: string;
@@ -189,7 +179,7 @@ export default function AdminStoreForm({
             onChange={(event) => update('type', event.target.value)}
             className="w-full rounded-lg border border-input bg-background px-3 py-2.5 text-foreground outline-none"
           >
-            {storeTypes.map((type) => (
+            {facilityTypeOptions(input.type).map((type) => (
               <option key={type.value} value={type.value}>
                 {type.label}
               </option>

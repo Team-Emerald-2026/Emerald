@@ -3,7 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import {
   FlaskConical,
   UtensilsCrossed,
-  ShoppingBag,
+  Ticket,
   DoorClosed,
   Info as InfoIcon,
   HeartPulse,
@@ -13,7 +13,12 @@ import {
 import { fetchMapFacilities, type BackendMapFacility } from '../lib/api';
 import { floors, mapImageByFloor, type MapFloor } from '../lib/campusMap';
 
-type BoothType = '体験' | 'フード' | '物販' | 'トイレ' | '案内' | '救護室' | 'サポート';
+// 管理画面で選べるのは 体験 / フード / 案内 / 金券販売 の4つ。
+// トイレ・救護室・サポートは、以前に登録された場所を表示するためだけに残している。
+type BoothType = 'フード' | '体験' | '案内' | '金券販売' | 'トイレ' | '救護室' | 'サポート';
+
+/** 凡例・絞り込みの並び順 */
+const typeOrder: BoothType[] = ['フード', '体験', '案内', '金券販売', 'トイレ', '救護室', 'サポート'];
 type Floor = `${number}F`;
 
 interface Facility {
@@ -41,7 +46,7 @@ const campusMap = {
 const typeIcon: Record<BoothType, LucideIcon> = {
   体験: FlaskConical,
   フード: UtensilsCrossed,
-  物販: ShoppingBag,
+  金券販売: Ticket,
   トイレ: DoorClosed,
   案内: InfoIcon,
   救護室: HeartPulse,
@@ -51,7 +56,7 @@ const typeIcon: Record<BoothType, LucideIcon> = {
 const typeColor: Record<BoothType, string> = {
   体験: 'var(--primary)',
   フード: 'var(--accent)',
-  物販: '#7c5cff',
+  金券販売: '#7c5cff',
   トイレ: '#3b82f6',
   案内: '#0ea5a3',
   救護室: '#e11d48',
@@ -64,8 +69,9 @@ function toBoothType(type: string): BoothType {
     case 'フード':
       return 'フード';
     case 'shop':
+    case '金券販売':
     case '物販':
-      return '物販';
+      return '金券販売';
     case 'toilet':
     case 'トイレ':
       return 'トイレ';
@@ -165,7 +171,10 @@ export default function CampusMap() {
   }, [displayFacilities, targetStoreId, targetFacilityId]);
 
   const boothTypes = useMemo(
-    () => Array.from(new Set(displayFacilities.map((f) => f.type))),
+    () =>
+      Array.from(new Set(displayFacilities.map((f) => f.type))).sort(
+        (a, b) => typeOrder.indexOf(a) - typeOrder.indexOf(b),
+      ),
     [displayFacilities],
   );
 
@@ -309,7 +318,9 @@ export default function CampusMap() {
         {filtered.map((f) => {
           const isSelected = selectedFacility?.id === f.id;
           const hasSelection = selectedFacility != null;
+          const PinIcon = typeIcon[f.type];
           return (
+            // 外側のボタンの余白で、指で押せる範囲（約44px）を確保する
             <button
               key={f.id}
               type="button"
@@ -317,22 +328,28 @@ export default function CampusMap() {
                 e.stopPropagation();
                 selectFacility(f);
               }}
-              className={`absolute max-w-[20%] -translate-x-1/2 -translate-y-1/2 truncate whitespace-nowrap rounded-md px-1.5 py-1 text-[10px] font-bold leading-none text-white shadow-md transition ${
-                isSelected
-                  ? 'z-20 scale-110 ring-2 ring-white'
-                  : hasSelection
-                    ? 'z-0 opacity-55'
-                    : 'z-0'
+              className={`absolute -translate-x-1/2 -translate-y-1/2 p-1.5 transition ${
+                isSelected ? 'z-20' : hasSelection ? 'z-0 opacity-55' : 'z-0'
               }`}
-              style={{
-                left: `${f.x}%`,
-                top: `${f.y}%`,
-                backgroundColor: typeColor[f.type],
-              }}
-              title={f.name}
+              style={{ left: `${f.x}%`, top: `${f.y}%` }}
+              title={pinText(f)}
+              aria-label={roomNote(f) ? `${f.name}（${roomNote(f)}）` : f.name}
               aria-pressed={isSelected}
             >
-              {pinText(f)}
+              <span
+                className={`grid h-7 w-7 place-items-center rounded-full border-2 border-white shadow-md transition-transform ${
+                  isSelected ? 'scale-125 ring-2 ring-white' : ''
+                }`}
+                style={{ backgroundColor: typeColor[f.type] }}
+              >
+                <PinIcon className="h-3.5 w-3.5 text-white" aria-hidden="true" />
+              </span>
+              {isSelected && (
+                <span className="pointer-events-none absolute bottom-full left-1/2 mb-1 max-w-40 -translate-x-1/2 truncate whitespace-nowrap rounded-md bg-black/80 px-2 py-1 text-[11px] font-bold leading-none text-white shadow-md">
+                  {f.name}
+                  {roomNote(f) ? `（${roomNote(f)}）` : ''}
+                </span>
+              )}
             </button>
           );
         })}
@@ -342,6 +359,25 @@ export default function CampusMap() {
           </p>
         )}
       </div>
+
+      {boothTypes.length > 0 && (
+        <ul className="flex flex-wrap gap-x-3 gap-y-1.5 px-1" aria-label="アイコンの意味">
+          {boothTypes.map((t) => {
+            const LegendIcon = typeIcon[t];
+            return (
+              <li key={t} className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <span
+                  className="grid h-5 w-5 place-items-center rounded-full"
+                  style={{ backgroundColor: typeColor[t] }}
+                >
+                  <LegendIcon className="h-3 w-3 text-white" aria-hidden="true" />
+                </span>
+                {t}
+              </li>
+            );
+          })}
+        </ul>
+      )}
 
       {import.meta.env.DEV && clickPos && (
         <p className="text-sm text-muted-foreground">

@@ -16,8 +16,8 @@ import {
   type AdminMapFacility,
 } from '../../lib/api';
 import {
-  FACILITY_TYPES,
   facilityTypeInfo,
+  facilityTypeOptions,
   floors,
   mapImageByFloor,
   type MapFloor,
@@ -432,7 +432,7 @@ export default function AdminMap() {
               onChange={(event) => setDraft({ ...draft, type: event.target.value })}
               className="w-full rounded-lg border border-input bg-background px-3 py-2.5 text-foreground"
             >
-              {FACILITY_TYPES.map((type) => (
+              {facilityTypeOptions(draft.type).map((type) => (
                 <option key={type.value} value={type.value}>
                   {type.label}
                 </option>
@@ -531,7 +531,7 @@ export default function AdminMap() {
                   onChange={(event) => setEditType(event.target.value)}
                   className="w-full rounded-lg border border-input bg-background px-3 py-2.5 text-foreground"
                 >
-                  {FACILITY_TYPES.map((type) => (
+                  {facilityTypeOptions(selected.type).map((type) => (
                     <option key={type.value} value={type.value}>
                       {type.label}
                     </option>
