@@ -426,11 +426,13 @@ class AccountingController extends Controller
             // First ticket for this store: determine starting point from existing orders to avoid collisions.
             if (!$counter) {
                 // Find max numeric suffix from existing ticket_numbers like '<prefix>-<num>'
+                // （CAST ... AS UNSIGNED は MySQL 専用で Postgres では失敗するため、PHP 側で計算する）
                 $max = Order::query()
                     ->where('store_id', $storeId)
                     ->where('ticket_number', 'like', $prefix . '-%')
-                    ->selectRaw('MAX(CAST(SUBSTRING(ticket_number, ?) AS UNSIGNED)) as max', [strlen($prefix) + 2])
-                    ->value('max');
+                    ->pluck('ticket_number')
+                    ->map(fn ($number) => (int) substr((string) $number, strlen($prefix) + 1))
+                    ->max();
 
                 // If no existing tickets, start at 101; otherwise start at max + 1
                 $start = ($max ? (int) $max : 100) + 1;
