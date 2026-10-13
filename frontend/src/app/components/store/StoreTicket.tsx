@@ -4,13 +4,14 @@ import { useFestival, setBigNumber, logoutStore } from '../../lib/festivalStore'
 import {
   ApiError,
   callBoothOrder,
+  cancelBoothOrder,
   describeOrderError,
   getBoothOrderStage,
   serveBoothOrder,
   type BoothOrder,
 } from '../../lib/api';
 import { useBoothOrders } from '../../lib/useBoothOrders';
-import { Megaphone, Check, Maximize2, X } from 'lucide-react';
+import { Ban, Megaphone, Check, Maximize2, X } from 'lucide-react';
 
 const pipeline = ['受付', '提供待ち', '呼び出し中', '提供済み'] as const;
 
@@ -32,7 +33,8 @@ export default function StoreTicket() {
     upsertOrder,
   } = useBoothOrders(session?.token, { onUnauthorized: logoutStore });
 
-  const [confirmId, setConfirmId] = useState<string | null>(null);
+  // 確認中の操作（提供完了 / 注文のキャンセル）
+  const [confirm, setConfirm] = useState<{ id: string; kind: 'serve' | 'cancel' } | null>(null);
   const [fullscreen, setFullscreen] = useState(false);
   // 操作中の注文（連打しても、同じ注文に二重に送らない）
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -55,7 +57,7 @@ export default function StoreTicket() {
       }
       setActionError(describeOrderError(err, '操作に失敗しました。もう一度お試しください。'));
       if (err instanceof ApiError && (err.status === 409 || err.status === 404)) {
-        setConfirmId(null);
+        setConfirm(null);
         void refresh();
       }
     } finally {
@@ -76,8 +78,19 @@ export default function StoreTicket() {
       const updated = await serveBoothOrder(session!.token, order.id);
       upsertOrder(updated);
       if (bigNumber === order.ticket_number) setBigNumber(null);
-      setConfirmId(null);
+      setConfirm(null);
       setFullscreen(false);
+    });
+
+  const completeCancel = (order: BoothOrder) =>
+    runAction(order.id, async () => {
+      const updated = await cancelBoothOrder(session!.token, order.id);
+      upsertOrder(updated);
+      if (bigNumber === order.ticket_number) {
+        setBigNumber(null);
+        setFullscreen(false);
+      }
+      setConfirm(null);
     });
 
   return (
@@ -149,7 +162,8 @@ export default function StoreTicket() {
         <ul className="space-y-2">
           {orders.map((o) => {
             const called = getBoothOrderStage(o) === 'called';
-            const confirming = confirmId === o.id;
+            const confirming = confirm?.id === o.id;
+            const confirmKind = confirming ? confirm.kind : null;
             const busy = busyId === o.id;
             return (
               <li key={o.id} className="rounded-2xl border border-border bg-card p-4">
@@ -199,31 +213,56 @@ export default function StoreTicket() {
 
                 {confirming ? (
                   <div className="mt-3 rounded-xl border border-border bg-muted/50 p-3">
-                    <p className="text-sm font-bold text-foreground">
-                      {o.ticket_number} を提供済みにしますか？
-                    </p>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      提供済み画面から「未提供に戻す」で取り消せます。
-                    </p>
+                    {confirmKind === 'cancel' ? (
+                      <>
+                        <p className="text-sm font-bold text-foreground">
+                          {o.ticket_number} の注文をキャンセルしますか？
+                        </p>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          待ち人数が1人減り、売上からも外れます。元には戻せません。返金は、アプリの外で行ってください。
+                        </p>
+                      </>
+                    ) : (
+                      <>
+                        <p className="text-sm font-bold text-foreground">
+                          {o.ticket_number} を提供済みにしますか？
+                        </p>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          提供済み画面から「未提供に戻す」で取り消せます。
+                        </p>
+                      </>
+                    )}
                     <div className="mt-3 flex gap-2">
                       <button
                         type="button"
-                        onClick={() => setConfirmId(null)}
+                        onClick={() => setConfirm(null)}
                         disabled={busy}
                         className="flex min-h-11 flex-1 items-center justify-center rounded-lg border border-border py-2 text-sm font-bold text-foreground hover:bg-muted disabled:opacity-40"
                       >
-                        キャンセル
+                        やめる
                       </button>
-                      <button
-                        type="button"
-                        onClick={() => void completeServe(o)}
-                        disabled={busy}
-                        className="flex min-h-11 flex-1 items-center justify-center gap-1 rounded-lg py-2 text-sm font-bold text-white disabled:opacity-40"
-                        style={{ backgroundColor: 'var(--busy)' }}
-                      >
-                        <Check className="h-4 w-4" />
-                        {busy ? '送信中...' : '提供完了する'}
-                      </button>
+                      {confirmKind === 'cancel' ? (
+                        <button
+                          type="button"
+                          onClick={() => void completeCancel(o)}
+                          disabled={busy}
+                          className="flex min-h-11 flex-1 items-center justify-center gap-1 rounded-lg bg-red-500 py-2 text-sm font-bold text-white disabled:opacity-40"
+                        >
+                          <Ban className="h-4 w-4" />
+                          {busy ? '送信中...' : 'キャンセルする'}
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => void completeServe(o)}
+                          disabled={busy}
+                          className="flex min-h-11 flex-1 items-center justify-center gap-1 rounded-lg py-2 text-sm font-bold text-white disabled:opacity-40"
+                          style={{ backgroundColor: 'var(--busy)' }}
+                        >
+                          <Check className="h-4 w-4" />
+                          {busy ? '送信中...' : '提供完了する'}
+                        </button>
+                      )}
                     </div>
                   </div>
                 ) : (
@@ -240,11 +279,21 @@ export default function StoreTicket() {
                     </button>
                     <button
                       type="button"
-                      onClick={() => setConfirmId(o.id)}
+                      onClick={() => setConfirm({ id: o.id, kind: 'serve' })}
                       disabled={busyId !== null}
                       className="flex min-h-11 min-w-28 items-center justify-center gap-1 rounded-lg border border-border py-2 text-sm font-medium text-foreground hover:bg-muted disabled:opacity-40"
                     >
                       提供完了
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setConfirm({ id: o.id, kind: 'cancel' })}
+                      disabled={busyId !== null}
+                      aria-label={`${o.ticket_number} の注文をキャンセル`}
+                      className="flex min-h-11 items-center justify-center gap-1 rounded-lg border border-red-500/60 px-3 py-2 text-sm font-medium text-red-500 hover:bg-red-500/10 disabled:opacity-40"
+                    >
+                      <Ban className="h-4 w-4" />
+                      注文キャンセル
                     </button>
                   </div>
                 )}

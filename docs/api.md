@@ -45,6 +45,7 @@
 | /booth/accounting/orders/{id}/call | PATCH | Bearer Token | 会計を呼び出し中にする |
 | /booth/accounting/orders/{id}/serve | PATCH | Bearer Token | 会計を提供完了にする |
 | /booth/accounting/orders/{id}/unserve | PATCH | Bearer Token | 提供完了を取り消して、提供待ちに戻す |
+| /booth/accounting/orders/{id}/cancel | PATCH | Bearer Token | 提供前の注文（提供待ち・呼び出し中）をキャンセルする |
 | /booth/sales | GET | Bearer Token | 当日売上記録一覧 |
 | /booth/sales | POST | Bearer Token | 当日売上入力 |
 | /booth/sales/{id} | PATCH | Bearer Token | 当日売上記録の編集 |
@@ -434,6 +435,13 @@ PATCH /api/v1/booth/accounting/orders/{id}/unserve
 ```
 
 提供完了を取り消して、提供待ちに戻す（`called_at` と `served_at` を空にする）。待ち人数を 1 増やす。精算の状態や売上は変わらない。提供済みでない会計に使うと 409 を返す。
+
+#### 注文のキャンセル（提供前）
+```javascript
+PATCH /api/v1/booth/accounting/orders/{id}/cancel
+```
+
+提供前の注文（提供待ち・呼び出し中）をキャンセルする。`status` が `canceled` になり、待ち人数を 1 減らす（0 未満にはならない）。精算済みの注文でも、売上の集計から外れる。返金はアプリの外で行う前提で、このAPIは記録だけを変える。キャンセルしたあとは、呼び出し・提供・精算はできず、元に戻すAPIもない。提供済み、またはすでにキャンセル済みの会計に使うと 409 を返す。
 
 ### 4.8 当日売上入力
 

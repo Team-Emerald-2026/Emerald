@@ -804,6 +804,15 @@ export function unserveBoothOrder(token: string, orderId: number | string, signa
   }).then((payload) => toBoothOrder(payload, '未提供に戻せませんでした。'));
 }
 
+/** 提供前の注文（提供待ち・呼び出し中）をキャンセルする。待ち人数は1人分減り、売上から外れる */
+export function cancelBoothOrder(token: string, orderId: number | string, signal?: AbortSignal) {
+  return request(`/v1/booth/accounting/orders/${encodeURIComponent(String(orderId))}/cancel`, {
+    method: 'PATCH',
+    token,
+    signal,
+  }).then((payload) => toBoothOrder(payload, 'キャンセルできませんでした。'));
+}
+
 export interface AuthResponse {
   token: string;
   store_id: string;
