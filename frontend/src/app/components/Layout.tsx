@@ -47,7 +47,7 @@ export default function Layout() {
   };
 
   return (
-    <div className="mx-auto flex h-dvh max-w-md flex-col bg-background">
+    <div className="mx-auto flex h-dvh w-full flex-col bg-background">
       {/* ヘッダー */}
       <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center justify-center border-b border-border bg-card/90 px-4 backdrop-blur">
         <span className="font-display text-lg font-bold tracking-wide text-foreground">
