@@ -60,6 +60,7 @@
 | /admin/stores/{id} | DELETE | Bearer Token | 店舗削除（非表示化） |
 | /admin/revenue | GET | Bearer Token | 総収益取得 |
 | /admin/analytics | GET | Bearer Token | 集計・分析・可視化用データ取得 |
+| /admin/analytics | DELETE | Bearer Token | 売上データのリセット（会計・売上入力・受付番号を全削除） |
 | /admin/events | GET | Bearer Token | イベント・お知らせ一覧（管理者） |
 | /admin/events | POST | Bearer Token | イベント・お知らせ作成 |
 | /admin/events/{id} | GET | Bearer Token | イベント・お知らせ詳細（管理者） |
@@ -497,6 +498,7 @@ GET /api/v1/events/{id}
 - `DELETE /api/v1/admin/stores/{id}`: 店舗削除（非表示化）
 - `GET /api/v1/admin/revenue`: 総収益取得（会計清算 + 当日売上入力）
 - `GET /api/v1/admin/analytics`: 集計・分析・可視化用データ取得
+- `DELETE /api/v1/admin/analytics`: 売上データのリセット（会計・明細・売上入力・受付番号の採番を全削除し、各店舗の待ち人数を 0 に戻す。店舗・メニュー・アカウントは残す。元に戻せない）。レスポンス: `{ "data": { "orders": 削除した会計数, "sales_entries": 削除した売上入力数 } }`
 - `GET|POST|PATCH|DELETE /api/v1/admin/events`: イベント・お知らせ管理
 
 ## 5. エラー仕様
