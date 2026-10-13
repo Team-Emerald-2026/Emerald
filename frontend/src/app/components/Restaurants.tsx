@@ -1,11 +1,17 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, Hash, Info, Megaphone } from 'lucide-react';
-import { fetchRestaurants, type BackendStore } from '../lib/api';
+import {
+  fetchCallNumbers,
+  fetchRestaurants,
+  type BackendStore,
+  type CallNumber,
+} from '../lib/api';
 import { getWaitDisplay, type WaitDisplay } from '../lib/waitDisplay';
 import { Skeleton, SkeletonText } from './Skeleton';
 
-type TicketStatus = 'waiting' | 'called' | 'served';
+/** 呼び出し中の番号を取りに行く間隔（店舗側の画面と同じ5秒） */
+const CALL_NUMBER_POLL_MS = 5000;
 
 type Store = {
   id: string;
@@ -13,24 +19,6 @@ type Store = {
   description: string;
   isOpen: boolean;
   wait: WaitDisplay;
-};
-
-type Ticket = {
-  number: string;
-  status: TicketStatus;
-};
-
-// TODO(API): 店舗レジで発行した受取番号一覧に差し替え
-const MOCK_TICKETS: Record<string, Ticket[]> = {
-  'store-101': [
-    { number: 'C-12', status: 'called' },
-    { number: 'C-13', status: 'waiting' },
-    { number: 'C-14', status: 'waiting' },
-  ],
-  'store-102': [
-    { number: 'Y-03', status: 'called' },
-    { number: 'Y-04', status: 'waiting' },
-  ],
 };
 
 function toStore(store: BackendStore): Store {
@@ -41,28 +29,6 @@ function toStore(store: BackendStore): Store {
     isOpen: store.is_open,
     wait: getWaitDisplay(store),
   };
-}
-
-function statusLabel(status: TicketStatus) {
-  switch (status) {
-    case 'called':
-      return '呼び出し中';
-    case 'served':
-      return '受取済';
-    default:
-      return '待ち';
-  }
-}
-
-function statusStyle(status: TicketStatus) {
-  switch (status) {
-    case 'called':
-      return { backgroundColor: 'var(--accent-soft, var(--ok-soft))', color: 'var(--accent, var(--ok))' };
-    case 'served':
-      return { backgroundColor: 'var(--muted)', color: 'var(--muted-foreground)' };
-    default:
-      return { backgroundColor: 'var(--ok-soft)', color: 'var(--ok)' };
-  }
 }
 
 function StoreCardSkeleton() {
@@ -118,7 +84,59 @@ export default function Restaurants() {
     [stores, selectedStoreId],
   );
 
-  const tickets = selectedStoreId ? (MOCK_TICKETS[selectedStoreId] ?? []) : [];
+  // 選んだ店舗の「呼び出し中」の番号（サーバーから5秒ごとに取得）
+  const [tickets, setTickets] = useState<CallNumber[]>([]);
+  const [ticketsLoading, setTicketsLoading] = useState(false);
+  const [ticketsError, setTicketsError] = useState(false);
+
+  useEffect(() => {
+    if (!selectedStoreId) {
+      setTickets([]);
+      setTicketsError(false);
+      setTicketsLoading(false);
+      return;
+    }
+
+    let controller: AbortController | null = null;
+    setTickets([]);
+    setTicketsError(false);
+    setTicketsLoading(true);
+
+    const load = () => {
+      controller?.abort();
+      const current = new AbortController();
+      controller = current;
+
+      fetchCallNumbers(selectedStoreId, current.signal)
+        .then((data) => {
+          if (current.signal.aborted) return;
+          setTickets(data);
+          setTicketsError(false);
+        })
+        .catch((err: unknown) => {
+          if (err instanceof DOMException && err.name === 'AbortError') return;
+          setTicketsError(true);
+        })
+        .finally(() => {
+          if (!current.signal.aborted) setTicketsLoading(false);
+        });
+    };
+
+    load();
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === 'visible') load();
+    }, CALL_NUMBER_POLL_MS);
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') load();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+
+    return () => {
+      controller?.abort();
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [selectedStoreId]);
 
   /* ---------- 店舗の受取番号一覧 ---------- */
   if (selectedStoreId) {
@@ -146,7 +164,9 @@ export default function Restaurants() {
           style={{ backgroundColor: 'var(--info-soft)', color: 'var(--info)' }}
         >
           <Info className="mt-0.5 h-4 w-4 shrink-0" />
-          <p>店頭で購入後、店舗タブレットで発行された番号をここで確認できます。</p>
+          <p>
+            店頭で購入後、お店から呼び出された番号をここで確認できます。画面は5秒ごとに自動で更新されます。
+          </p>
         </div>
 
         {!selectedStore && !loading && (
@@ -162,11 +182,29 @@ export default function Restaurants() {
           </div>
         )}
 
-        {selectedStore && tickets.length === 0 && (
+        {selectedStore && ticketsError && (
+          <div
+            className="rounded-xl p-3 text-sm"
+            style={{ backgroundColor: 'var(--busy-soft)', color: 'var(--busy)' }}
+          >
+            呼び出し番号を取得できませんでした。通信を確認して、しばらくお待ちください。
+            {tickets.length > 0 && '（表示は最後に取得できた内容です）'}
+          </div>
+        )}
+
+        {selectedStore && ticketsLoading && tickets.length === 0 && !ticketsError && (
+          <div className="space-y-3" aria-label="呼び出し番号を読み込み中">
+            <Skeleton className="h-20 w-full rounded-2xl" />
+          </div>
+        )}
+
+        {selectedStore && !ticketsLoading && !ticketsError && tickets.length === 0 && (
           <div className="rounded-2xl border border-border bg-card p-8 text-center">
             <Megaphone className="mx-auto h-8 w-8 text-muted-foreground" />
-            <p className="mt-3 text-muted-foreground">現在表示できる受取番号はありません。</p>
-            <p className="mt-1 text-xs text-muted-foreground">※ 仮データ未設定（API接続後に更新）</p>
+            <p className="mt-3 text-muted-foreground">現在呼び出し中の番号はありません。</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              番号が呼ばれると、ここに表示されます。
+            </p>
           </div>
         )}
 
@@ -174,7 +212,7 @@ export default function Restaurants() {
           <ul className="space-y-3">
             {tickets.map((ticket) => (
               <li
-                key={ticket.number}
+                key={ticket.id}
                 className="flex items-center justify-between gap-3 rounded-2xl border border-border bg-card px-4 py-4"
               >
                 <div className="flex items-center gap-3">
@@ -185,15 +223,17 @@ export default function Restaurants() {
                     <Hash className="h-5 w-5" />
                   </span>
                   <div>
-                    <p className="font-display text-2xl font-bold text-foreground">{ticket.number}</p>
+                    <p className="font-display text-2xl font-bold text-foreground">
+                      {ticket.ticket_number}
+                    </p>
                     <p className="text-xs text-muted-foreground">受取番号</p>
                   </div>
                 </div>
                 <span
                   className="shrink-0 rounded-lg px-2.5 py-1 text-xs font-bold"
-                  style={statusStyle(ticket.status)}
+                  style={{ backgroundColor: 'var(--accent-soft, var(--ok-soft))', color: 'var(--accent, var(--ok))' }}
                 >
-                  {statusLabel(ticket.status)}
+                  呼び出し中
                 </span>
               </li>
             ))}
