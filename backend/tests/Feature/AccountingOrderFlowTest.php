@@ -361,4 +361,50 @@ class AccountingOrderFlowTest extends TestCase
         $this->patchJson("/api/v1/booth/accounting/orders/{$first}/unserve")->assertOk();
         $this->getJson('/api/v1/restaurants')->assertJsonPath('data.0.estimated_wait_min', 8);
     }
+
+    // ------------------------------------------------------------------
+    // 受付番号の採番（本番の Postgres でも動く書き方になっているか）
+    // ------------------------------------------------------------------
+
+    public function test_first_ticket_number_of_a_store_starts_at_101(): void
+    {
+        $store = $this->createStore();
+        $coffee = $this->createMenuItem($store, 'コーヒー', 300);
+        $this->loginAsStore($store);
+
+        $this->postJson('/api/v1/booth/accounting/orders', [
+            'items' => [['menu_item_id' => $coffee->id, 'quantity' => 1]],
+        ])->assertCreated()
+            ->assertJsonPath('data.ticket_number', 'C-101');
+
+        $this->postJson('/api/v1/booth/accounting/orders', [
+            'items' => [['menu_item_id' => $coffee->id, 'quantity' => 1]],
+        ])->assertCreated()
+            ->assertJsonPath('data.ticket_number', 'C-102');
+    }
+
+    public function test_ticket_number_continues_after_existing_orders_when_counter_is_missing(): void
+    {
+        $store = $this->createStore();
+        $coffee = $this->createMenuItem($store, 'コーヒー', 300);
+
+        // 古いデータ: 注文はあるが、採番用のカウンターの行がない状態
+        foreach (['C-101', 'C-109', 'C-105'] as $number) {
+            Order::query()->create([
+                'store_id' => $store->id,
+                'ticket_number' => $number,
+                'total_price' => 300,
+                'status' => 'settled',
+                'ordered_at' => now(),
+                'settled_at' => now(),
+            ]);
+        }
+
+        $this->loginAsStore($store);
+
+        $this->postJson('/api/v1/booth/accounting/orders', [
+            'items' => [['menu_item_id' => $coffee->id, 'quantity' => 1]],
+        ])->assertCreated()
+            ->assertJsonPath('data.ticket_number', 'C-110');
+    }
 }
