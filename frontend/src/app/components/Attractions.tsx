@@ -116,12 +116,27 @@ function BoothDetail({ booth, detail }: { booth: Booth; detail?: DetailState }) 
               {menuItems.map((item) => (
                 <li key={item.id} className="flex items-start justify-between gap-3 py-1.5">
                   <div className="min-w-0">
-                    <p className="text-foreground">{item.name}</p>
+                    <p
+                      className={
+                        item.is_sold_out ? 'text-muted-foreground line-through' : 'text-foreground'
+                      }
+                    >
+                      {item.name}
+                    </p>
                     {item.description && (
                       <p className="text-xs text-muted-foreground">{item.description}</p>
                     )}
                   </div>
-                  <p className="shrink-0 font-bold text-foreground">{formatPrice(item.price)}</p>
+                  {item.is_sold_out ? (
+                    <span
+                      className="shrink-0 rounded-full px-2 py-0.5 text-xs font-bold"
+                      style={{ backgroundColor: 'var(--busy-soft)', color: 'var(--busy)' }}
+                    >
+                      売り切れ
+                    </span>
+                  ) : (
+                    <p className="shrink-0 font-bold text-foreground">{formatPrice(item.price)}</p>
+                  )}
                 </li>
               ))}
             </ul>

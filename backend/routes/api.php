@@ -56,6 +56,7 @@ Route::prefix('v1/booth')->group(function () {
         Route::get('accounting/menu-items', [AccountingController::class, 'menuItems']);
         Route::post('accounting/menu-items', [AccountingController::class, 'storeMenuItem']);
         Route::patch('accounting/menu-items/{id}', [AccountingController::class, 'updateMenuItem'])->whereNumber('id');
+        Route::patch('accounting/menu-items/{id}/sold-out', [AccountingController::class, 'updateMenuItemSoldOut'])->whereNumber('id');
         Route::delete('accounting/menu-items/{id}', [AccountingController::class, 'destroyMenuItem'])->whereNumber('id');
         Route::get('accounting/orders', [AccountingController::class, 'index']);
         Route::get('accounting/orders/ticket/{ticketNumber}', [AccountingController::class, 'showByTicket']);

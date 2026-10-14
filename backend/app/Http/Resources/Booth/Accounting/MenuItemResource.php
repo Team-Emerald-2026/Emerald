@@ -15,6 +15,7 @@ class MenuItemResource extends JsonResource
             'description' => $this->description,
             'price' => $this->price,
             'is_available' => (bool) $this->is_available,
+            'is_sold_out' => (bool) $this->is_sold_out,
         ];
 
         return [

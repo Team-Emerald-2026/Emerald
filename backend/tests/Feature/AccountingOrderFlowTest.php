@@ -210,6 +210,116 @@ class AccountingOrderFlowTest extends TestCase
     }
 
     // ------------------------------------------------------------------
+    // 売り切れ
+    // ------------------------------------------------------------------
+
+    public function test_menu_item_can_be_marked_sold_out_and_back(): void
+    {
+        $store = $this->createStore();
+        $coffee = $this->createMenuItem($store, 'コーヒー', 300);
+        $this->loginAsStore($store);
+
+        $this->getJson('/api/v1/booth/accounting/menu-items')
+            ->assertOk()
+            ->assertJsonPath('data.0.is_sold_out', false);
+
+        $this->patchJson("/api/v1/booth/accounting/menu-items/{$coffee->id}/sold-out", ['is_sold_out' => true])
+            ->assertOk()
+            ->assertJsonPath('data.is_sold_out', true);
+
+        // 売り切れでもメニュー一覧からは消えない
+        $this->getJson('/api/v1/booth/accounting/menu-items')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.is_sold_out', true);
+
+        $this->patchJson("/api/v1/booth/accounting/menu-items/{$coffee->id}/sold-out", ['is_sold_out' => false])
+            ->assertOk()
+            ->assertJsonPath('data.is_sold_out', false);
+    }
+
+    public function test_sold_out_flag_must_be_boolean(): void
+    {
+        $store = $this->createStore();
+        $coffee = $this->createMenuItem($store, 'コーヒー', 300);
+        $this->loginAsStore($store);
+
+        $this->patchJson("/api/v1/booth/accounting/menu-items/{$coffee->id}/sold-out", ['is_sold_out' => 'maybe'])
+            ->assertStatus(422);
+        $this->patchJson("/api/v1/booth/accounting/menu-items/{$coffee->id}/sold-out", [])
+            ->assertStatus(422);
+
+        $this->assertFalse($coffee->fresh()->is_sold_out);
+    }
+
+    public function test_sold_out_item_cannot_be_ordered(): void
+    {
+        $store = $this->createStore();
+        $coffee = $this->createMenuItem($store, 'コーヒー', 300);
+        $toast = $this->createMenuItem($store, 'トースト', 250);
+        $this->loginAsStore($store);
+
+        $this->patchJson("/api/v1/booth/accounting/menu-items/{$toast->id}/sold-out", ['is_sold_out' => true])
+            ->assertOk();
+
+        $this->postJson('/api/v1/booth/accounting/orders', [
+            'items' => [
+                ['menu_item_id' => $coffee->id, 'quantity' => 1],
+                ['menu_item_id' => $toast->id, 'quantity' => 1],
+            ],
+            'settle' => true,
+        ])->assertStatus(409)
+            ->assertJsonPath('error.code', 'SOLD_OUT')
+            ->assertJsonPath('error.details.menu_item_ids', [$toast->id]);
+
+        $this->assertSame(0, Order::query()->count());
+        $this->assertSame(0, $store->fresh()->current_queue_count);
+
+        // 売り切れでない商品だけなら注文できる
+        $this->postJson('/api/v1/booth/accounting/orders', [
+            'items' => [['menu_item_id' => $coffee->id, 'quantity' => 1]],
+        ])->assertCreated();
+    }
+
+    public function test_sold_out_cannot_be_changed_on_other_store_item(): void
+    {
+        $store = $this->createStore();
+        $coffee = $this->createMenuItem($store, 'コーヒー', 300);
+        $other = $this->createStore('store-102', ['name' => '他の店', 'ticket_prefix' => 'B']);
+
+        Sanctum::actingAs($this->createStoreUser($other, 'other_admin'));
+
+        $this->patchJson("/api/v1/booth/accounting/menu-items/{$coffee->id}/sold-out", ['is_sold_out' => true])
+            ->assertStatus(404);
+
+        $this->assertFalse($coffee->fresh()->is_sold_out);
+    }
+
+    public function test_sold_out_requires_authentication(): void
+    {
+        $this->patchJson('/api/v1/booth/accounting/menu-items/1/sold-out', ['is_sold_out' => true])
+            ->assertStatus(401);
+    }
+
+    public function test_visitor_store_api_shows_sold_out_items(): void
+    {
+        $store = $this->createStore();
+        $coffee = $this->createMenuItem($store, 'コーヒー', 300);
+        $this->createMenuItem($store, 'トースト', 250);
+        $this->loginAsStore($store);
+
+        $this->patchJson("/api/v1/booth/accounting/menu-items/{$coffee->id}/sold-out", ['is_sold_out' => true])
+            ->assertOk();
+
+        $this->getJson("/api/v1/restaurants/{$store->id}")
+            ->assertOk()
+            ->assertJsonCount(2, 'data.menu_items')
+            ->assertJsonPath('data.menu_items.0.name', 'コーヒー')
+            ->assertJsonPath('data.menu_items.0.is_sold_out', true)
+            ->assertJsonPath('data.menu_items.1.is_sold_out', false);
+    }
+
+    // ------------------------------------------------------------------
     // 未提供に戻す
     // ------------------------------------------------------------------
 

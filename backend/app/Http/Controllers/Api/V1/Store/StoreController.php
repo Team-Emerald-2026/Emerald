@@ -39,7 +39,7 @@ class StoreController extends Controller
             ->with([
                 'menuItems' => fn ($query) => $query
                     ->where('is_available', true)
-                    ->select(['id', 'store_id', 'name', 'description', 'price', 'is_available'])
+                    ->select(['id', 'store_id', 'name', 'description', 'price', 'is_available', 'is_sold_out'])
                     ->orderBy('id'),
                 'mapFacility:id,store_id,name,type,floor,x,y',
                 'orders' => fn ($query) => $query

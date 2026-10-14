@@ -187,12 +187,16 @@ export default function AdminStoreForm({
           </select>
         </label>
         <label className="text-sm">
-          <span className="mb-1 block text-muted-foreground">受付番号 prefix</span>
+          <span className="mb-1 block text-muted-foreground">受付番号の頭文字（英数字）</span>
           <input
             value={input.ticket_prefix}
             onChange={(event) => update('ticket_prefix', event.target.value.toUpperCase())}
+            placeholder="例: Y"
             className="w-full rounded-lg border border-input bg-background px-3 py-2.5 text-foreground outline-none"
           />
+          <span className="mt-1 block text-xs text-muted-foreground">
+            受付番号が「{input.ticket_prefix || 'Y'}-101」のようになります。空欄なら自動で決まります。
+          </span>
         </label>
         <label className="sm:col-span-2 text-sm">
           <span className="mb-1 block text-muted-foreground">説明</span>
@@ -226,26 +230,19 @@ export default function AdminStoreForm({
             className="w-full rounded-lg border border-input bg-background px-3 py-2.5 text-foreground outline-none"
           />
         </label>
-        <label className="text-sm">
-          <span className="mb-1 block text-muted-foreground">一人当たりの待ち時間（分）</span>
-          <input
-            type="number"
-            min={0}
-            value={input.current_wait_min}
-            onChange={(event) => update('current_wait_min', Number(event.target.value))}
-            className="w-full rounded-lg border border-input bg-background px-3 py-2.5 text-foreground outline-none"
-          />
-        </label>
-        <label className="text-sm">
-          <span className="mb-1 block text-muted-foreground">待ち人数</span>
-          <input
-            type="number"
-            min={0}
-            value={input.current_queue_count}
-            onChange={(event) => update('current_queue_count', Number(event.target.value))}
-            className="w-full rounded-lg border border-input bg-background px-3 py-2.5 text-foreground outline-none"
-          />
-        </label>
+        {/* 新規の店舗は待ち人数0から始まる。編集時は、ずれた待ち人数を直すために残す */}
+        {store && (
+          <label className="text-sm">
+            <span className="mb-1 block text-muted-foreground">待ち人数</span>
+            <input
+              type="number"
+              min={0}
+              value={input.current_queue_count}
+              onChange={(event) => update('current_queue_count', Number(event.target.value))}
+              className="w-full rounded-lg border border-input bg-background px-3 py-2.5 text-foreground outline-none"
+            />
+          </label>
+        )}
         <label className="sm:col-span-2 text-sm">
           <span className="mb-1 block text-muted-foreground">店舗位置</span>
           <select

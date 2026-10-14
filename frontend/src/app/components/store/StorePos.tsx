@@ -8,13 +8,21 @@ import {
   createBoothOrder,
   describeOrderError,
   fetchBoothMenuItems,
+  setBoothMenuItemSoldOut,
 } from '../../lib/api';
 
 interface Product {
   id: string;
   name: string;
   price: number;
+  soldOut: boolean;
 }
+
+/** 売り切れ・削除された商品をカートから外す */
+const pruneCart = (cart: Record<string, number>, products: Product[]) =>
+  Object.fromEntries(
+    Object.entries(cart).filter(([id]) => products.some((p) => p.id === id && !p.soldOut)),
+  );
 
 const yen = (n: number) => `¥${n.toLocaleString('ja-JP')}`;
 
@@ -27,6 +35,7 @@ export default function StorePos() {
   const [issued, setIssued] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
+  const [togglingId, setTogglingId] = useState<string | null>(null);
   // 連打しても二重に送らないための目印（state は次の描画まで変わらないため ref も使う）
   const submittingRef = useRef(false);
 
@@ -37,12 +46,16 @@ export default function StorePos() {
       setLoadError('');
       return fetchBoothMenuItems(token, signal)
         .then((items) => {
-          setProducts(
-            items
-              .filter((item) => item.is_available !== false)
-              .map((item) => ({ id: String(item.id), name: item.name, price: Number(item.price) })),
-          );
-          setCart({});
+          const next = items
+            .filter((item) => item.is_available !== false)
+            .map((item) => ({
+              id: String(item.id),
+              name: item.name,
+              price: Number(item.price),
+              soldOut: item.is_sold_out === true,
+            }));
+          setProducts(next);
+          setCart((c) => pruneCart(c, next));
         })
         .catch((err: unknown) => {
           if (signal?.aborted) return;
@@ -110,8 +123,14 @@ export default function StorePos() {
         // 販売停止や削除でメニューが変わっていた場合は、読み込み直して選び直してもらう
         await loadProducts(session.token);
         setSubmitError(
-          'メニューの内容が変わっていたため、カートを空にしました。もう一度選んでください。',
+          'メニューの内容が変わっていたため、最新のメニューに更新しました。注文内容を確認して、もう一度会計してください。',
         );
+        return;
+      }
+      if (err instanceof ApiError && err.code === 'SOLD_OUT') {
+        // 別の端末で売り切れにされていた場合は、最新のメニューを読み込んでカートから外す
+        await loadProducts(session.token);
+        setSubmitError(describeOrderError(err, '売り切れの商品が含まれています。'));
         return;
       }
       if (err instanceof ApiError) {
@@ -125,6 +144,29 @@ export default function StorePos() {
     } finally {
       submittingRef.current = false;
       setSubmitting(false);
+    }
+  };
+
+  const toggleSoldOut = async (product: Product) => {
+    if (!session?.token || togglingId) return;
+
+    setTogglingId(product.id);
+    setSubmitError('');
+    try {
+      const updated = await setBoothMenuItemSoldOut(session.token, product.id, !product.soldOut);
+      const next = products.map((p) =>
+        p.id === product.id ? { ...p, soldOut: updated.is_sold_out === true } : p,
+      );
+      setProducts(next);
+      setCart((c) => pruneCart(c, next));
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) {
+        logoutStore();
+        return;
+      }
+      setSubmitError(err instanceof Error ? err.message : '売り切れの設定を変更できませんでした。');
+    } finally {
+      setTogglingId(null);
     }
   };
 
@@ -179,15 +221,41 @@ export default function StorePos() {
               return (
                 <div
                   key={p.id}
-                  className="flex min-h-36 flex-col rounded-2xl border border-border bg-card p-3"
+                  className={`flex min-h-36 flex-col rounded-2xl border border-border p-3 ${
+                    p.soldOut ? 'bg-muted' : 'bg-card'
+                  }`}
                 >
-                  <p className="font-bold text-foreground">{p.name}</p>
+                  <div className="flex items-start justify-between gap-2">
+                    <p
+                      className={`font-bold ${
+                        p.soldOut ? 'text-muted-foreground line-through' : 'text-foreground'
+                      }`}
+                    >
+                      {p.name}
+                    </p>
+                    {p.soldOut && (
+                      <span
+                        className="shrink-0 rounded-full px-2 py-0.5 text-xs font-bold"
+                        style={{ backgroundColor: 'var(--busy-soft)', color: 'var(--busy)' }}
+                      >
+                        売り切れ
+                      </span>
+                    )}
+                  </div>
                   <p className="text-sm text-muted-foreground">{yen(p.price)}</p>
-                  <div className="mt-auto flex items-center justify-between gap-2 pt-4">
+                  <button
+                    type="button"
+                    onClick={() => void toggleSoldOut(p)}
+                    disabled={togglingId !== null}
+                    className="mt-2 min-h-9 rounded-lg border border-border bg-background px-2 text-xs font-bold text-foreground hover:bg-muted disabled:opacity-50"
+                  >
+                    {togglingId === p.id ? '変更中...' : p.soldOut ? '販売を再開する' : '売り切れにする'}
+                  </button>
+                  <div className="mt-auto flex items-center justify-between gap-2 pt-3">
                     <button
                       type="button"
                       onClick={() => setQty(p.id, qty - 1)}
-                      disabled={qty === 0}
+                      disabled={qty === 0 || p.soldOut}
                       aria-label={`${p.name}を1減らす`}
                       className="grid h-11 w-11 place-items-center rounded-xl border border-border bg-background text-foreground disabled:opacity-40"
                     >
@@ -199,8 +267,9 @@ export default function StorePos() {
                     <button
                       type="button"
                       onClick={() => setQty(p.id, qty + 1)}
+                      disabled={p.soldOut}
                       aria-label={`${p.name}を1追加`}
-                      className="grid h-11 w-11 place-items-center rounded-xl text-white"
+                      className="grid h-11 w-11 place-items-center rounded-xl text-white disabled:opacity-40"
                       style={{ backgroundColor: 'var(--primary)' }}
                     >
                       <Plus className="h-5 w-5" />

@@ -36,6 +36,7 @@ class StoreResource extends JsonResource
                 'description' => $item->description,
                 'price' => (int) $item->price,
                 'is_available' => (bool) $item->is_available,
+                'is_sold_out' => (bool) $item->is_sold_out,
             ])->values();
         }
 
