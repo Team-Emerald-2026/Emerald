@@ -8,7 +8,6 @@ import {
   createBoothOrder,
   describeOrderError,
   fetchBoothMenuItems,
-  setBoothMenuItemSoldOut,
 } from '../../lib/api';
 
 interface Product {
@@ -35,7 +34,6 @@ export default function StorePos() {
   const [issued, setIssued] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
-  const [togglingId, setTogglingId] = useState<string | null>(null);
   // 連打しても二重に送らないための目印（state は次の描画まで変わらないため ref も使う）
   const submittingRef = useRef(false);
 
@@ -146,30 +144,6 @@ export default function StorePos() {
       setSubmitting(false);
     }
   };
-
-  const toggleSoldOut = async (product: Product) => {
-    if (!session?.token || togglingId) return;
-
-    setTogglingId(product.id);
-    setSubmitError('');
-    try {
-      const updated = await setBoothMenuItemSoldOut(session.token, product.id, !product.soldOut);
-      const next = products.map((p) =>
-        p.id === product.id ? { ...p, soldOut: updated.is_sold_out === true } : p,
-      );
-      setProducts(next);
-      setCart((c) => pruneCart(c, next));
-    } catch (err) {
-      if (err instanceof ApiError && err.status === 401) {
-        logoutStore();
-        return;
-      }
-      setSubmitError(err instanceof Error ? err.message : '売り切れの設定を変更できませんでした。');
-    } finally {
-      setTogglingId(null);
-    }
-  };
-
   return (
     <StoreShell title="レジ（会計）">
       <div className="space-y-5">
@@ -243,15 +217,7 @@ export default function StorePos() {
                     )}
                   </div>
                   <p className="text-sm text-muted-foreground">{yen(p.price)}</p>
-                  <button
-                    type="button"
-                    onClick={() => void toggleSoldOut(p)}
-                    disabled={togglingId !== null}
-                    className="mt-2 min-h-9 rounded-lg border border-border bg-background px-2 text-xs font-bold text-foreground hover:bg-muted disabled:opacity-50"
-                  >
-                    {togglingId === p.id ? '変更中...' : p.soldOut ? '販売を再開する' : '売り切れにする'}
-                  </button>
-                  <div className="mt-auto flex items-center justify-between gap-2 pt-3">
+                  <div className="mt-auto flex items-center justify-between gap-2 pt-4">
                     <button
                       type="button"
                       onClick={() => setQty(p.id, qty - 1)}

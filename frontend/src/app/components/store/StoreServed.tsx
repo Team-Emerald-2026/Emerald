@@ -93,7 +93,7 @@ export default function StoreServed() {
   };
 
   return (
-    <StoreShell title="提供済み履歴">
+    <StoreShell title="提供履歴">
       <div className="mb-3 flex flex-wrap gap-2">
         {filters.map((item) => (
           <button

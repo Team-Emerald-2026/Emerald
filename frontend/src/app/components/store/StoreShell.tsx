@@ -18,7 +18,7 @@ const links = [
   { to: '/store/ticket', label: '呼び出し', icon: Megaphone, end: false },
   { to: '/store/dashboard', label: 'ダッシュボード', icon: LayoutDashboard, end: false },
   { to: '/store/waiting', label: '待ち人数', icon: Users, end: false },
-  { to: '/store/served', label: '提供済み', icon: History, end: false },
+  { to: '/store/served', label: '提供履歴', icon: History, end: false },
   { to: '/store/profile', label: '店舗情報', icon: Store, end: false },
 ];
 

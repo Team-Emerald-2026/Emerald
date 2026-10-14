@@ -20,6 +20,7 @@ export const FACILITY_TYPES = [
   { value: 'food', label: 'フード', color: 'var(--accent)' },
   { value: 'information', label: '案内', color: '#0ea5a3' },
   { value: 'shop', label: '金券販売', color: '#7c5cff' },
+  { value: 'support', label: '運営サポート', color: '#d97706' },
 ] as const;
 
 /**
@@ -30,7 +31,6 @@ export const LEGACY_FACILITY_TYPES = [
   { value: 'stage', label: 'イベントもの', color: 'var(--primary)' },
   { value: 'toilet', label: 'トイレ', color: '#3b82f6' },
   { value: 'first_aid', label: '救護室', color: '#e11d48' },
-  { value: 'support', label: 'サポート', color: '#d97706' },
 ] as const;
 
 export function facilityTypeInfo(type: string) {
