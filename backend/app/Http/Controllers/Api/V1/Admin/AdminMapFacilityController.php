@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\MapFacilities;
 use App\Models\Store;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 /**
  * 管理画面の「マップ編集」用API。
@@ -83,7 +84,21 @@ class AdminMapFacilityController extends Controller
             $validated['name'] = trim($validated['name']);
         }
 
-        $facility->fill($validated)->save();
+        $oldPosition = ['floor' => $facility->floor, 'x' => $facility->x, 'y' => $facility->y];
+        $newPosition = array_map('intval', array_merge($oldPosition, array_intersect_key($validated, $oldPosition)));
+
+        DB::transaction(function () use ($facility, $validated, $oldPosition, $newPosition) {
+            $facility->fill($validated)->save();
+
+            // 店舗が入った枠は「空き枠（部屋番号）」と「店舗のピン」が同じ位置に重なっている。
+            // 片方だけ動くと離れてしまうので、同じ位置にあるピンは一緒に動かす。
+            if ($newPosition !== $oldPosition) {
+                MapFacilities::query()
+                    ->whereKeyNot($facility->id)
+                    ->where($oldPosition)
+                    ->update($newPosition);
+            }
+        });
 
         $store = $facility->store_id !== null
             ? Store::query()->find($facility->store_id)

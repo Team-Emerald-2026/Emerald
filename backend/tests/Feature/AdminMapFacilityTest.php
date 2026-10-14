@@ -135,6 +135,26 @@ class AdminMapFacilityTest extends TestCase
         ]);
     }
 
+    public function test_moving_a_place_also_moves_pins_at_the_same_position(): void
+    {
+        $store = $this->createStore();
+        $slot = $this->createPlace(['name' => '401', 'floor' => 4, 'x' => 30, 'y' => 40]);
+        $pin = $this->createPlace(['store_id' => $store->id, 'name' => $store->name, 'floor' => 4, 'x' => 30, 'y' => 40]);
+        $other = $this->createPlace(['name' => '402', 'floor' => 4, 'x' => 31, 'y' => 40]);
+        Sanctum::actingAs($this->createAdmin());
+
+        $this->patchJson("/api/v1/admin/map/facilities/{$slot->id}", ['x' => 35, 'y' => 45])->assertOk();
+
+        $this->assertDatabaseHas('map_facilities', ['id' => $slot->id, 'x' => 35, 'y' => 45]);
+        $this->assertDatabaseHas('map_facilities', ['id' => $pin->id, 'x' => 35, 'y' => 45]);
+        $this->assertDatabaseHas('map_facilities', ['id' => $other->id, 'x' => 31, 'y' => 40]);
+
+        $this->patchJson("/api/v1/admin/map/facilities/{$pin->id}", ['x' => 20])->assertOk();
+
+        $this->assertDatabaseHas('map_facilities', ['id' => $slot->id, 'x' => 20, 'y' => 45]);
+        $this->assertDatabaseHas('map_facilities', ['id' => $pin->id, 'x' => 20, 'y' => 45]);
+    }
+
     public function test_admin_can_delete_unlinked_place(): void
     {
         $place = $this->createPlace();
