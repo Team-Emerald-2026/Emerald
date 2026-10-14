@@ -765,4 +765,79 @@ class MissingApisTest extends TestCase
             'ticker_after_minutes' => 30,
         ]);
     }
+
+    public function test_notice_can_be_sent_to_ticker_immediately_and_stopped(): void
+    {
+        $this->travelTo(now()->setTime(5, 0));
+        Sanctum::actingAs($this->createAdmin());
+        $this->createTickerEvent('ゲスト登壇', now(), 10);
+
+        $response = $this->postJson('/api/v1/admin/events', [
+            'title' => '雨天のお知らせ',
+            'body' => '中庭の企画は体育館に変更します',
+            'type' => 'notice',
+            'ticker_now' => true,
+            'ticker_after_minutes' => 30,
+        ])->assertCreated()
+            ->assertJsonPath('data.attributes.ticker_active', true);
+        $id = $response->json('data.id');
+
+        // お知らせを先に、時刻なしで流す
+        $this->getJson('/api/v1/ticker')
+            ->assertOk()
+            ->assertJsonCount(2, 'data')
+            ->assertJsonPath('data.0.title', '雨天のお知らせ')
+            ->assertJsonPath('data.0.starts_at', null)
+            ->assertJsonPath('data.1.title', 'ゲスト登壇');
+
+        // 流している途中に文面を直しても、流し始めた時刻は変わらない
+        $this->travel(20)->minutes();
+        $this->patchJson("/api/v1/admin/events/{$id}", ['body' => '中庭の企画は体育館で行います', 'ticker_now' => true])
+            ->assertOk();
+        $this->travel(11)->minutes();
+        $this->assertNotContains('雨天のお知らせ', collect($this->getJson('/api/v1/ticker')->json('data'))->pluck('title'));
+
+        // もう一度流すと、いまから流し直す
+        $this->patchJson("/api/v1/admin/events/{$id}", ['ticker_now' => true])
+            ->assertOk()
+            ->assertJsonPath('data.attributes.ticker_active', true);
+
+        // 止める
+        $this->patchJson("/api/v1/admin/events/{$id}", ['ticker_now' => false])
+            ->assertOk()
+            ->assertJsonPath('data.attributes.ticker_active', false);
+        $this->assertDatabaseHas('event_notices', ['id' => $id, 'ticker_started_at' => null]);
+    }
+
+    public function test_notice_ticker_without_duration_runs_until_stopped(): void
+    {
+        $this->travelTo(now()->setTime(5, 0));
+        Sanctum::actingAs($this->createAdmin());
+
+        $this->postJson('/api/v1/admin/events', [
+            'title' => '迷子のお知らせ',
+            'body' => '1F総合案内でお預かりしています',
+            'type' => 'notice',
+            'ticker_now' => true,
+            'ticker_after_minutes' => null,
+        ])->assertCreated();
+
+        $this->travel(10)->hours();
+        $this->getJson('/api/v1/ticker')->assertOk()->assertJsonPath('data.0.title', '迷子のお知らせ');
+    }
+
+    public function test_unpublished_notice_is_not_sent_to_ticker(): void
+    {
+        Sanctum::actingAs($this->createAdmin());
+
+        $this->postJson('/api/v1/admin/events', [
+            'title' => '下書き',
+            'body' => 'まだ出さない',
+            'type' => 'notice',
+            'is_published' => false,
+            'ticker_now' => true,
+        ])->assertCreated();
+
+        $this->getJson('/api/v1/ticker')->assertOk()->assertExactJson(['data' => []]);
+    }
 }

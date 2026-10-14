@@ -16,6 +16,7 @@ class EventNotice extends Model
         'is_published',
         'ticker_lead_minutes',
         'ticker_after_minutes',
+        'ticker_started_at',
     ];
 
     protected $casts = [
@@ -24,6 +25,7 @@ class EventNotice extends Model
         'is_published' => 'boolean',
         'ticker_lead_minutes' => 'integer',
         'ticker_after_minutes' => 'integer',
+        'ticker_started_at' => 'datetime',
     ];
 
     /** 開始から何分後まで電光掲示板に流すか（未指定のときの既定値） */
@@ -31,15 +33,26 @@ class EventNotice extends Model
 
     /**
      * いま電光掲示板に流す時間帯かどうか。
-     * 「開始の ticker_lead_minutes 分前」から「開始の ticker_after_minutes 分後」まで。
+     * - イベント: 「開始の ticker_lead_minutes 分前」から「開始の ticker_after_minutes 分後」まで
+     * - お知らせ: 「流し始めた時刻（ticker_started_at）」から ticker_after_minutes 分間。null なら止めるまで
      */
     public function isTickerActiveAt($at = null): bool
     {
+        $at = $at ?? now();
+
+        if ($this->type === 'notice') {
+            if ($this->ticker_started_at === null || $at->lt($this->ticker_started_at)) {
+                return false;
+            }
+
+            return $this->ticker_after_minutes === null
+                || $at->lte($this->ticker_started_at->copy()->addMinutes($this->ticker_after_minutes));
+        }
+
         if ($this->ticker_lead_minutes === null || $this->starts_at === null) {
             return false;
         }
 
-        $at = $at ?? now();
         $from = $this->starts_at->copy()->subMinutes($this->ticker_lead_minutes);
         $until = $this->starts_at->copy()->addMinutes(
             $this->ticker_after_minutes ?? self::TICKER_DEFAULT_AFTER_MINUTES,
