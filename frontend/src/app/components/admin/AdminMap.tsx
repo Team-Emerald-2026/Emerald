@@ -39,6 +39,7 @@ type Draft = { name: string; type: string; x: number; y: number };
 type DragState = { id: string; x: number; y: number };
 
 const floorNumber = (floor: MapFloor) => Number(floor.replace('F', ''));
+const samePlace = (a: AdminMapFacility, b: AdminMapFacility) => a.floor === b.floor && a.x === b.x && a.y === b.y;
 
 export default function AdminMap() {
   const adminSession = useFestival((s) => s.adminSession);
@@ -47,6 +48,8 @@ export default function AdminMap() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [drag, setDrag] = useState<DragState | null>(null);
+  // 移動したがまだ保存していない位置。「位置を保存」を押したときだけ API に送る
+  const [pending, setPending] = useState<DragState | null>(null);
   const [editName, setEditName] = useState('');
   const [editType, setEditType] = useState('booth');
   const [loading, setLoading] = useState(true);
@@ -95,6 +98,21 @@ export default function AdminMap() {
   }, [facilities]);
   const selected = facilities.find((item) => item.id === selectedId) ?? null;
 
+  // 同じ位置のピン（空き枠と、そこに入った店舗）は一緒に動く
+  const moving = drag ?? pending;
+  const movingItem = moving ? facilities.find((item) => item.id === moving.id) : undefined;
+  const positionOf = (item: AdminMapFacility) =>
+    moving && movingItem && (item.id === movingItem.id || samePlace(item, movingItem)) ? moving : item;
+  const hasPending = pending !== null && selected !== null && pending.id === selected.id;
+
+  // 未保存の位置があるときは、破棄してよいか確認する
+  const confirmDiscardPending = () => {
+    if (!pending) return true;
+    if (!window.confirm('位置の変更が保存されていません。破棄しますか？')) return false;
+    setPending(null);
+    return true;
+  };
+
   useEffect(() => {
     if (selected && selected.store_id === null) {
       setEditName(selected.name);
@@ -106,17 +124,14 @@ export default function AdminMap() {
   const focusPoint = draft
     ? { x: draft.x, y: draft.y, ignoreId: null as string | null }
     : selected
-      ? {
-          x: drag?.id === selected.id ? drag.x : selected.x,
-          y: drag?.id === selected.id ? drag.y : selected.y,
-          ignoreId: selected.id,
-        }
+      ? { x: positionOf(selected).x, y: positionOf(selected).y, ignoreId: selected.id }
       : null;
 
   const neighbors = useMemo(() => {
     if (!focusPoint) return [];
     return floorFacilities
       .filter((item) => item.id !== focusPoint.ignoreId)
+      .filter((item) => !(selected && !draft && samePlace(item, selected)))
       .filter(
         (item) => Math.abs(item.x - focusPoint.x) < NEAR_X && Math.abs(item.y - focusPoint.y) < NEAR_Y,
       )
@@ -139,20 +154,28 @@ export default function AdminMap() {
   const replaceFacility = (next: AdminMapFacility) =>
     setFacilities((current) => current.map((item) => (item.id === next.id ? next : item)));
 
-  const savePosition = async (item: AdminMapFacility, x: number, y: number) => {
-    if (!canUse || saving) return;
-    if (x === item.x && y === item.y) return;
-    const previous = item;
-    replaceFacility({ ...item, x, y });
+  const movePending = (item: AdminMapFacility, x: number, y: number) => {
+    setMessage('');
+    setError('');
+    setPending(x === item.x && y === item.y ? null : { id: item.id, x, y });
+  };
+
+  const savePosition = async () => {
+    if (!selected || !hasPending || !pending || !canUse || saving) return;
+    const { x, y } = pending;
     setSaving(true);
     setError('');
     setMessage('');
     try {
-      const saved = await updateAdminMapFacility(token, item.id, { x, y });
-      if (saved) replaceFacility(saved);
-      setMessage(`「${item.store_name ?? item.name}」の位置を ${x}%, ${y}% に移動しました。`);
+      const saved = await updateAdminMapFacility(token, selected.id, { x, y });
+      setFacilities((current) =>
+        current.map((item) =>
+          item.id === selected.id ? (saved ?? { ...item, x, y }) : samePlace(item, selected) ? { ...item, x, y } : item,
+        ),
+      );
+      setPending(null);
+      setMessage(`「${selected.store_name ?? selected.name}」の位置を ${x}%, ${y}% に移動しました。`);
     } catch (err: unknown) {
-      replaceFacility(previous);
       setError(err instanceof Error ? err.message : '位置を保存できませんでした。');
     } finally {
       setSaving(false);
@@ -163,6 +186,7 @@ export default function AdminMap() {
     if (!canUse) return;
     const point = toPercent(event.clientX, event.clientY);
     if (!point) return;
+    if (!confirmDiscardPending()) return;
     setSelectedId(null);
     setMessage('');
     setError('');
@@ -176,6 +200,7 @@ export default function AdminMap() {
 
   const handlePinPointerDown = (event: ReactPointerEvent<HTMLButtonElement>, item: AdminMapFacility) => {
     event.stopPropagation();
+    if (pending && pending.id !== item.id && !confirmDiscardPending()) return;
     setSelectedId(item.id);
     setDraft(null);
     setMessage('');
@@ -205,12 +230,13 @@ export default function AdminMap() {
     }
     const point = toPercent(event.clientX, event.clientY);
     setDrag(null);
-    if (point) void savePosition(item, point.x, point.y);
+    if (point) movePending(item, point.x, point.y);
   };
 
   const nudge = (dx: number, dy: number) => {
     if (!selected) return;
-    void savePosition(selected, clamp(selected.x + dx, 0, 100), clamp(selected.y + dy, 0, 100));
+    const current = positionOf(selected);
+    movePending(selected, clamp(current.x + dx, 0, 100), clamp(current.y + dy, 0, 100));
   };
 
   const submitDraft = async () => {
@@ -274,6 +300,7 @@ export default function AdminMap() {
       await deleteAdminMapFacility(token, selected.id);
       setMessage(`「${selected.name}」を削除しました。`);
       setSelectedId(null);
+      setPending(null);
       await loadFacilities();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : '削除に失敗しました。');
@@ -283,6 +310,7 @@ export default function AdminMap() {
   };
 
   const changeFloor = (next: MapFloor) => {
+    if (next !== floor && !confirmDiscardPending()) return;
     setFloor(next);
     setSelectedId(null);
     setDraft(null);
@@ -290,7 +318,7 @@ export default function AdminMap() {
     setError('');
   };
 
-  // 同じ位置に店舗のピンがある空き枠は、店舗のピンより下に描く
+  // 同じ位置に店舗のピンがある空き枠は描かない（店舗のピンに部屋番号を表示し、一緒に動かす）
   const occupiedKeys = new Set(
     floorFacilities.filter((item) => item.store_id !== null).map((item) => `${item.x}:${item.y}`),
   );
@@ -300,7 +328,7 @@ export default function AdminMap() {
       <div className="mb-4">
         <h2 className="font-display text-xl font-bold text-foreground">場所の追加・移動・削除</h2>
         <p className="text-sm text-muted-foreground">
-          地図の空いている所をクリックすると新しい場所を追加できます。ピンはドラッグで移動できます。
+          地図の空いている所をクリックすると新しい場所を追加できます。ピンはドラッグや矢印ボタンで動かし、「位置を保存」で確定します。
         </p>
       </div>
 
@@ -354,9 +382,9 @@ export default function AdminMap() {
 
         {floorFacilities.map((item) => {
           const isSelected = item.id === selectedId;
-          const position = drag?.id === item.id ? drag : item;
+          const position = positionOf(item);
           const linked = item.store_id !== null;
-          const covered = !linked && occupiedKeys.has(`${item.x}:${item.y}`);
+          if (!linked && occupiedKeys.has(`${item.x}:${item.y}`)) return null;
           const info = facilityTypeInfo(item.type);
           return (
             <button
@@ -372,7 +400,7 @@ export default function AdminMap() {
               onClick={(event) => event.stopPropagation()}
               title={linked ? `${item.store_name}（店舗）` : item.name}
               className={`absolute max-w-[20%] -translate-x-1/2 -translate-y-1/2 cursor-grab truncate whitespace-nowrap rounded-md px-1.5 py-1 text-[10px] font-bold leading-none text-white shadow-md active:cursor-grabbing ${
-                isSelected ? 'z-30 scale-110 ring-2 ring-white' : linked ? 'z-10' : covered ? 'z-0 opacity-40' : 'z-0'
+                isSelected ? 'z-30 scale-110 ring-2 ring-white' : linked ? 'z-10' : 'z-0'
               } ${linked && item.store_visible === false ? 'opacity-50' : ''}`}
               style={{
                 left: `${position.x}%`,
@@ -399,7 +427,7 @@ export default function AdminMap() {
       </div>
 
       <p className="mt-2 text-xs text-muted-foreground">
-        <span className="font-bold">黒い縁のピン</span>は店舗が入っている場所です。薄いピンは、同じ位置に店舗が入っていて来場者には見えません。
+        <span className="font-bold">黒い縁のピン</span>は店舗が入っている場所です。部屋番号のピンと店舗は1つにまとめて表示し、動かすと一緒に移動します。
       </p>
 
       {neighbors.length > 0 && (
@@ -469,8 +497,8 @@ export default function AdminMap() {
               {selected.store_id ? (selected.store_name ?? selected.name) : selected.name}
             </h3>
             <p className="text-xs text-muted-foreground">
-              {floor} / X:{drag?.id === selected.id ? drag.x : selected.x}% Y:
-              {drag?.id === selected.id ? drag.y : selected.y}% / {facilityTypeInfo(selected.type).label}
+              {floor} / X:{positionOf(selected).x}% Y:{positionOf(selected).y}% /{' '}
+              {facilityTypeInfo(selected.type).label}
             </p>
           </div>
 
@@ -492,6 +520,32 @@ export default function AdminMap() {
                 <ArrowRight className="h-4 w-4" />
               </NudgeButton>
             </div>
+            {hasPending && (
+              <div className="mt-2 space-y-2 rounded-xl border border-amber-500/50 bg-amber-500/10 p-3">
+                <p className="text-xs font-bold text-amber-600">
+                  位置の変更はまだ保存されていません（元: X:{selected.x}% Y:{selected.y}%）
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void savePosition()}
+                    disabled={saving}
+                    className="flex-1 rounded-xl py-2.5 text-sm font-bold text-white disabled:opacity-60"
+                    style={{ backgroundColor: 'var(--primary)' }}
+                  >
+                    {saving ? '保存中...' : '位置を保存'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPending(null)}
+                    disabled={saving}
+                    className="rounded-xl border border-border px-4 py-2.5 text-sm text-foreground hover:bg-muted disabled:opacity-60"
+                  >
+                    元に戻す
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
           {selected.store_id ? (
@@ -580,6 +634,7 @@ export default function AdminMap() {
                 <button
                   type="button"
                   onClick={() => {
+                    if (pending && pending.id !== item.id && !confirmDiscardPending()) return;
                     setSelectedId(item.id);
                     setDraft(null);
                     setMessage('');
