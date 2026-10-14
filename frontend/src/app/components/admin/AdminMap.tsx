@@ -340,7 +340,7 @@ export default function AdminMap() {
         onClick={handleMapClick}
         // 来場者画面（スマホ幅）と同じくらいの大きさで表示する。ピンの大きさは固定のため、
         // 大きい画面で配置すると来場者画面ではピンがはみ出して見えてしまうので、幅をそろえている。
-        className="relative mx-auto aspect-[825/466] min-h-52 w-full max-w-sm cursor-crosshair select-none overflow-hidden rounded-2xl border border-border bg-muted"
+        className="relative mx-auto aspect-[1042/745] min-h-52 w-full max-w-sm cursor-crosshair select-none overflow-hidden rounded-2xl border border-border bg-muted"
       >
         <img
           src={mapImageByFloor[floor]}
