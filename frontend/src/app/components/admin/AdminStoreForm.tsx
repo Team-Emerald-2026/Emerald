@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { AdminMapFacility, AdminStore, AdminStoreInput } from '../../lib/api';
-import { facilityTypeOptions } from '../../lib/campusMap';
+import { facilityTypeOptions, PLACE_ONLY_TYPES } from '../../lib/campusMap';
 
 interface Props {
   store: AdminStore | null;
@@ -179,7 +179,9 @@ export default function AdminStoreForm({
             onChange={(event) => update('type', event.target.value)}
             className="w-full rounded-lg border border-input bg-background px-3 py-2.5 text-foreground outline-none"
           >
-            {facilityTypeOptions(input.type).map((type) => (
+            {facilityTypeOptions(input.type)
+              .filter((type) => !PLACE_ONLY_TYPES.includes(type.value) || type.value === input.type)
+              .map((type) => (
               <option key={type.value} value={type.value}>
                 {type.label}
               </option>

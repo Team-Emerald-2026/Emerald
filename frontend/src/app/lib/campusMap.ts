@@ -21,7 +21,12 @@ export const FACILITY_TYPES = [
   { value: 'information', label: '案内', color: '#0ea5a3' },
   { value: 'shop', label: '金券販売', color: '#7c5cff' },
   { value: 'support', label: '運営サポート', color: '#d97706' },
+  { value: 'toilet_men', label: '男子トイレ', color: '#2563eb' },
+  { value: 'toilet_women', label: '女子トイレ', color: '#db2777' },
 ] as const;
+
+/** 場所（マップ編集）だけで使い、店舗には選ばせない種類 */
+export const PLACE_ONLY_TYPES: readonly string[] = ['toilet_men', 'toilet_women'];
 
 /**
  * 以前は選べた種類。今は新しく選べないが、すでに登録済みの場所が持っていることがあるので、
