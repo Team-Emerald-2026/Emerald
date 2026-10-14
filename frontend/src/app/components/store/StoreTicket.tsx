@@ -13,15 +13,6 @@ import {
 import { useBoothOrders } from '../../lib/useBoothOrders';
 import { Ban, Megaphone, Check, Maximize2, X } from 'lucide-react';
 
-const pipeline = ['受付', '提供待ち', '呼び出し中', '提供済み'] as const;
-
-function pipelineIndex(order: BoothOrder) {
-  const stage = getBoothOrderStage(order);
-  if (stage === 'called') return 2;
-  if (stage === 'served') return 3;
-  return 1;
-}
-
 export default function StoreTicket() {
   const session = useFestival((s) => s.session);
   const bigNumber = useFestival((s) => s.bigNumber);
@@ -93,25 +84,27 @@ export default function StoreTicket() {
       setConfirm(null);
     });
 
+  const calledCount = orders.filter((o) => getBoothOrderStage(o) === 'called').length;
+  const statusCounts = [
+    { label: '提供待ち', count: orders.length - calledCount, color: 'var(--ok)', bg: 'var(--ok-soft)' },
+    { label: '呼び出し中', count: calledCount, color: 'var(--busy)', bg: 'var(--busy-soft)' },
+  ];
+
   return (
     <StoreShell title="受付番号の呼び出し">
-      <ol className="mb-4 grid grid-cols-4 gap-1 text-center text-[11px] font-bold">
-        {pipeline.map((label, index) => {
-          const current = index === 1 || index === 2;
-          return (
-            <li
-              key={label}
-              className="rounded-lg px-1 py-2"
-              style={{
-                backgroundColor: current ? 'var(--primary)' : 'var(--muted)',
-                color: current ? 'var(--primary-foreground)' : 'var(--muted-foreground)',
-              }}
-            >
+      <dl className="mb-4 grid grid-cols-2 gap-2">
+        {statusCounts.map(({ label, count, color, bg }) => (
+          <div key={label} className="rounded-2xl px-4 py-3" style={{ backgroundColor: bg }}>
+            <dt className="text-xs font-bold" style={{ color }}>
               {label}
-            </li>
-          );
-        })}
-      </ol>
+            </dt>
+            <dd className="font-display text-3xl font-bold text-foreground">
+              {loading ? '-' : count}
+              <span className="ml-1 text-sm font-medium text-muted-foreground">件</span>
+            </dd>
+          </div>
+        ))}
+      </dl>
 
       <div
         className="rounded-3xl p-6 text-center text-white"
@@ -195,19 +188,7 @@ export default function StoreTicket() {
                   </button>
                 </div>
 
-                <p className="mt-2 text-[11px] text-muted-foreground">
-                  {pipeline.map((label, index) => {
-                    const active = index === pipelineIndex(o);
-                    return (
-                      <span key={label}>
-                        {index > 0 ? ' → ' : ''}
-                        <span className={active ? 'font-bold text-foreground' : ''}>{label}</span>
-                      </span>
-                    );
-                  })}
-                </p>
-
-                <p className="mt-1 text-sm text-muted-foreground">
+                <p className="mt-2 text-sm text-muted-foreground">
                   {o.items.map((it) => `${it.name ?? '商品'}×${it.quantity}`).join('・')}
                 </p>
 
