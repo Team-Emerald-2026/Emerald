@@ -23,10 +23,11 @@ export const FACILITY_TYPES = [
   { value: 'support', label: '運営サポート', color: '#d97706' },
   { value: 'toilet_men', label: '男子トイレ', color: '#2563eb' },
   { value: 'toilet_women', label: '女子トイレ', color: '#db2777' },
+  { value: 'toilet', label: '男女トイレ', color: '#64748b' },
 ] as const;
 
 /** 場所（マップ編集）だけで使い、店舗には選ばせない種類 */
-export const PLACE_ONLY_TYPES: readonly string[] = ['toilet_men', 'toilet_women'];
+export const PLACE_ONLY_TYPES: readonly string[] = ['toilet_men', 'toilet_women', 'toilet'];
 
 /**
  * 以前は選べた種類。今は新しく選べないが、すでに登録済みの場所が持っていることがあるので、
@@ -34,7 +35,6 @@ export const PLACE_ONLY_TYPES: readonly string[] = ['toilet_men', 'toilet_women'
  */
 export const LEGACY_FACILITY_TYPES = [
   { value: 'stage', label: 'イベントもの', color: 'var(--primary)' },
-  { value: 'toilet', label: 'トイレ', color: '#3b82f6' },
   { value: 'first_aid', label: '救護室', color: '#e11d48' },
 ] as const;
 

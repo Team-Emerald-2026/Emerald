@@ -4,7 +4,6 @@ import {
   FlaskConical,
   UtensilsCrossed,
   Ticket,
-  DoorClosed,
   Info as InfoIcon,
   HeartPulse,
   Headset,
@@ -14,8 +13,8 @@ import {
 import { fetchMapFacilities, type BackendMapFacility } from '../lib/api';
 import { floors, mapImageByFloor, type MapFloor } from '../lib/campusMap';
 
-// 管理画面で選べるのは 体験 / フード / 案内 / 金券販売 / 運営サポート / 男子トイレ / 女子トイレ の7つ。
-// トイレ（男女の区別なし）・救護室は、以前に登録された場所を表示するためだけに残している。
+// 管理画面で選べるのは 体験 / フード / 案内 / 金券販売 / 運営サポート / 男子トイレ / 女子トイレ / 男女トイレ の8つ。
+// 救護室は、以前に登録された場所を表示するためだけに残している。
 type BoothType =
   | 'フード'
   | '体験'
@@ -24,7 +23,7 @@ type BoothType =
   | '金券販売'
   | '男子トイレ'
   | '女子トイレ'
-  | 'トイレ'
+  | '男女トイレ'
   | '救護室';
 
 /** 凡例・絞り込みの並び順 */
@@ -36,7 +35,7 @@ const typeOrder: BoothType[] = [
   '金券販売',
   '男子トイレ',
   '女子トイレ',
-  'トイレ',
+  '男女トイレ',
   '救護室',
 ];
 type Floor = `${number}F`;
@@ -69,7 +68,7 @@ const typeIcon: Record<BoothType, LucideIcon> = {
   金券販売: Ticket,
   男子トイレ: Toilet,
   女子トイレ: Toilet,
-  トイレ: DoorClosed,
+  男女トイレ: Toilet,
   案内: InfoIcon,
   救護室: HeartPulse,
   運営サポート: Headset,
@@ -81,7 +80,7 @@ const typeColor: Record<BoothType, string> = {
   金券販売: '#7c5cff',
   男子トイレ: '#2563eb',
   女子トイレ: '#db2777',
-  トイレ: '#3b82f6',
+  男女トイレ: '#64748b',
   案内: '#0ea5a3',
   救護室: '#e11d48',
   運営サポート: '#d97706',
@@ -104,7 +103,8 @@ function toBoothType(type: string): BoothType {
       return '女子トイレ';
     case 'toilet':
     case 'トイレ':
-      return 'トイレ';
+    case '男女トイレ':
+      return '男女トイレ';
     case 'information':
     case 'info':
     case '案内':
