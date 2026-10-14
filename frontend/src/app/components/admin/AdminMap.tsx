@@ -378,6 +378,7 @@ export default function AdminMap() {
         })}
       </div>
 
+      <p className="mx-auto mb-1 max-w-sm px-1 text-sm font-bold text-foreground">{floor} の地図</p>
       <div
         ref={mapRef}
         onClick={handleMapClick}
@@ -391,10 +392,6 @@ export default function AdminMap() {
           draggable={false}
           className="pointer-events-none absolute inset-0 h-full w-full object-fill"
         />
-        <span className="pointer-events-none absolute left-3 top-3 z-10 rounded-full bg-black/70 px-2.5 py-1 text-xs font-bold text-white">
-          {floor}
-        </span>
-
         {floorFacilities.map((item) => {
           const isSelected = item.id === selectedId;
           const position = positionOf(item);

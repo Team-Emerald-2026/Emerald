@@ -8,17 +8,37 @@ import {
   Info as InfoIcon,
   HeartPulse,
   Headset,
+  Toilet,
   type LucideIcon,
 } from 'lucide-react';
 import { fetchMapFacilities, type BackendMapFacility } from '../lib/api';
 import { floors, mapImageByFloor, type MapFloor } from '../lib/campusMap';
 
-// 管理画面で選べるのは 体験 / フード / 案内 / 金券販売 / 運営サポート の5つ。
-// トイレ・救護室は、以前に登録された場所を表示するためだけに残している。
-type BoothType = 'フード' | '体験' | '案内' | '運営サポート' | '金券販売' | 'トイレ' | '救護室';
+// 管理画面で選べるのは 体験 / フード / 案内 / 金券販売 / 運営サポート / 男子トイレ / 女子トイレ の7つ。
+// トイレ（男女の区別なし）・救護室は、以前に登録された場所を表示するためだけに残している。
+type BoothType =
+  | 'フード'
+  | '体験'
+  | '案内'
+  | '運営サポート'
+  | '金券販売'
+  | '男子トイレ'
+  | '女子トイレ'
+  | 'トイレ'
+  | '救護室';
 
 /** 凡例・絞り込みの並び順 */
-const typeOrder: BoothType[] = ['フード', '体験', '案内', '運営サポート', '金券販売', 'トイレ', '救護室'];
+const typeOrder: BoothType[] = [
+  'フード',
+  '体験',
+  '案内',
+  '運営サポート',
+  '金券販売',
+  '男子トイレ',
+  '女子トイレ',
+  'トイレ',
+  '救護室',
+];
 type Floor = `${number}F`;
 
 interface Facility {
@@ -47,6 +67,8 @@ const typeIcon: Record<BoothType, LucideIcon> = {
   体験: FlaskConical,
   フード: UtensilsCrossed,
   金券販売: Ticket,
+  男子トイレ: Toilet,
+  女子トイレ: Toilet,
   トイレ: DoorClosed,
   案内: InfoIcon,
   救護室: HeartPulse,
@@ -57,6 +79,8 @@ const typeColor: Record<BoothType, string> = {
   体験: 'var(--primary)',
   フード: 'var(--accent)',
   金券販売: '#7c5cff',
+  男子トイレ: '#2563eb',
+  女子トイレ: '#db2777',
   トイレ: '#3b82f6',
   案内: '#0ea5a3',
   救護室: '#e11d48',
@@ -72,6 +96,12 @@ function toBoothType(type: string): BoothType {
     case '金券販売':
     case '物販':
       return '金券販売';
+    case 'toilet_men':
+    case '男子トイレ':
+      return '男子トイレ';
+    case 'toilet_women':
+    case '女子トイレ':
+      return '女子トイレ';
     case 'toilet':
     case 'トイレ':
       return 'トイレ';
@@ -296,6 +326,7 @@ export default function CampusMap() {
         </label>
       </div>
 
+      <p className="px-1 text-sm font-bold text-foreground">{floor} の地図</p>
       <div
         className={`relative isolate aspect-[1042/745] min-h-52 w-full overflow-hidden rounded-2xl border border-border bg-muted ${
           import.meta.env.DEV ? 'cursor-crosshair' : ''
@@ -313,9 +344,6 @@ export default function CampusMap() {
           alt={`${floor} 校内マップ`}
           className="absolute inset-0 h-full w-full object-fill"
         />
-        <span className="absolute left-3 top-3 z-10 rounded-full bg-black/70 px-2.5 py-1 text-xs font-bold text-white">
-          {floor}
-        </span>
         {filtered.map((f) => {
           const isSelected = selectedFacility?.id === f.id;
           const hasSelection = selectedFacility != null;
