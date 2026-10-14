@@ -19,6 +19,9 @@ class EventNoticeResource extends JsonResource
             'is_published' => (bool) $this->is_published,
             'ticker_lead_minutes' => $this->ticker_lead_minutes,
             'ticker_after_minutes' => $this->ticker_after_minutes,
+            'ticker_started_at' => optional($this->ticker_started_at)->toISOString(),
+            // いま電光掲示板に流しているか
+            'ticker_active' => $this->resource->isTickerActiveAt(),
         ];
 
         return [

@@ -530,8 +530,12 @@ export interface EventNotice {
   is_published?: boolean;
   /** 開始の何分前からホームの電光掲示板に流すか。null は流さない */
   ticker_lead_minutes?: number | null;
-  /** 開始の何分後まで流すか。null は 20 分 */
+  /** イベント: 開始の何分後まで流すか（null は 20 分）。お知らせ: 流す時間（null は止めるまで） */
   ticker_after_minutes?: number | null;
+  /** お知らせを掲示板に流し始めた時刻。null は流していない */
+  ticker_started_at?: string | null;
+  /** いま電光掲示板に流しているか */
+  ticker_active?: boolean;
 }
 
 export interface EventNoticeInput {
@@ -543,6 +547,8 @@ export interface EventNoticeInput {
   is_published?: boolean;
   ticker_lead_minutes?: number | null;
   ticker_after_minutes?: number | null;
+  /** お知らせを掲示板にすぐ流すか（true で流し始め、false で止める） */
+  ticker_now?: boolean;
 }
 
 /** ホームの電光掲示板に、いま流すお知らせ */
@@ -550,7 +556,8 @@ export interface TickerItem {
   id: string;
   title: string;
   body: string;
-  starts_at: string;
+  /** イベントの開始時刻。お知らせは null（時刻を出さない） */
+  starts_at: string | null;
 }
 
 export function fetchTicker(signal?: AbortSignal) {
@@ -593,7 +600,7 @@ export function createAdminEvent(
 export function updateAdminEvent(
   token: string | undefined,
   id: string,
-  input: EventNoticeInput,
+  input: Partial<EventNoticeInput>,
   signal?: AbortSignal,
 ) {
   return request(`/v1/admin/events/${encodeURIComponent(id)}`, {

@@ -4,8 +4,8 @@ import { Megaphone } from 'lucide-react';
 import { fetchTicker, type TickerItem } from '../lib/api';
 import { jstParts, timeLabel } from '../lib/eventSchedule';
 
-/** 流すお知らせを取り直す間隔。14時になったら自動で流れ始めるための定期確認 */
-const TICKER_POLL_MS = 60_000;
+/** 流すお知らせを取り直す間隔。イベントの時刻になったときや、緊急のお知らせをすぐ出すための定期確認 */
+const TICKER_POLL_MS = 30_000;
 /** 本文を何文字まで流すか（長すぎると読み終わる前に流れ去るため） */
 const BODY_MAX_CHARS = 60;
 const SEPARATOR = '　　　◆　　　';
@@ -21,6 +21,7 @@ function toText(item: TickerItem): string {
 /**
  * ホームのヘッダーのすぐ下に出す電光掲示板（Layout.tsx でホームのときだけ表示）。
  * 管理画面で「掲示板に流す」を設定したイベントを、その時間帯だけ右から左へ流す。
+ * 「掲示板にすぐ流す」にしたお知らせは、イベントより先に流す。
  * 流すものがないとき（や取得に失敗したとき）は何も表示しない。
  */
 export default function HomeTicker() {

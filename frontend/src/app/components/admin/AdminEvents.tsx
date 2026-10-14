@@ -44,10 +44,21 @@ type FormState = {
   tickerLead: string;
   /** 開始の何分後まで流すか */
   tickerAfter: string;
+  /** お知らせを掲示板にすぐ流すか（お知らせのみ） */
+  noticeTicker: boolean;
+  /** お知らせを流す時間（分）。'' は止めるまで */
+  noticeTickerMinutes: string;
 };
 
 const TICKER_DEFAULT_LEAD = '10';
 const TICKER_DEFAULT_AFTER = '20';
+const NOTICE_TICKER_DEFAULT = '30';
+const NOTICE_TICKER_OPTIONS = [
+  { value: '30', label: '30分' },
+  { value: '60', label: '1時間' },
+  { value: '120', label: '2時間' },
+  { value: '', label: '止めるまで' },
+];
 
 const emptyForm = (day: EventDayKey): FormState => ({
   title: '',
@@ -59,6 +70,8 @@ const emptyForm = (day: EventDayKey): FormState => ({
   ticker: false,
   tickerLead: TICKER_DEFAULT_LEAD,
   tickerAfter: TICKER_DEFAULT_AFTER,
+  noticeTicker: false,
+  noticeTickerMinutes: NOTICE_TICKER_DEFAULT,
 });
 
 function tickerFields(item: EventNotice) {
@@ -90,6 +103,13 @@ function toForm(item: EventNotice, fallbackDay: EventDayKey): FormState {
       time: '12:00',
       is_published: item.is_published ?? true,
       ...tickerFields(item),
+      // 流す時間が終わったお知らせはオフで開き、チェックし直すと今から流し直す
+      noticeTicker: item.ticker_active ?? false,
+      noticeTickerMinutes: item.ticker_started_at
+        ? item.ticker_after_minutes == null
+          ? ''
+          : String(item.ticker_after_minutes)
+        : NOTICE_TICKER_DEFAULT,
     };
   }
 
@@ -101,6 +121,8 @@ function toForm(item: EventNotice, fallbackDay: EventDayKey): FormState {
     time: parts ? minutesToTime(parts.minutes) : '12:00',
     is_published: item.is_published ?? true,
     ...tickerFields(item),
+    noticeTicker: false,
+    noticeTickerMinutes: NOTICE_TICKER_DEFAULT,
   };
 }
 
@@ -243,7 +265,7 @@ export default function AdminEvents() {
       startsAt = toStartsAt(form.day, '00:00');
     }
 
-    // 電光掲示板は開始時刻のあるイベントだけ。お知らせは流さない
+    // イベントは開始時刻を基準に流す。お知らせは「すぐ流す」で、保存した時から流す
     const useTicker = form.type === 'event' && form.ticker;
     const tickerLead = useTicker ? toMinutes(form.tickerLead) : null;
     const tickerAfter = useTicker ? toMinutes(form.tickerAfter) : null;
@@ -251,6 +273,7 @@ export default function AdminEvents() {
       setError('電光掲示板の「何分前から」「何分後まで」は 0〜180 の数字で入力してください。');
       return;
     }
+    const noticeTicker = form.type === 'notice' && form.noticeTicker;
 
     // 終了時刻は付けない（公開は「公開する」のチェックで切り替える）
     const input: EventNoticeInput = {
@@ -261,7 +284,12 @@ export default function AdminEvents() {
       ends_at: null,
       is_published: form.is_published,
       ticker_lead_minutes: tickerLead,
-      ticker_after_minutes: useTicker ? tickerAfter : null,
+      ticker_after_minutes: useTicker
+        ? tickerAfter
+        : noticeTicker && form.noticeTickerMinutes !== ''
+          ? Number(form.noticeTickerMinutes)
+          : null,
+      ...(form.type === 'notice' ? { ticker_now: noticeTicker } : {}),
     };
 
     setSaving(true);
@@ -275,6 +303,9 @@ export default function AdminEvents() {
       } else {
         await createAdminEvent(adminSession?.token, input);
         setMessage('作成しました。来場者のイベント画面にも反映されます。');
+      }
+      if (noticeTicker && form.is_published) {
+        setMessage((prev) => `${prev} ホームの電光掲示板にも30秒ほどで流れ始めます。`);
       }
       if (form.type === 'event' && getEventDay(form.day)) {
         setDayKey(form.day as EventDayKey);
@@ -350,6 +381,22 @@ export default function AdminEvents() {
     </div>
   );
 
+  const stopNoticeTicker = async (item: EventNotice) => {
+    if ((!adminSession && !ADMIN_PUBLIC_ACCESS) || saving) return;
+    setSaving(true);
+    setError('');
+    setMessage('');
+    try {
+      await updateAdminEvent(adminSession?.token, item.id, { ticker_now: false });
+      setMessage(`「${item.title}」を電光掲示板から止めました。`);
+      await loadItems();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : '止められませんでした。');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const renderNoticeItem = (item: EventNotice, index: number) => (
     <li
       key={item.id}
@@ -364,9 +411,27 @@ export default function AdminEvents() {
           {!item.is_published && (
             <span className="ml-2 text-xs font-medium text-muted-foreground">（非公開）</span>
           )}
+          {item.ticker_active && item.is_published && (
+            <span
+              className="ml-2 rounded-md px-1.5 py-0.5 text-[10px] font-bold text-white"
+              style={{ backgroundColor: 'var(--accent)' }}
+            >
+              掲示板で放送中
+            </span>
+          )}
         </p>
         <p className="mt-1 text-sm text-muted-foreground">{item.body}</p>
       </button>
+      {item.ticker_active && (
+        <button
+          type="button"
+          onClick={() => void stopNoticeTicker(item)}
+          disabled={saving}
+          className="shrink-0 rounded-md border border-border px-2 py-1 text-xs font-bold text-foreground hover:bg-muted disabled:opacity-50"
+        >
+          掲示板を止める
+        </button>
+      )}
       <button
         type="button"
         onClick={() => openEdit(item)}
@@ -589,6 +654,41 @@ export default function AdminEvents() {
                       </div>
                       <p className="mt-2 text-xs text-muted-foreground">
                         例: 14:00開始で「10分前から・20分後まで」なら、13:50〜14:20 にホームの動画の上で右から左へ流れます。
+                        公開がオフのときは流れません。
+                      </p>
+                    </>
+                  )}
+                </div>
+              )}
+
+              {form.type === 'notice' && (
+                <div className="rounded-xl border border-border p-3">
+                  <label className="flex items-center gap-2 text-sm font-medium text-foreground">
+                    <input
+                      type="checkbox"
+                      checked={form.noticeTicker}
+                      onChange={(e) => updateField('noticeTicker', e.target.checked)}
+                    />
+                    ホームの電光掲示板にすぐ流す（緊急のお知らせ向け）
+                  </label>
+                  {form.noticeTicker && (
+                    <>
+                      <label className="mt-3 block text-sm">
+                        <span className="mb-1 block text-muted-foreground">流す時間</span>
+                        <select
+                          value={form.noticeTickerMinutes}
+                          onChange={(e) => updateField('noticeTickerMinutes', e.target.value)}
+                          className="w-full rounded-lg border border-input bg-background px-3 py-2.5 text-foreground"
+                        >
+                          {NOTICE_TICKER_OPTIONS.map((option) => (
+                            <option key={option.value} value={option.value}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <p className="mt-2 text-xs text-muted-foreground">
+                        保存した時から流れ始め、イベントより先に表示されます。途中で止めるときは、このチェックを外すか、一覧の「掲示板を止める」を押してください。
                         公開がオフのときは流れません。
                       </p>
                     </>

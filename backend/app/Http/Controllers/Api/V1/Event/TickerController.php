@@ -10,24 +10,33 @@ class TickerController extends Controller
     /**
      * ホームの電光掲示板に、いま流すお知らせ。
      * 時刻の判定はサーバー側で行う（来場者の端末の時計がずれていても影響しない）。
+     * 「すぐ流す」お知らせを先に（新しく流し始めたものから）、続けてイベントを開始時刻順に並べる。
      */
     public function index()
     {
         $now = now();
 
-        $items = EventNotice::query()
+        $active = EventNotice::query()
             ->published()
-            ->whereNotNull('starts_at')
-            ->whereNotNull('ticker_lead_minutes')
+            ->where(function ($query) {
+                $query
+                    ->where(fn ($q) => $q->where('type', 'notice')->whereNotNull('ticker_started_at'))
+                    ->orWhere(fn ($q) => $q->where('type', '!=', 'notice')->whereNotNull('starts_at')->whereNotNull('ticker_lead_minutes'));
+            })
             ->get()
-            ->filter(fn (EventNotice $notice) => $notice->isTickerActiveAt($now))
-            ->sortBy('starts_at')
+            ->filter(fn (EventNotice $notice) => $notice->isTickerActiveAt($now));
+
+        $notices = $active->where('type', 'notice')->sortByDesc('ticker_started_at');
+        $events = $active->where('type', '!=', 'notice')->sortBy('starts_at');
+
+        $items = $notices->concat($events)
             ->values()
             ->map(fn (EventNotice $notice) => [
                 'id' => (string) $notice->id,
                 'title' => $notice->title,
                 'body' => $notice->body,
-                'starts_at' => $notice->starts_at->toISOString(),
+                // お知らせは時刻を出さない
+                'starts_at' => $notice->type === 'notice' ? null : $notice->starts_at->toISOString(),
             ]);
 
         return response()->json(['data' => $items], 200, [], JSON_UNESCAPED_UNICODE);
