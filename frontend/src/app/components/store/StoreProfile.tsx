@@ -6,6 +6,7 @@ import {
   deleteBoothMenuItem,
   fetchBoothMenuItems,
   fetchStoreProfile,
+  setBoothMenuItemSoldOut,
   updateBoothMenuItem,
   updateStoreProfile,
   type BackendMenuItem,
@@ -158,6 +159,27 @@ export default function StoreProfile() {
     setProductName(item.name);
     setProductPrice(String(item.price));
     setProductError('');
+  };
+
+  const toggleSoldOut = async (item: BackendMenuItem) => {
+    if (!session?.token) {
+      setProductError('ログイン情報がありません。再度ログインしてください。');
+      return;
+    }
+
+    setSavingProduct(true);
+    setProductError('');
+
+    try {
+      const updated = await setBoothMenuItemSoldOut(session.token, item.id, !item.is_sold_out);
+      setMenuItems((current) =>
+        current.map((entry) => (String(entry.id) === String(updated.id) ? updated : entry)),
+      );
+    } catch (err: unknown) {
+      setProductError(err instanceof Error ? err.message : '売り切れの設定を変更できませんでした。');
+    } finally {
+      setSavingProduct(false);
+    }
   };
 
   const removeProduct = async (item: BackendMenuItem) => {
@@ -378,10 +400,34 @@ export default function StoreProfile() {
                     className="flex items-center justify-between gap-3 rounded-xl border border-border bg-background px-4 py-3"
                   >
                     <div className="min-w-0">
-                      <p className="truncate font-medium text-foreground">{item.name}</p>
+                      <div className="flex items-center gap-2">
+                        <p
+                          className={`truncate font-medium ${
+                            item.is_sold_out ? 'text-muted-foreground line-through' : 'text-foreground'
+                          }`}
+                        >
+                          {item.name}
+                        </p>
+                        {item.is_sold_out && (
+                          <span
+                            className="shrink-0 rounded-full px-2 py-0.5 text-xs font-bold"
+                            style={{ backgroundColor: 'var(--busy-soft)', color: 'var(--busy)' }}
+                          >
+                            売り切れ
+                          </span>
+                        )}
+                      </div>
                       <p className="text-sm text-muted-foreground">{yen(item.price)}</p>
                     </div>
                     <div className="flex shrink-0 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => void toggleSoldOut(item)}
+                        disabled={savingProduct}
+                        className="min-h-10 rounded-lg border border-border px-3 text-xs font-bold text-foreground hover:bg-muted disabled:opacity-60"
+                      >
+                        {item.is_sold_out ? '販売再開' : '売り切れにする'}
+                      </button>
                       <button
                         type="button"
                         onClick={() => startEditProduct(item)}

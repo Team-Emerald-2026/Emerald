@@ -23,7 +23,7 @@ class AccountingController extends Controller
         $menuItems = MenuItem::query()
             ->forStore($storeId)
             ->where('is_available', true)
-            ->select(['id', 'name', 'description', 'price', 'is_available'])
+            ->select(['id', 'name', 'description', 'price', 'is_available', 'is_sold_out'])
             ->orderBy('id')
             ->get();
 
@@ -62,6 +62,28 @@ class AccountingController extends Controller
             'name' => $validated['name'],
             'price' => $validated['price'],
         ]);
+        $item->save();
+
+        return MenuItemResource::make($item->refresh())
+            ->response()
+            ->setEncodingOptions(JSON_UNESCAPED_UNICODE);
+    }
+
+    /**
+     * 商品の売り切れを切り替える。売り切れ中もメニューには表示し、注文だけ受け付けない。
+     */
+    public function updateMenuItemSoldOut(Request $request, int $id)
+    {
+        $item = $this->findStoreMenuItem($id);
+        if (! $item) {
+            return $this->menuItemNotFound();
+        }
+
+        $validated = $request->validate([
+            'is_sold_out' => ['required', 'boolean'],
+        ]);
+
+        $item->is_sold_out = (bool) $validated['is_sold_out'];
         $item->save();
 
         return MenuItemResource::make($item->refresh())
@@ -201,6 +223,17 @@ class AccountingController extends Controller
             ->whereIn('id', $menuItemIds)
             ->get()
             ->keyBy('id');
+
+        $soldOutItems = $menuItems->filter(fn (MenuItem $menuItem) => $menuItem->is_sold_out);
+        if ($soldOutItems->isNotEmpty()) {
+            return response()->json([
+                'error' => [
+                    'code' => 'SOLD_OUT',
+                    'message' => '売り切れの商品が含まれています: ' . $soldOutItems->pluck('name')->implode('、'),
+                    'details' => ['menu_item_ids' => $soldOutItems->keys()->values()],
+                ],
+            ], 409, [], JSON_UNESCAPED_UNICODE);
+        }
 
         $result = DB::transaction(function () use ($requestedItems, $storeId, $menuItems, $settleNow) {
             $ticketNumber = $this->generateNextTicketNumber($storeId);

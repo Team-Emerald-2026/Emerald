@@ -37,6 +37,7 @@
 | /booth/auth/logout | POST | Bearer Token | 店舗ログアウト |
 | /booth/dashboard | GET | Bearer Token | 店舗ダッシュボード取得 |
 | /booth/accounting/menu-items | GET | Bearer Token | 店舗メニュー取得 |
+| /booth/accounting/menu-items/{id}/sold-out | PATCH | Bearer Token | 商品の売り切れを切り替える |
 | /booth/accounting/orders | GET | Bearer Token | 会計一覧取得 |
 | /booth/accounting/orders | POST | Bearer Token | 会計作成・受付番号発行 |
 | /booth/accounting/orders/{id} | GET | Bearer Token | 会計詳細取得 |
@@ -391,7 +392,17 @@ GET /api/v1/booth/dashboard
 GET /api/v1/booth/accounting/menu-items
 ```
 
-ログイン中店舗の商品メニューを取得する。
+ログイン中店舗の商品メニューを取得する。各商品の `is_sold_out` で売り切れ中かどうかが分かる。
+
+#### 売り切れの切り替え
+```javascript
+PATCH /api/v1/booth/accounting/menu-items/{id}/sold-out
+{
+  "is_sold_out": true
+}
+```
+
+商品を売り切れにする（`false` で販売を再開する）。売り切れ中の商品はメニューから消えず、来場者向けの `GET /api/v1/restaurants/{id}` の `menu_items[]` にも `is_sold_out: true` で返る。他の店舗の商品は 404。
 
 #### 会計作成・受付番号発行
 ```javascript
@@ -408,6 +419,7 @@ POST /api/v1/booth/accounting/orders
 
 - `settle`（任意）: `true` にすると、注文の作成と同じ処理の中で精算済みにする（レジで会計と同時に番号を出す用）。途中で失敗した場合は、注文も売上も残らない。省略時は未精算（`issued`）
 - レスポンスの `items[]` には、商品名 `name` が含まれる（販売停止にしたメニューも、過去の注文では名前を取得できる）
+- 売り切れ中の商品が含まれる場合は、注文を作らずに 409 `{"error":{"code":"SOLD_OUT","message":"売り切れの商品が含まれています: 〇〇","details":{"menu_item_ids":[...]}}}` を返す
 
 #### 会計清算
 ```javascript

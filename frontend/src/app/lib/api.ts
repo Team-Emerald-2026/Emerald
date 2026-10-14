@@ -46,6 +46,8 @@ export interface BackendMenuItem {
   description: string | null;
   price: number;
   is_available: boolean;
+  /** 売り切れ中（メニューには表示したまま、注文だけ止める） */
+  is_sold_out?: boolean;
 }
 
 export interface AdminLoginResponse {
@@ -140,6 +142,7 @@ export class ApiError extends Error {
   constructor(
     message: string,
     public readonly status: number,
+    public readonly code?: string,
   ) {
     super(message);
     this.name = 'ApiError';
@@ -205,6 +208,7 @@ async function request(path: string, options: RequestOptions = {}): Promise<unkn
 
   if (!response.ok) {
     let message = `API request failed: ${response.status}`;
+    let code: string | undefined;
     try {
       const errorBody = (await response.json()) as unknown;
       if (isRecord(errorBody)) {
@@ -213,11 +217,14 @@ async function request(path: string, options: RequestOptions = {}): Promise<unkn
         } else if (isRecord(errorBody.error) && typeof errorBody.error.message === 'string') {
           message = errorBody.error.message;
         }
+        if (isRecord(errorBody.error) && typeof errorBody.error.code === 'string') {
+          code = errorBody.error.code;
+        }
       }
     } catch {
       // keep default message
     }
-    throw new ApiError(message, response.status);
+    throw new ApiError(message, response.status, code);
   }
 
   if (response.status === 204) return null;
@@ -327,6 +334,27 @@ export function updateBoothMenuItem(
     const updated = normalizeItem<BackendMenuItem>(payload);
     if (!updated) {
       throw new Error('商品を更新できませんでした。');
+    }
+    return updated;
+  });
+}
+
+/** 商品の売り切れを切り替える（売り切れ中もメニューには表示され、注文だけ止まる） */
+export function setBoothMenuItemSoldOut(
+  token: string,
+  id: number | string,
+  isSoldOut: boolean,
+  signal?: AbortSignal,
+) {
+  return request(`/v1/booth/accounting/menu-items/${encodeURIComponent(String(id))}/sold-out`, {
+    method: 'PATCH',
+    token,
+    body: { is_sold_out: isSoldOut },
+    signal,
+  }).then((payload) => {
+    const updated = normalizeItem<BackendMenuItem>(payload);
+    if (!updated) {
+      throw new Error('売り切れの設定を変更できませんでした。');
     }
     return updated;
   });
@@ -806,6 +834,9 @@ export function serveBoothOrder(token: string, orderId: number | string, signal?
  */
 export function describeOrderError(error: unknown, fallback: string): string {
   if (error instanceof ApiError) {
+    if (error.status === 409 && error.code === 'SOLD_OUT') {
+      return `${error.message}。売り切れの商品をカートから外しました。`;
+    }
     if (error.status === 409) {
       return 'すでに状態が変わっていました。最新の状態に更新しました。';
     }
