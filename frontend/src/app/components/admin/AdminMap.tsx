@@ -40,6 +40,8 @@ type DragState = { id: string; x: number; y: number };
 
 const floorNumber = (floor: MapFloor) => Number(floor.replace('F', ''));
 const samePlace = (a: AdminMapFacility, b: AdminMapFacility) => a.floor === b.floor && a.x === b.x && a.y === b.y;
+const placeKey = (item: AdminMapFacility) => `${item.floor}:${item.x}:${item.y}`;
+const displayName = (item: AdminMapFacility) => (item.store_id ? (item.store_name ?? item.name) : item.name);
 
 export default function AdminMap() {
   const adminSession = useFestival((s) => s.adminSession);
@@ -87,16 +89,34 @@ export default function AdminMap() {
     return () => controller.abort();
   }, [adminSession]);
 
+  // 管理画面は部屋（空き枠）が主役。部屋に入った店舗は、その部屋の情報として扱い、ピンや一覧には出さない
+  const { storeByPlace, roomPlaces } = useMemo(() => {
+    const stores = new Map<string, AdminMapFacility>();
+    const rooms = new Set<string>();
+    for (const item of facilities) {
+      if (item.store_id === null) rooms.add(placeKey(item));
+      else if (!stores.has(placeKey(item))) stores.set(placeKey(item), item);
+    }
+    return { storeByPlace: stores, roomPlaces: rooms };
+  }, [facilities]);
+  const assignedStore = (item: AdminMapFacility) =>
+    item.store_id === null ? (storeByPlace.get(placeKey(item)) ?? null) : null;
+  const visibleFacilities = useMemo(
+    () => facilities.filter((item) => item.store_id === null || !roomPlaces.has(placeKey(item))),
+    [facilities, roomPlaces],
+  );
+
   const floorFacilities = useMemo(
-    () => facilities.filter((item) => item.floor === floorNumber(floor)),
-    [facilities, floor],
+    () => visibleFacilities.filter((item) => item.floor === floorNumber(floor)),
+    [visibleFacilities, floor],
   );
   const countByFloor = useMemo(() => {
     const counts = new Map<number, number>();
-    for (const item of facilities) counts.set(item.floor, (counts.get(item.floor) ?? 0) + 1);
+    for (const item of visibleFacilities) counts.set(item.floor, (counts.get(item.floor) ?? 0) + 1);
     return counts;
-  }, [facilities]);
+  }, [visibleFacilities]);
   const selected = facilities.find((item) => item.id === selectedId) ?? null;
+  const selectedStore = selected ? assignedStore(selected) : null;
 
   // 同じ位置のピン（空き枠と、そこに入った店舗）は一緒に動く
   const moving = drag ?? pending;
@@ -291,7 +311,7 @@ export default function AdminMap() {
   };
 
   const remove = async () => {
-    if (!selected || selected.store_id !== null || !canUse || saving) return;
+    if (!selected || selected.store_id !== null || selectedStore || !canUse || saving) return;
     if (!window.confirm(`${floor} の「${selected.name}」を削除しますか？`)) return;
     setSaving(true);
     setError('');
@@ -317,11 +337,6 @@ export default function AdminMap() {
     setMessage('');
     setError('');
   };
-
-  // 同じ位置に店舗のピンがある空き枠は描かない（店舗のピンに部屋番号を表示し、一緒に動かす）
-  const occupiedKeys = new Set(
-    floorFacilities.filter((item) => item.store_id !== null).map((item) => `${item.x}:${item.y}`),
-  );
 
   return (
     <AdminShell title="マップ編集">
@@ -383,9 +398,10 @@ export default function AdminMap() {
         {floorFacilities.map((item) => {
           const isSelected = item.id === selectedId;
           const position = positionOf(item);
-          const linked = item.store_id !== null;
-          if (!linked && occupiedKeys.has(`${item.x}:${item.y}`)) return null;
-          const info = facilityTypeInfo(item.type);
+          const store = item.store_id !== null ? item : assignedStore(item);
+          const linked = store !== null;
+          // 色は来場者マップと同じく、店舗が入っていれば店舗の種類で決める
+          const info = facilityTypeInfo((store ?? item).type);
           return (
             <button
               key={item.id}
@@ -398,10 +414,10 @@ export default function AdminMap() {
                 setDrag(null);
               }}
               onClick={(event) => event.stopPropagation()}
-              title={linked ? `${item.store_name}（店舗）` : item.name}
+              title={store ? `${item.label ?? item.name}（${store.store_name ?? '店舗'}）` : item.name}
               className={`absolute max-w-[20%] -translate-x-1/2 -translate-y-1/2 cursor-grab truncate whitespace-nowrap rounded-md px-1.5 py-1 text-[10px] font-bold leading-none text-white shadow-md active:cursor-grabbing ${
                 isSelected ? 'z-30 scale-110 ring-2 ring-white' : linked ? 'z-10' : 'z-0'
-              } ${linked && item.store_visible === false ? 'opacity-50' : ''}`}
+              } ${store?.store_visible === false ? 'opacity-50' : ''}`}
               style={{
                 left: `${position.x}%`,
                 top: `${position.y}%`,
@@ -411,7 +427,7 @@ export default function AdminMap() {
               }}
             >
               {/* 来場者マップと同じ表示ルール: 場所の名前（部屋番号など）を優先する */}
-              {item.label ?? (linked ? (item.store_name ?? item.name) : item.name)}
+              {item.label ?? displayName(item)}
             </button>
           );
         })}
@@ -427,7 +443,7 @@ export default function AdminMap() {
       </div>
 
       <p className="mt-2 text-xs text-muted-foreground">
-        <span className="font-bold">黒い縁のピン</span>は店舗が入っている場所です。部屋番号のピンと店舗は1つにまとめて表示し、動かすと一緒に移動します。
+        <span className="font-bold">黒い縁のピン</span>は店舗が入っている場所です。部屋番号で表示し、選ぶと入っている店舗がわかります。動かすと店舗も一緒に移動します。
       </p>
 
       {neighbors.length > 0 && (
@@ -498,9 +514,27 @@ export default function AdminMap() {
             </h3>
             <p className="text-xs text-muted-foreground">
               {floor} / X:{positionOf(selected).x}% Y:{positionOf(selected).y}% /{' '}
-              {facilityTypeInfo(selected.type).label}
+              {facilityTypeInfo((selectedStore ?? selected).type).label}
             </p>
           </div>
+
+          {selectedStore && (
+            <div className="rounded-xl border border-border bg-muted/50 p-3 text-sm">
+              <p className="text-xs text-muted-foreground">割り当て店舗</p>
+              <p className="font-bold text-foreground">
+                {selectedStore.store_name ?? selectedStore.name}
+                <span className="ml-2 text-xs font-normal text-muted-foreground">
+                  （{selectedStore.store_visible === false ? '非表示' : '表示中'}）
+                </span>
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                店舗名・種類の変更や、別の部屋への割り当ては店舗管理で行います。
+                <Link to="/admin/stores" className="ml-1 font-bold" style={{ color: 'var(--primary)' }}>
+                  店舗管理へ
+                </Link>
+              </p>
+            </div>
+          )}
 
           <div>
             <p className="mb-1 text-xs font-bold text-muted-foreground">位置を微調整（1%ずつ）</p>
@@ -578,20 +612,23 @@ export default function AdminMap() {
                   className="w-full rounded-lg border border-input bg-background px-3 py-2.5 text-foreground outline-none"
                 />
               </label>
-              <label className="block text-sm">
-                <span className="mb-1 block text-muted-foreground">種類</span>
-                <select
-                  value={editType}
-                  onChange={(event) => setEditType(event.target.value)}
-                  className="w-full rounded-lg border border-input bg-background px-3 py-2.5 text-foreground"
-                >
-                  {facilityTypeOptions(selected.type).map((type) => (
-                    <option key={type.value} value={type.value}>
-                      {type.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              {/* 店舗が入っている間は店舗の種類で表示されるので、部屋の種類は空いたときにだけ選ぶ */}
+              {!selectedStore && (
+                <label className="block text-sm">
+                  <span className="mb-1 block text-muted-foreground">種類</span>
+                  <select
+                    value={editType}
+                    onChange={(event) => setEditType(event.target.value)}
+                    className="w-full rounded-lg border border-input bg-background px-3 py-2.5 text-foreground"
+                  >
+                    {facilityTypeOptions(selected.type).map((type) => (
+                      <option key={type.value} value={type.value}>
+                        {type.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
               <div className="flex gap-2">
                 <button
                   type="button"
@@ -600,18 +637,24 @@ export default function AdminMap() {
                   className="flex-1 rounded-xl py-3 font-bold text-white disabled:opacity-50"
                   style={{ backgroundColor: 'var(--primary)' }}
                 >
-                  名前・種類を保存
+                  {selectedStore ? '名前を保存' : '名前・種類を保存'}
                 </button>
                 <button
                   type="button"
                   onClick={() => void remove()}
-                  disabled={saving}
+                  disabled={saving || selectedStore !== null}
+                  title={selectedStore ? '店舗が入っているため削除できません' : undefined}
                   className="inline-flex items-center gap-1 rounded-xl border border-red-500 px-4 py-3 text-sm font-bold text-red-500 hover:bg-red-500/10 disabled:opacity-50"
                 >
                   <Trash2 className="h-4 w-4" />
                   削除
                 </button>
               </div>
+              {selectedStore && (
+                <p className="text-xs text-muted-foreground">
+                  店舗が入っている部屋は削除できません。先に店舗管理で店舗位置を別の部屋に変えてください。
+                </p>
+              )}
             </div>
           )}
         </section>
@@ -629,40 +672,40 @@ export default function AdminMap() {
           </p>
         ) : (
           <ul className="overflow-hidden rounded-2xl border border-border bg-card">
-            {floorFacilities.map((item, index) => (
-              <li key={item.id} className={index > 0 ? 'border-t border-border' : ''}>
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (pending && pending.id !== item.id && !confirmDiscardPending()) return;
-                    setSelectedId(item.id);
-                    setDraft(null);
-                    setMessage('');
-                    setError('');
-                  }}
-                  className={`flex w-full items-center gap-3 px-3 py-2.5 text-left hover:bg-muted/60 ${
-                    item.id === selectedId ? 'bg-muted' : ''
-                  }`}
-                >
-                  <span
-                    className="h-3 w-3 shrink-0 rounded-full"
-                    style={{ backgroundColor: facilityTypeInfo(item.type).color }}
-                  />
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-medium text-foreground">{item.name}</span>
-                    <span className="block text-xs text-muted-foreground">
-                      {item.label && item.label !== item.name ? `${item.label} / ` : ''}
-                      {facilityTypeInfo(item.type).label} / X:{item.x}% Y:{item.y}%
+            {floorFacilities.map((item, index) => {
+              const store = item.store_id !== null ? item : assignedStore(item);
+              const info = facilityTypeInfo((store ?? item).type);
+              return (
+                <li key={item.id} className={index > 0 ? 'border-t border-border' : ''}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (pending && pending.id !== item.id && !confirmDiscardPending()) return;
+                      setSelectedId(item.id);
+                      setDraft(null);
+                      setMessage('');
+                      setError('');
+                    }}
+                    className={`flex w-full items-center gap-3 px-3 py-2.5 text-left hover:bg-muted/60 ${
+                      item.id === selectedId ? 'bg-muted' : ''
+                    }`}
+                  >
+                    <span className="h-3 w-3 shrink-0 rounded-full" style={{ backgroundColor: info.color }} />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-medium text-foreground">{displayName(item)}</span>
+                      <span className="block text-xs text-muted-foreground">
+                        {info.label} / X:{item.x}% Y:{item.y}%
+                      </span>
                     </span>
-                  </span>
-                  {item.store_id && (
-                    <span className="shrink-0 rounded-md bg-muted px-2 py-0.5 text-xs font-bold text-foreground">
-                      {item.store_name ?? '店舗'}
-                    </span>
-                  )}
-                </button>
-              </li>
-            ))}
+                    {store && (
+                      <span className="shrink-0 rounded-md bg-muted px-2 py-0.5 text-xs font-bold text-foreground">
+                        {store.store_name ?? '店舗'}
+                      </span>
+                    )}
+                  </button>
+                </li>
+              );
+            })}
           </ul>
         )}
       </section>

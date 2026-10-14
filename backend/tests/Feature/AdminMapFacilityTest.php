@@ -155,6 +155,18 @@ class AdminMapFacilityTest extends TestCase
         $this->assertDatabaseHas('map_facilities', ['id' => $pin->id, 'x' => 20, 'y' => 45]);
     }
 
+    public function test_room_with_assigned_store_cannot_be_deleted(): void
+    {
+        $store = $this->createStore();
+        $room = $this->createPlace(['name' => '401', 'floor' => 4, 'x' => 30, 'y' => 40]);
+        $this->createPlace(['store_id' => $store->id, 'name' => $store->name, 'floor' => 4, 'x' => 30, 'y' => 40]);
+        Sanctum::actingAs($this->createAdmin());
+
+        $this->deleteJson("/api/v1/admin/map/facilities/{$room->id}")->assertStatus(409);
+
+        $this->assertDatabaseHas('map_facilities', ['id' => $room->id]);
+    }
+
     public function test_admin_can_delete_unlinked_place(): void
     {
         $place = $this->createPlace();
