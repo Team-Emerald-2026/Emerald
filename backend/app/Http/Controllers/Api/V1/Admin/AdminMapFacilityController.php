@@ -118,6 +118,16 @@ class AdminMapFacilityController extends Controller
             abort(409, "店舗「{$storeName}」が紐づいているため削除できません。先に店舗側で場所を変更するか、店舗を削除してください。");
         }
 
+        // 店舗が入っている部屋を消すと、店舗のピンから部屋番号が消えてしまう
+        $storeIdInRoom = MapFacilities::query()
+            ->whereNotNull('store_id')
+            ->where(['floor' => $facility->floor, 'x' => $facility->x, 'y' => $facility->y])
+            ->value('store_id');
+        if ($storeIdInRoom !== null) {
+            $storeName = Store::query()->whereKey($storeIdInRoom)->value('name') ?? $storeIdInRoom;
+            abort(409, "店舗「{$storeName}」が入っているため削除できません。先に店舗管理で店舗位置を別の部屋に変えてください。");
+        }
+
         $facility->delete();
 
         return response()->noContent();
