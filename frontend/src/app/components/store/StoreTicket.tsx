@@ -209,7 +209,7 @@ export default function StoreTicket() {
                           {o.ticket_number} を提供済みにしますか？
                         </p>
                         <p className="mt-1 text-xs text-muted-foreground">
-                          提供済み画面から「未提供に戻す」で取り消せます。
+                          提供履歴画面から「未提供に戻す」で取り消せます。
                         </p>
                       </>
                     )}

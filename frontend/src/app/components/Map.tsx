@@ -13,12 +13,12 @@ import {
 import { fetchMapFacilities, type BackendMapFacility } from '../lib/api';
 import { floors, mapImageByFloor, type MapFloor } from '../lib/campusMap';
 
-// 管理画面で選べるのは 体験 / フード / 案内 / 金券販売 の4つ。
-// トイレ・救護室・サポートは、以前に登録された場所を表示するためだけに残している。
-type BoothType = 'フード' | '体験' | '案内' | '金券販売' | 'トイレ' | '救護室' | 'サポート';
+// 管理画面で選べるのは 体験 / フード / 案内 / 金券販売 / 運営サポート の5つ。
+// トイレ・救護室は、以前に登録された場所を表示するためだけに残している。
+type BoothType = 'フード' | '体験' | '案内' | '運営サポート' | '金券販売' | 'トイレ' | '救護室';
 
 /** 凡例・絞り込みの並び順 */
-const typeOrder: BoothType[] = ['フード', '体験', '案内', '金券販売', 'トイレ', '救護室', 'サポート'];
+const typeOrder: BoothType[] = ['フード', '体験', '案内', '運営サポート', '金券販売', 'トイレ', '救護室'];
 type Floor = `${number}F`;
 
 interface Facility {
@@ -50,7 +50,7 @@ const typeIcon: Record<BoothType, LucideIcon> = {
   トイレ: DoorClosed,
   案内: InfoIcon,
   救護室: HeartPulse,
-  サポート: Headset,
+  運営サポート: Headset,
 };
 
 const typeColor: Record<BoothType, string> = {
@@ -60,7 +60,7 @@ const typeColor: Record<BoothType, string> = {
   トイレ: '#3b82f6',
   案内: '#0ea5a3',
   救護室: '#e11d48',
-  サポート: '#d97706',
+  運営サポート: '#d97706',
 };
 
 function toBoothType(type: string): BoothType {
@@ -84,7 +84,8 @@ function toBoothType(type: string): BoothType {
       return '救護室';
     case 'support':
     case 'サポート':
-      return 'サポート';
+    case '運営サポート':
+      return '運営サポート';
     default:
       return '体験';
   }
