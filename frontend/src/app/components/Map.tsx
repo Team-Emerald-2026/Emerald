@@ -297,7 +297,7 @@ export default function CampusMap() {
       </div>
 
       <div
-        className={`relative aspect-[1042/745] min-h-52 w-full overflow-hidden rounded-2xl border border-border bg-muted ${
+        className={`relative isolate aspect-[1042/745] min-h-52 w-full overflow-hidden rounded-2xl border border-border bg-muted ${
           import.meta.env.DEV ? 'cursor-crosshair' : ''
         }`}
         onClick={(e) => {
