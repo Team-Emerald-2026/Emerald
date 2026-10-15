@@ -344,6 +344,14 @@ export default function CampusMap() {
           alt={`${floor} 校内マップ`}
           className="absolute inset-0 h-full w-full object-fill"
         />
+        {/* 左上の階段の右あたりに現在のフロア名を重ねて表示する */}
+        <span
+          aria-hidden="true"
+          className="pointer-events-none absolute -translate-x-1/2 -translate-y-1/2 select-none font-display text-2xl font-bold text-black"
+          style={{ left: '22%', top: '13%' }}
+        >
+          {floor}
+        </span>
         {filtered.map((f) => {
           const isSelected = selectedFacility?.id === f.id;
           const hasSelection = selectedFacility != null;
