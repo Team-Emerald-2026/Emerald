@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useMemo, useState } from 'react';
-import { CalendarDays, Edit3, ExternalLink, Plus, Trash2, X } from 'lucide-react';
+import { CalendarDays, Edit3, ExternalLink, MapPin, Plus, Trash2, X } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import AdminShell from './AdminShell';
 import EventDayTabs from '../EventDayTabs';
@@ -8,7 +8,9 @@ import {
   createAdminEvent,
   deleteAdminEvent,
   fetchAdminEvents,
+  fetchAdminMapFacilities,
   updateAdminEvent,
+  type AdminMapFacility,
   type EventNotice,
   type EventNoticeInput,
 } from '../../lib/api';
@@ -17,6 +19,8 @@ import {
   buildTimetableRows,
   classifyItem,
   defaultDayKey,
+  eventLocationLabel,
+  eventTimeRangeLabel,
   getEventDay,
   jstParts,
   minutesToTime,
@@ -38,6 +42,10 @@ type FormState = {
   day: string;
   /** HH:MM（イベントのみ） */
   time: string;
+  /** 終わりの時刻 HH:MM（イベントのみ）。'' は指定なし */
+  endTime: string;
+  /** 開催場所（校内マップの部屋の id。イベントのみ）。'' は指定なし */
+  mapFacilityId: string;
   /** お知らせの「何時から」（HH:MM）。'' は指定なし */
   noticeStart: string;
   /** お知らせの「何時まで」（HH:MM）。'' は指定なし */
@@ -71,6 +79,8 @@ const emptyForm = (day: EventDayKey): FormState => ({
   type: 'event',
   day,
   time: '12:00',
+  endTime: '',
+  mapFacilityId: '',
   noticeStart: '',
   noticeEnd: '',
   is_published: true,
@@ -109,6 +119,8 @@ function toForm(item: EventNotice, fallbackDay: EventDayKey): FormState {
       type: 'notice',
       day: knownDay,
       time: '12:00',
+      endTime: '',
+      mapFacilityId: '',
       // 0:00 は「時間の指定なし」として扱う（終日のお知らせ）
       noticeStart: knownDay && parts && parts.minutes !== 0 ? minutesToTime(parts.minutes) : '',
       noticeEnd: knownDay && endParts && endParts.minutes !== 0 ? minutesToTime(endParts.minutes) : '',
@@ -124,12 +136,15 @@ function toForm(item: EventNotice, fallbackDay: EventDayKey): FormState {
     };
   }
 
+  const endParts = jstParts(item.ends_at);
   return {
     title: item.title,
     body: item.body,
     type: 'event',
     day: knownDay || fallbackDay,
     time: parts ? minutesToTime(parts.minutes) : '12:00',
+    endTime: endParts ? minutesToTime(endParts.minutes) : '',
+    mapFacilityId: item.map_facility_id ?? '',
     noticeStart: '',
     noticeEnd: '',
     is_published: item.is_published ?? true,
@@ -137,6 +152,23 @@ function toForm(item: EventNotice, fallbackDay: EventDayKey): FormState {
     noticeTicker: false,
     noticeTickerMinutes: NOTICE_TICKER_DEFAULT,
   };
+}
+
+type RoomOption = { id: string; floor: number; label: string };
+
+/** 部屋（店舗の入っていない枠）を階・部屋番号の順に並べ、「8F・801（射的）」の形にする */
+function toRoomOptions(facilities: AdminMapFacility[]): RoomOption[] {
+  const storeByPlace = new Map<string, string>();
+  for (const f of facilities) {
+    if (f.store_id && f.store_name) storeByPlace.set(`${f.floor}:${f.x}:${f.y}`, f.store_name);
+  }
+  return facilities
+    .filter((f) => f.store_id === null)
+    .sort((a, b) => a.floor - b.floor || a.name.localeCompare(b.name, 'ja', { numeric: true }))
+    .map((f) => {
+      const store = storeByPlace.get(`${f.floor}:${f.x}:${f.y}`);
+      return { id: f.id, floor: f.floor, label: `${f.floor}F・${f.name}${store ? `（${store}）` : ''}` };
+    });
 }
 
 function noticeDayLabel(item: EventNotice) {
@@ -184,6 +216,17 @@ export default function AdminEvents() {
     return () => controller.abort();
   }, [adminSession]);
 
+  // 開催場所の候補（校内マップの部屋）。読めなくてもイベントの登録はできるようにする
+  const [rooms, setRooms] = useState<RoomOption[]>([]);
+  useEffect(() => {
+    if (!adminSession && !ADMIN_PUBLIC_ACCESS) return;
+    const controller = new AbortController();
+    fetchAdminMapFacilities(adminSession?.token, controller.signal)
+      .then((facilities) => setRooms(toRoomOptions(facilities)))
+      .catch(() => {});
+    return () => controller.abort();
+  }, [adminSession]);
+
   const classified = useMemo(() => items.map(classifyItem), [items]);
   const rows = useMemo(() => buildTimetableRows(classified, dayKey), [classified, dayKey]);
   const dayNotices = useMemo(() => noticesForDay(classified, dayKey), [classified, dayKey]);
@@ -203,11 +246,11 @@ export default function AdminEvents() {
   );
   const formDay = getEventDay(form.day);
 
-  const openCreate = (hour?: number) => {
+  const openCreate = (minutes?: number) => {
     setEditing(null);
     setForm({
       ...emptyForm(dayKey),
-      time: hour != null ? minutesToTime(hour * 60) : '12:00',
+      time: minutes != null ? minutesToTime(minutes) : '12:00',
     });
     setShowForm(true);
     setMessage('');
@@ -271,6 +314,19 @@ export default function AdminEvents() {
         return;
       }
       startsAt = toStartsAt(day.key, form.time);
+
+      if (form.endTime) {
+        const endMinutes = timeToMinutes(form.endTime);
+        if (endMinutes == null) {
+          setError('終わりの時間を入力し直してください。');
+          return;
+        }
+        if (endMinutes <= minutes) {
+          setError('終わりの時間は、始まりの時間より後にしてください。');
+          return;
+        }
+        endsAt = toStartsAt(day.key, form.endTime);
+      }
     } else if (form.day) {
       if (!getEventDay(form.day)) {
         setError('表示する日を選び直してください。');
@@ -306,9 +362,11 @@ export default function AdminEvents() {
       body: form.body.trim(),
       type: form.type,
       starts_at: startsAt,
-      // お知らせの「何時まで」。イベントには付けない（公開は「公開する」のチェックで切り替える）
+      // イベントの終わりの時刻／お知らせの「何時まで」（公開は「公開する」のチェックで切り替える）
       ends_at: endsAt,
       is_published: form.is_published,
+      map_facility_id:
+        form.type === 'event' && form.mapFacilityId ? Number(form.mapFacilityId) : null,
       ticker_lead_minutes: tickerLead,
       ticker_after_minutes: useTicker
         ? tickerAfter
@@ -364,15 +422,10 @@ export default function AdminEvents() {
     }
   };
 
-  const renderEventItem = (item: EventNotice, minutes?: number) => (
+  const renderEventItem = (item: EventNotice) => (
     <div key={item.id} className="flex items-start gap-1 rounded-lg px-1 py-1 hover:bg-muted/60">
       <button type="button" onClick={() => openEdit(item)} className="min-w-0 flex-1 text-left">
         <p className="font-display text-base font-bold text-foreground">
-          {minutes != null && (
-            <span className="mr-2 text-xs font-bold tabular-nums text-muted-foreground">
-              {timeLabel(minutes)}
-            </span>
-          )}
           {item.title}
           {!item.is_published && (
             <span className="ml-2 text-xs font-medium text-muted-foreground">（非公開）</span>
@@ -383,6 +436,15 @@ export default function AdminEvents() {
               style={{ backgroundColor: 'var(--accent)' }}
             >
               掲示板
+            </span>
+          )}
+        </p>
+        <p className="mt-0.5 flex flex-wrap items-center gap-x-3 text-xs font-medium tabular-nums text-muted-foreground">
+          <span>{eventTimeRangeLabel(item)}</span>
+          {eventLocationLabel(item) && (
+            <span className="inline-flex items-center gap-0.5">
+              <MapPin className="h-3 w-3" aria-hidden="true" />
+              {eventLocationLabel(item)}
             </span>
           )}
         </p>
@@ -621,23 +683,67 @@ export default function AdminEvents() {
               )}
 
               {form.type === 'event' && (
+                <div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <label className="block text-sm">
+                      <span className="mb-1 block text-muted-foreground">何時から</span>
+                      <input
+                        type="time"
+                        value={form.time}
+                        min={formDay ? minutesToTime(formDay.startMinutes) : undefined}
+                        max={formDay ? minutesToTime(formDay.endMinutes) : undefined}
+                        onChange={(e) => updateField('time', e.target.value)}
+                        className="w-full rounded-lg border border-input bg-background px-3 py-2.5 text-foreground"
+                      />
+                    </label>
+                    <label className="block text-sm">
+                      <span className="mb-1 block text-muted-foreground">何時まで（任意）</span>
+                      <input
+                        type="time"
+                        value={form.endTime}
+                        onChange={(e) => updateField('endTime', e.target.value)}
+                        className="w-full rounded-lg border border-input bg-background px-3 py-2.5 text-foreground"
+                      />
+                    </label>
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {formDay &&
+                      `開始は ${minutesToTime(formDay.startMinutes)}〜${minutesToTime(formDay.endMinutes)} の間で指定してください。`}
+                    「何時まで」を入れると「14:00〜15:00」のように表示されます。
+                  </p>
+                </div>
+              )}
+
+              {form.type === 'event' && (
                 <label className="block text-sm">
-                  <span className="mb-1 block text-muted-foreground">
-                    時間
-                    {formDay && (
-                      <span className="ml-2 text-xs">
-                        （{minutesToTime(formDay.startMinutes)}〜{minutesToTime(formDay.endMinutes)}）
-                      </span>
-                    )}
-                  </span>
-                  <input
-                    type="time"
-                    value={form.time}
-                    min={formDay ? minutesToTime(formDay.startMinutes) : undefined}
-                    max={formDay ? minutesToTime(formDay.endMinutes) : undefined}
-                    onChange={(e) => updateField('time', e.target.value)}
+                  <span className="mb-1 block text-muted-foreground">場所（任意）</span>
+                  <select
+                    value={form.mapFacilityId}
+                    onChange={(e) => updateField('mapFacilityId', e.target.value)}
                     className="w-full rounded-lg border border-input bg-background px-3 py-2.5 text-foreground"
-                  />
+                  >
+                    <option value="">指定しない</option>
+                    {/* 部屋の一覧を読めなかったときも、いまの場所を消さずに保存できるようにする */}
+                    {form.mapFacilityId && !rooms.some((room) => room.id === form.mapFacilityId) && (
+                      <option value={form.mapFacilityId}>
+                        {(editing && eventLocationLabel(editing)) ?? '（いまの場所）'}
+                      </option>
+                    )}
+                    {Array.from(new Set(rooms.map((room) => room.floor))).map((floor) => (
+                      <optgroup key={floor} label={`${floor}F`}>
+                        {rooms
+                          .filter((room) => room.floor === floor)
+                          .map((room) => (
+                            <option key={room.id} value={room.id}>
+                              {room.label}
+                            </option>
+                          ))}
+                      </optgroup>
+                    ))}
+                  </select>
+                  <span className="mt-1 block text-xs text-muted-foreground">
+                    校内マップの部屋から選びます。来場者画面に「8F・801」と表示され、押すとマップが開きます。
+                  </span>
                 </label>
               )}
 
@@ -791,25 +897,24 @@ export default function AdminEvents() {
             <div className="px-3 py-2.5">内容</div>
           </div>
           {rows.map((row) => (
-            <Fragment key={row.hour}>
-              <div className="grid min-h-14 grid-cols-[4.5rem_1fr] border-b border-border last:border-b-0">
+            <Fragment key={row.minutes}>
+              <div className="grid min-h-12 grid-cols-[4.5rem_1fr] border-b border-border last:border-b-0">
                 <div className="border-r border-border bg-muted/30 px-3 py-3">
                   <span className="text-sm font-bold tabular-nums text-foreground">
-                    {timeLabel(row.hour * 60)}
+                    {timeLabel(row.minutes)}
                   </span>
                 </div>
-                <div className="space-y-2 px-2 py-2">
+                <div className="space-y-1 px-2 py-2">
                   {row.exact.map((item) => renderEventItem(item))}
-                  {row.exact.length === 0 && (
-                    <button
-                      type="button"
-                      onClick={() => openCreate(row.hour)}
-                      className="flex w-full items-center gap-1 rounded-lg px-2 py-2 text-left text-sm text-muted-foreground hover:bg-muted"
-                    >
-                      <Plus className="h-3.5 w-3.5" />
-                      この時間に追加
-                    </button>
-                  )}
+                  {/* 同じ時刻に複数のイベントがあってもよいので、いつでも追加できるようにする */}
+                  <button
+                    type="button"
+                    onClick={() => openCreate(row.minutes)}
+                    className="flex w-full items-center gap-1 rounded-lg px-2 py-1.5 text-left text-xs text-muted-foreground hover:bg-muted"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    {row.exact.length === 0 ? 'この時間に追加' : 'この時間にもう1件追加'}
+                  </button>
                 </div>
               </div>
               {row.between.map(({ minutes, item }) => (

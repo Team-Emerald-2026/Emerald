@@ -875,6 +875,68 @@ class MissingApisTest extends TestCase
         ]);
     }
 
+    public function test_event_can_have_room_location_and_end_time(): void
+    {
+        $this->travelTo(now()->setTime(5, 0));
+        Sanctum::actingAs($this->createAdmin());
+        $room = MapFacilities::query()->create([
+            'store_id' => null,
+            'name' => '801',
+            'type' => 'booth',
+            'floor' => 8,
+            'x' => 50,
+            'y' => 50,
+        ]);
+
+        $response = $this->postJson('/api/v1/admin/events', [
+            'title' => 'トークショー',
+            'body' => 'ゲスト登壇',
+            'type' => 'event',
+            'starts_at' => now()->toISOString(),
+            'ends_at' => now()->addHour()->toISOString(),
+            'is_published' => true,
+            'map_facility_id' => $room->id,
+            'ticker_lead_minutes' => 10,
+        ])->assertCreated()
+            ->assertJsonPath('data.attributes.map_facility_id', (string) $room->id)
+            ->assertJsonPath('data.attributes.location.floor', 8)
+            ->assertJsonPath('data.attributes.location.name', '801');
+
+        // 同じ時刻にもう1件登録できる
+        $this->postJson('/api/v1/admin/events', [
+            'title' => '同時刻の企画',
+            'body' => '中庭',
+            'type' => 'event',
+            'starts_at' => now()->toISOString(),
+            'is_published' => true,
+        ])->assertCreated()
+            ->assertJsonPath('data.attributes.location', null);
+
+        $this->getJson('/api/v1/events')
+            ->assertOk()
+            ->assertJsonCount(2, 'data')
+            ->assertJsonPath('data.0.attributes.location.name', '801');
+
+        $this->getJson('/api/v1/ticker')
+            ->assertOk()
+            ->assertJsonPath('data.0.location', '8F・801')
+            ->assertJsonPath('data.0.ends_at', now()->addHour()->toISOString());
+
+        // 終了が開始より前はエラー
+        $this->postJson('/api/v1/admin/events', [
+            'title' => '逆転',
+            'body' => 'x',
+            'type' => 'event',
+            'starts_at' => now()->toISOString(),
+            'ends_at' => now()->subMinute()->toISOString(),
+        ])->assertUnprocessable();
+
+        // 部屋を消したら場所は空になる
+        $id = $response->json('data.id');
+        $room->delete();
+        $this->assertDatabaseHas('event_notices', ['id' => $id, 'map_facility_id' => null]);
+    }
+
     public function test_notice_can_be_sent_to_ticker_immediately_and_stopped(): void
     {
         $this->travelTo(now()->setTime(5, 0));

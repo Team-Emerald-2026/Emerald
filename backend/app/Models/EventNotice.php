@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
@@ -19,6 +20,7 @@ class EventNotice extends Model
         'ticker_lead_minutes',
         'ticker_after_minutes',
         'ticker_started_at',
+        'map_facility_id',
     ];
 
     protected $casts = [
@@ -83,6 +85,20 @@ class EventNotice extends Model
         );
 
         return $at->gte($from) && $at->lte($until);
+    }
+
+    /** 開催場所（校内マップの部屋） */
+    public function mapFacility(): BelongsTo
+    {
+        return $this->belongsTo(MapFacilities::class, 'map_facility_id');
+    }
+
+    /** 表示用の場所（例: 8F・801）。場所がなければ null */
+    public function locationLabel(): ?string
+    {
+        $facility = $this->mapFacility;
+
+        return $facility ? "{$facility->floor}F・{$facility->name}" : null;
     }
 
     public function scopePublished(Builder $query): Builder

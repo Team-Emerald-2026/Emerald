@@ -17,6 +17,13 @@ class EventNoticeResource extends JsonResource
             'starts_at' => optional($this->starts_at)->toISOString(),
             'ends_at' => optional($this->ends_at)->toISOString(),
             'is_published' => (bool) $this->is_published,
+            // 開催場所（校内マップの部屋）。なければ null
+            'map_facility_id' => $this->map_facility_id !== null ? (string) $this->map_facility_id : null,
+            'location' => $this->mapFacility ? [
+                'id' => (string) $this->mapFacility->id,
+                'floor' => (int) $this->mapFacility->floor,
+                'name' => $this->mapFacility->name,
+            ] : null,
             'ticker_lead_minutes' => $this->ticker_lead_minutes,
             'ticker_after_minutes' => $this->ticker_after_minutes,
             'ticker_started_at' => optional($this->ticker_started_at)->toISOString(),

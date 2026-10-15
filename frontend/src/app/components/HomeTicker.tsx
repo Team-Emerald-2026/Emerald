@@ -11,11 +11,13 @@ const BODY_MAX_CHARS = 60;
 const SEPARATOR = '　　　◆　　　';
 
 function toText(item: TickerItem): string {
-  const parts = jstParts(item.starts_at);
-  const time = parts ? `【${timeLabel(parts.minutes)}〜】` : '';
+  const start = jstParts(item.starts_at);
+  const end = jstParts(item.ends_at);
+  const time = start ? `【${timeLabel(start.minutes)}〜${end ? timeLabel(end.minutes) : ''}】` : '';
+  const location = item.location ? `（${item.location}）` : '';
   const flatBody = item.body.replace(/\s+/g, ' ').trim();
   const body = flatBody.length > BODY_MAX_CHARS ? `${flatBody.slice(0, BODY_MAX_CHARS)}…` : flatBody;
-  return `${time}${item.title}${body ? `　${body}` : ''}`;
+  return `${time}${item.title}${location}${body ? `　${body}` : ''}`;
 }
 
 /**

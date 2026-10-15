@@ -11,6 +11,7 @@ class EventController extends Controller
     public function index()
     {
         $events = EventNotice::query()
+            ->with('mapFacility')
             ->published()
             ->orderByRaw('starts_at is null')
             ->orderBy('starts_at')
