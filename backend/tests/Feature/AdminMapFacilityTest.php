@@ -189,6 +189,18 @@ class AdminMapFacilityTest extends TestCase
         $this->assertDatabaseHas('map_facilities', ['id' => $pin->id]);
     }
 
+    public function test_map_editing_requires_authentication(): void
+    {
+        $place = $this->createPlace();
+
+        $this->getJson('/api/v1/admin/map/facilities')->assertUnauthorized();
+        $this->postJson('/api/v1/admin/map/facilities', [
+            'name' => 'x', 'type' => 'booth', 'floor' => 3, 'x' => 1, 'y' => 1,
+        ])->assertUnauthorized();
+        $this->patchJson("/api/v1/admin/map/facilities/{$place->id}", ['x' => 5])->assertUnauthorized();
+        $this->deleteJson("/api/v1/admin/map/facilities/{$place->id}")->assertUnauthorized();
+    }
+
     public function test_map_editing_requires_admin_role(): void
     {
         config(['admin.public_access' => false]);

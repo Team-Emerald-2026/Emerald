@@ -78,25 +78,27 @@ Route::prefix('v1/booth')->group(function () {
 
 Route::prefix('v1/admin')->group(function () {
     Route::post('auth/login', [AdminAuthController::class, 'login']);
-    Route::post('auth/logout', [AdminAuthController::class, 'logout'])->middleware('auth:sanctum');
-    Route::get('analytics', [AdminAnalyticsController::class, 'index']);
-    Route::get('revenue', [AdminAnalyticsController::class, 'revenue']);
-    Route::delete('analytics', [AdminAnalyticsController::class, 'reset']);
-    Route::get('stores', [AdminStoreController::class, 'index']);
-    Route::post('stores', [AdminStoreController::class, 'store']);
-    Route::get('stores/{id}', [AdminStoreController::class, 'show']);
-    Route::patch('stores/{id}', [AdminStoreController::class, 'update']);
-    Route::patch('stores/{id}/wait-time', [AdminStoreController::class, 'updateWaitTime'])
-        ->middleware('auth:sanctum');
-    Route::delete('stores/{id}', [AdminStoreController::class, 'destroy']);
-    Route::delete('stores/{id}/permanent', [AdminStoreController::class, 'forceDestroy']);
-    Route::get('map/facilities', [AdminMapFacilityController::class, 'index']);
-    Route::post('map/facilities', [AdminMapFacilityController::class, 'store']);
-    Route::patch('map/facilities/{id}', [AdminMapFacilityController::class, 'update'])->whereNumber('id');
-    Route::delete('map/facilities/{id}', [AdminMapFacilityController::class, 'destroy'])->whereNumber('id');
-    Route::get('events', [AdminEventController::class, 'index']);
-    Route::post('events', [AdminEventController::class, 'store']);
-    Route::get('events/{id}', [AdminEventController::class, 'show']);
-    Route::patch('events/{id}', [AdminEventController::class, 'update']);
-    Route::delete('events/{id}', [AdminEventController::class, 'destroy']);
+
+    Route::middleware('auth:sanctum')->group(function () {
+        Route::post('auth/logout', [AdminAuthController::class, 'logout']);
+        Route::get('analytics', [AdminAnalyticsController::class, 'index']);
+        Route::get('revenue', [AdminAnalyticsController::class, 'revenue']);
+        Route::delete('analytics', [AdminAnalyticsController::class, 'reset']);
+        Route::get('stores', [AdminStoreController::class, 'index']);
+        Route::post('stores', [AdminStoreController::class, 'store']);
+        Route::get('stores/{id}', [AdminStoreController::class, 'show']);
+        Route::patch('stores/{id}', [AdminStoreController::class, 'update']);
+        Route::patch('stores/{id}/wait-time', [AdminStoreController::class, 'updateWaitTime']);
+        Route::delete('stores/{id}', [AdminStoreController::class, 'destroy']);
+        Route::delete('stores/{id}/permanent', [AdminStoreController::class, 'forceDestroy']);
+        Route::get('map/facilities', [AdminMapFacilityController::class, 'index']);
+        Route::post('map/facilities', [AdminMapFacilityController::class, 'store']);
+        Route::patch('map/facilities/{id}', [AdminMapFacilityController::class, 'update'])->whereNumber('id');
+        Route::delete('map/facilities/{id}', [AdminMapFacilityController::class, 'destroy'])->whereNumber('id');
+        Route::get('events', [AdminEventController::class, 'index']);
+        Route::post('events', [AdminEventController::class, 'store']);
+        Route::get('events/{id}', [AdminEventController::class, 'show']);
+        Route::patch('events/{id}', [AdminEventController::class, 'update']);
+        Route::delete('events/{id}', [AdminEventController::class, 'destroy']);
+    });
 });

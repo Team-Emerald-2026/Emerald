@@ -1,2 +1,2 @@
-/** 一時的に /admin をログインなしで開ける。戻すときは false にする。 */
+/** 管理画面をログインなしで開けるフラグ。本番では必ず false。 */
 export const ADMIN_PUBLIC_ACCESS = false;

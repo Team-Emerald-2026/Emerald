@@ -587,13 +587,43 @@ class MissingApisTest extends TestCase
         $this->assertDatabaseHas('stores', ['id' => $store->id]);
     }
 
-    public function test_admin_stores_are_readable_without_login_when_public(): void
+    public function test_admin_endpoints_require_authentication(): void
     {
-        $this->createStore();
+        $store = $this->createStore();
 
-        $this->getJson('/api/v1/admin/stores')
-            ->assertOk()
-            ->assertJsonPath('data.0.id', 'store-101');
+        $this->getJson('/api/v1/admin/stores')->assertUnauthorized();
+        $this->getJson("/api/v1/admin/stores/{$store->id}")->assertUnauthorized();
+        $this->patchJson("/api/v1/admin/stores/{$store->id}", ['name' => '乗っ取り'])->assertUnauthorized();
+        $this->deleteJson("/api/v1/admin/stores/{$store->id}")->assertUnauthorized();
+        $this->deleteJson("/api/v1/admin/stores/{$store->id}/permanent")->assertUnauthorized();
+        $this->getJson('/api/v1/admin/analytics')->assertUnauthorized();
+        $this->getJson('/api/v1/admin/revenue')->assertUnauthorized();
+        $this->deleteJson('/api/v1/admin/analytics')->assertUnauthorized();
+    }
+
+    public function test_admin_endpoints_require_authentication_even_when_public_access_is_enabled(): void
+    {
+        config(['admin.public_access' => true]);
+        $store = $this->createStore();
+
+        $this->getJson('/api/v1/admin/stores')->assertUnauthorized();
+        $this->deleteJson("/api/v1/admin/stores/{$store->id}/permanent")->assertUnauthorized();
+        $this->deleteJson('/api/v1/admin/analytics')->assertUnauthorized();
+    }
+
+    public function test_store_user_cannot_use_admin_apis_even_when_public_access_is_enabled(): void
+    {
+        config(['admin.public_access' => true]);
+        $store = $this->createStore();
+        Sanctum::actingAs($this->createStoreUser($store));
+
+        $this->getJson('/api/v1/admin/stores')->assertForbidden();
+        $this->patchJson("/api/v1/admin/stores/{$store->id}", [
+            'login_id' => 'hijacked',
+            'password' => 'stolen',
+        ])->assertForbidden();
+        $this->deleteJson("/api/v1/admin/stores/{$store->id}/permanent")->assertForbidden();
+        $this->deleteJson('/api/v1/admin/analytics')->assertForbidden();
     }
 
     public function test_admin_can_reset_sales_data(): void
