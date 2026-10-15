@@ -22,7 +22,7 @@ function toText(item: TickerItem): string {
  * ホームのヘッダーのすぐ下に出す電光掲示板（Layout.tsx でホームのときだけ表示）。
  * 管理画面で「掲示板に流す」を設定したイベントを、その時間帯だけ右から左へ流す。
  * 「掲示板にすぐ流す」にしたお知らせは、イベントより先に流す。
- * 流すものがないとき（や取得に失敗したとき）は何も表示しない。
+ * 流すものがないときも帯は出したままにして、「流れているお知らせはない」ことを示す。
  */
 export default function HomeTicker() {
   const [items, setItems] = useState<TickerItem[]>([]);
@@ -62,8 +62,6 @@ export default function HomeTicker() {
 
   const text = useMemo(() => items.map(toText).join(SEPARATOR), [items]);
 
-  if (items.length === 0) return null;
-
   // 文字数が多いほどゆっくり長く流して、読み終わる前に消えないようにする
   const duration = Math.max(14, 8 + text.length * 0.3);
 
@@ -73,7 +71,9 @@ export default function HomeTicker() {
       // ダークテーマでは背景と同化しないよう、シルバーの帯にする（白文字が読める濃さにしている）
       className="flex h-11 shrink-0 items-stretch overflow-hidden border-b border-border bg-[#15324a] text-white dark:bg-[#565f67]"
     >
-      <span className="sr-only">お知らせ: {text}</span>
+      <span className="sr-only">
+        {text ? `お知らせ: ${text}` : 'お知らせ: いま流れているお知らせはありません'}
+      </span>
       <span
         className="flex shrink-0 items-center gap-1.5 px-3 text-sm font-bold text-white"
         style={{ backgroundColor: 'var(--accent)' }}
@@ -82,16 +82,25 @@ export default function HomeTicker() {
         <Megaphone className="h-4 w-4" />
         お知らせ
       </span>
-      <span className="relative min-w-0 flex-1 overflow-hidden" aria-hidden="true">
-        {/* key を変えて、内容が変わったら最初から流し直す */}
-        <span
-          key={text}
-          className="ticker-track absolute inset-y-0 left-0 flex items-center text-base font-bold"
-          style={{ ['--ticker-duration' as string]: `${duration}s` }}
-        >
-          {text}
+      {text ? (
+        <span className="relative min-w-0 flex-1 overflow-hidden" aria-hidden="true">
+          {/* key を変えて、内容が変わったら最初から流し直す */}
+          <span
+            key={text}
+            className="ticker-track absolute inset-y-0 left-0 flex items-center text-base font-bold"
+            style={{ ['--ticker-duration' as string]: `${duration}s` }}
+          >
+            {text}
+          </span>
         </span>
-      </span>
+      ) : (
+        <span
+          className="flex min-w-0 flex-1 items-center truncate px-3 text-sm text-white/70"
+          aria-hidden="true"
+        >
+          いま流れているお知らせはありません
+        </span>
+      )}
     </Link>
   );
 }

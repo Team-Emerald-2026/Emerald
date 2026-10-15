@@ -116,6 +116,7 @@ export default function Home() {
   const [recommendedBooths, setRecommendedBooths] = useState<RecommendedBooth[]>([]);
   const [recommendationsLoading, setRecommendationsLoading] = useState(true);
   const [notices, setNotices] = useState<EventNotice[]>([]);
+  const [noticesLoading, setNoticesLoading] = useState(true);
   const [heroVideoSrc, setHeroVideoSrc] = useState<string | null>(null);
   const [heroVideoPlaying, setHeroVideoPlaying] = useState(false);
 
@@ -187,7 +188,10 @@ export default function Home() {
         setNotices(next);
       })
       .catch(() => {
-        // お知らせは補助の表示。取得に失敗したときは枠ごと出さない
+        // 取得に失敗したときは「お知らせはまだありません」の表示のままにする
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setNoticesLoading(false);
       });
 
     return () => controller.abort();
@@ -243,15 +247,27 @@ export default function Home() {
         </div>
       </button>
 
-      {/* お知らせ一覧（お知らせがあるときだけ表示） */}
-      {notices.length > 0 && (
-        <section>
-          <div className="mb-3 flex items-center justify-between px-1">
-            <h2 className="font-display text-base font-bold text-foreground">お知らせ</h2>
-            <Link to="/events" className="text-xs font-bold" style={{ color: 'var(--primary)' }}>
-              すべて見る
-            </Link>
+      {/* お知らせ一覧（0件でも枠は出したままにする） */}
+      <section>
+        <div className="mb-3 flex items-center justify-between px-1">
+          <h2 className="font-display text-base font-bold text-foreground">お知らせ</h2>
+          <Link to="/events" className="text-xs font-bold" style={{ color: 'var(--primary)' }}>
+            すべて見る
+          </Link>
+        </div>
+
+        {noticesLoading ? (
+          <div
+            className="flex items-start gap-3 rounded-2xl border border-border bg-card p-4"
+            aria-label="お知らせを読み込み中"
+          >
+            <Skeleton className="h-9 w-9 shrink-0 rounded-lg" />
+            <div className="min-w-0 flex-1 space-y-2">
+              <SkeletonText className="w-1/4" />
+              <SkeletonText className="w-3/5" />
+            </div>
           </div>
+        ) : notices.length > 0 ? (
           <ul className="overflow-hidden rounded-2xl border border-border bg-card">
             {notices.map((notice) => {
               const time = noticeTimeLabel(notice.created_at);
@@ -280,8 +296,12 @@ export default function Home() {
               );
             })}
           </ul>
-        </section>
-      )}
+        ) : (
+          <div className="rounded-2xl border border-border bg-card p-4 text-sm text-muted-foreground">
+            お知らせはまだありません。
+          </div>
+        )}
+      </section>
 
       {/* おすすめ枠 */}
       <section>
