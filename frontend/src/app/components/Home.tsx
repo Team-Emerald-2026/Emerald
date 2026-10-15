@@ -17,6 +17,31 @@ import { Skeleton, SkeletonText } from './Skeleton';
 
 /** ヒーロー背景動画（YouTube UI を避けるためローカルファイルを使用） */
 const HERO_VIDEO_SRC = '/hero.mp4';
+/** 画面の小さい端末向けの軽量版（ビットレートを落とした 480p） */
+const HERO_VIDEO_MOBILE_SRC = '/hero-mobile.mp4';
+/** 動画読み込み前・動画を流さない端末向けの静止画（動画の1コマ） */
+const HERO_POSTER_SRC = '/hero-poster.jpg';
+/** この幅以下の端末には軽量版の動画を配信する */
+const HERO_MOBILE_MAX_WIDTH = 768;
+
+interface NetworkInformationLike {
+  saveData?: boolean;
+  effectiveType?: string;
+}
+
+/**
+ * ヒーロー動画を読み込むべきか判定する。
+ * データセーバーが有効、または回線が遅い（2G/3G 相当）端末では
+ * 動画を読み込まず、ポスター画像だけを表示する。
+ */
+function shouldLoadHeroVideo(): boolean {
+  const connection = (navigator as Navigator & { connection?: NetworkInformationLike }).connection;
+  if (!connection) return true;
+  if (connection.saveData) return false;
+  const effectiveType = connection.effectiveType ?? '';
+  if (['slow-2g', '2g', '3g'].includes(effectiveType)) return false;
+  return true;
+}
 
 const quickMenu = [
   {
@@ -76,6 +101,26 @@ export default function Home() {
   const navigate = useNavigate();
   const [recommendedBooths, setRecommendedBooths] = useState<RecommendedBooth[]>([]);
   const [recommendationsLoading, setRecommendationsLoading] = useState(true);
+  const [heroVideoSrc, setHeroVideoSrc] = useState<string | null>(null);
+  const [heroVideoPlaying, setHeroVideoPlaying] = useState(false);
+
+  // ヒーロー動画はページの表示が終わってから読み込む（初期表示はポスター画像）
+  useEffect(() => {
+    if (!shouldLoadHeroVideo()) return;
+
+    const startLoading = () => {
+      const isSmallScreen = window.matchMedia(`(max-width: ${HERO_MOBILE_MAX_WIDTH}px)`).matches;
+      setHeroVideoSrc(isSmallScreen ? HERO_VIDEO_MOBILE_SRC : HERO_VIDEO_SRC);
+    };
+
+    if (document.readyState === 'complete') {
+      startLoading();
+      return;
+    }
+
+    window.addEventListener('load', startLoading, { once: true });
+    return () => window.removeEventListener('load', startLoading);
+  }, []);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -128,16 +173,25 @@ export default function Home() {
           style={{ background: 'linear-gradient(135deg,#0f7b5f,#15324a)' }}
           aria-hidden="true"
         />
-        <video
+        <img
           className="pointer-events-none absolute inset-0 h-full w-full object-cover"
-          src={HERO_VIDEO_SRC}
-          autoPlay
-          muted
-          loop
-          playsInline
-          preload="auto"
+          src={HERO_POSTER_SRC}
+          alt=""
+          decoding="async"
           aria-hidden="true"
         />
+        {heroVideoSrc && (
+          <video
+            className={`pointer-events-none absolute inset-0 h-full w-full object-cover transition-opacity duration-500 ${heroVideoPlaying ? 'opacity-100' : 'opacity-0'}`}
+            src={heroVideoSrc}
+            autoPlay
+            muted
+            loop
+            playsInline
+            onPlaying={() => setHeroVideoPlaying(true)}
+            aria-hidden="true"
+          />
+        )}
         <div
           className="absolute inset-0"
           style={{
