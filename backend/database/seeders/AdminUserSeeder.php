@@ -10,14 +10,14 @@ class AdminUserSeeder extends Seeder
 {
     public function run(): void
     {
-        $loginId = env('ADMIN_LOGIN_ID', 'admin');
-        $password = env('ADMIN_PASSWORD', 'password');
+        $loginId = config('admin.login_id');
+        $password = config('admin.password');
 
         if (! is_string($loginId) || $loginId === '' || ! is_string($password) || $password === '') {
             return;
         }
 
-        User::query()->updateOrCreate(
+        User::query()->firstOrCreate(
             ['login_id' => $loginId],
             [
                 'password' => Hash::make($password),

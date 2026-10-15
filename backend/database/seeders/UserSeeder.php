@@ -28,12 +28,6 @@ class UserSeeder extends Seeder
                     'role' => 'store',
                     'password' => Hash::make('password'),
                 ],
-                [
-                    'login_id' => 'admin',
-                    'store_id' => null,
-                    'role' => 'admin',
-                    'password' => Hash::make('password'),
-                ],
             ] as $user
         ) {
             DB::table('users')->updateOrInsert(

@@ -396,6 +396,7 @@ class MissingApisTest extends TestCase
 
     public function test_admin_seeder_creates_login_account(): void
     {
+        config(['admin.login_id' => 'admin', 'admin.password' => 'password']);
         $this->seed(\Database\Seeders\AdminUserSeeder::class);
 
         $this->postJson('/api/v1/booth/auth/login', [
@@ -404,6 +405,51 @@ class MissingApisTest extends TestCase
         ])
             ->assertOk()
             ->assertJsonPath('role', 'admin');
+    }
+
+    public function test_admin_seeder_skips_without_credentials(): void
+    {
+        config(['admin.login_id' => null, 'admin.password' => null]);
+        $this->seed(\Database\Seeders\AdminUserSeeder::class);
+
+        $this->assertDatabaseCount('users', 0);
+    }
+
+    public function test_admin_seeder_does_not_overwrite_existing_password(): void
+    {
+        User::query()->create([
+            'login_id' => 'admin',
+            'password' => Hash::make('already-set'),
+            'store_id' => null,
+            'role' => 'admin',
+        ]);
+        config(['admin.login_id' => 'admin', 'admin.password' => 'password']);
+
+        $this->seed(\Database\Seeders\AdminUserSeeder::class);
+
+        $this->postJson('/api/v1/admin/auth/login', [
+            'login_id' => 'admin',
+            'password' => 'already-set',
+        ])->assertOk();
+
+        $this->postJson('/api/v1/admin/auth/login', [
+            'login_id' => 'admin',
+            'password' => 'password',
+        ])->assertUnauthorized();
+    }
+
+    public function test_database_seeder_skips_demo_users_in_production(): void
+    {
+        $this->app['env'] = 'production';
+        config(['admin.login_id' => 'admin', 'admin.password' => 'secret-admin']);
+
+        $this->artisan('db:seed', ['--force' => true])->assertSuccessful();
+
+        $this->assertDatabaseHas('users', ['login_id' => 'admin', 'role' => 'admin']);
+        $this->assertDatabaseMissing('users', ['login_id' => 'testuser']);
+        $this->assertDatabaseMissing('users', ['login_id' => 'testuser2']);
+        $this->assertDatabaseCount('orders', 0);
+        $this->assertDatabaseCount('stores', 0);
     }
 
     public function test_store_user_can_update_booth_type(): void

@@ -13,8 +13,7 @@ class EventNoticeSeeder extends Seeder
 
     public function run(): void
     {
-        // 本番は起動のたびに db:seed が走るため、管理画面で編集した内容を
-        // 上書きしないよう、データが1件でもあれば何もしない
+        // 管理画面で編集した内容を上書きしないよう、データが1件でもあれば何もしない
         if (EventNotice::query()->exists()) {
             return;
         }
