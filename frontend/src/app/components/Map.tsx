@@ -328,7 +328,7 @@ export default function CampusMap() {
 
       <p className="px-1 text-lg font-bold text-foreground">{floor} の地図</p>
       <div
-        className={`relative isolate aspect-[1042/745] min-h-52 w-full overflow-hidden rounded-2xl border border-border bg-muted ${
+        className={`relative isolate aspect-[1324/745] min-h-52 w-full overflow-hidden rounded-2xl border border-border bg-muted ${
           import.meta.env.DEV ? 'cursor-crosshair' : ''
         }`}
         onClick={(e) => {
@@ -344,11 +344,11 @@ export default function CampusMap() {
           alt={`${floor} 校内マップ`}
           className="absolute inset-0 h-full w-full object-fill"
         />
-        {/* 左上の階段の右あたりに現在のフロア名を重ねて表示する */}
+        {/* 右上の建物のない余白に現在のフロア名を重ねて表示する */}
         <span
           aria-hidden="true"
           className="pointer-events-none absolute -translate-x-1/2 -translate-y-1/2 select-none font-display text-2xl font-bold text-black"
-          style={{ left: '22%', top: '13%' }}
+          style={{ left: '88%', top: '12%' }}
         >
           {floor}
         </span>
