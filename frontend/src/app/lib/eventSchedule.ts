@@ -4,6 +4,8 @@ import type { EventNotice } from './api';
 export const EVENT_DAYS = [
   { key: '2026-10-24', label: '10/24（土）', short: '10/24', startMinutes: 11 * 60, endMinutes: 16 * 60 + 30 },
   { key: '2026-10-25', label: '10/25（日）', short: '10/25', startMinutes: 11 * 60, endMinutes: 16 * 60 },
+  // 本番前の確認用。学園祭当日になったら外して 10/24・10/25 だけにする
+  { key: '2026-10-15', label: '10/15（木）', short: '10/15', startMinutes: 11 * 60, endMinutes: 16 * 60 + 30 },
 ] as const;
 
 export type EventDay = (typeof EVENT_DAYS)[number];

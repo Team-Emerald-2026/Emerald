@@ -8,7 +8,11 @@ interface EventDayTabsProps {
 /** 開催日（10/24・10/25）の切り替えタブ */
 export default function EventDayTabs({ value, onChange }: EventDayTabsProps) {
   return (
-    <div className="grid grid-cols-2 gap-1 rounded-xl border border-border bg-muted/40 p-1" role="tablist">
+    <div
+      className="grid gap-1 rounded-xl border border-border bg-muted/40 p-1"
+      style={{ gridTemplateColumns: `repeat(${EVENT_DAYS.length}, minmax(0, 1fr))` }}
+      role="tablist"
+    >
       {EVENT_DAYS.map((day) => {
         const active = day.key === value;
         return (
