@@ -1,12 +1,15 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Clock, ShoppingBag, MapPin, ChevronRight, Sparkles } from 'lucide-react';
+import { Clock, ShoppingBag, MapPin, ChevronRight, Sparkles, Megaphone } from 'lucide-react';
 import {
+  fetchEvents,
   fetchMapFacilities,
   fetchRestaurants,
   type BackendMapFacility,
   type BackendStore,
+  type EventNotice,
 } from '../lib/api';
+import { jstParts, timeLabel } from '../lib/eventSchedule';
 import {
   BUSY_QUEUE_COUNT,
   getWaitDisplay,
@@ -67,6 +70,17 @@ const quickMenu = [
   },
 ];
 
+/** ホームに出すお知らせの最大件数（それより古いものはイベント画面で見る） */
+const HOME_NOTICE_COUNT = 3;
+
+/** お知らせした時刻を「10/24 13:05」の形にする（日本時間）。時刻が無ければ null */
+function noticeTimeLabel(iso: string | null | undefined): string | null {
+  const parts = jstParts(iso);
+  if (!parts) return null;
+  const [, month, day] = parts.day.split('-');
+  return `${Number(month)}/${Number(day)} ${timeLabel(parts.minutes)}`;
+}
+
 interface RecommendedBooth {
   id: string;
   name: string;
@@ -101,6 +115,7 @@ export default function Home() {
   const navigate = useNavigate();
   const [recommendedBooths, setRecommendedBooths] = useState<RecommendedBooth[]>([]);
   const [recommendationsLoading, setRecommendationsLoading] = useState(true);
+  const [notices, setNotices] = useState<EventNotice[]>([]);
   const [heroVideoSrc, setHeroVideoSrc] = useState<string | null>(null);
   const [heroVideoPlaying, setHeroVideoPlaying] = useState(false);
 
@@ -159,6 +174,25 @@ export default function Home() {
     return () => controller.abort();
   }, []);
 
+  // お知らせ（公開中のものを新しい順に数件だけ）
+  useEffect(() => {
+    const controller = new AbortController();
+
+    fetchEvents(controller.signal)
+      .then((items) => {
+        const next = items
+          .filter((item) => item.type === 'notice')
+          .sort((a, b) => (b.created_at ?? '').localeCompare(a.created_at ?? ''))
+          .slice(0, HOME_NOTICE_COUNT);
+        setNotices(next);
+      })
+      .catch(() => {
+        // お知らせは補助の表示。取得に失敗したときは枠ごと出さない
+      });
+
+    return () => controller.abort();
+  }, []);
+
   return (
     <div className="space-y-6 p-4">
       {/* ヒーローカード */}
@@ -208,6 +242,46 @@ export default function Home() {
           <p className="mt-1 text-sm text-white/85">技術と灯りが集まる、二日間の祭。</p>
         </div>
       </button>
+
+      {/* お知らせ一覧（お知らせがあるときだけ表示） */}
+      {notices.length > 0 && (
+        <section>
+          <div className="mb-3 flex items-center justify-between px-1">
+            <h2 className="font-display text-base font-bold text-foreground">お知らせ</h2>
+            <Link to="/events" className="text-xs font-bold" style={{ color: 'var(--primary)' }}>
+              すべて見る
+            </Link>
+          </div>
+          <ul className="overflow-hidden rounded-2xl border border-border bg-card">
+            {notices.map((notice) => {
+              const time = noticeTimeLabel(notice.created_at);
+              return (
+                <li key={notice.id} className="border-b border-border last:border-b-0">
+                  <Link to="/events" className="flex items-start gap-3 p-4 transition-colors hover:bg-muted">
+                    <span
+                      className="grid h-9 w-9 shrink-0 place-items-center rounded-lg"
+                      style={{ backgroundColor: 'var(--accent)' }}
+                    >
+                      <Megaphone className="h-4 w-4 text-white" />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      {time && (
+                        <span className="block text-xs tabular-nums text-muted-foreground">{time}</span>
+                      )}
+                      <span className="block font-bold text-foreground">{notice.title}</span>
+                      {notice.body && (
+                        <span className="mt-0.5 block line-clamp-2 text-sm text-muted-foreground">
+                          {notice.body}
+                        </span>
+                      )}
+                    </span>
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      )}
 
       {/* おすすめ枠 */}
       <section>

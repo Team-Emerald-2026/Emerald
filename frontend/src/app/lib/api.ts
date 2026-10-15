@@ -540,6 +540,8 @@ export interface EventNotice {
   ticker_started_at?: string | null;
   /** いま電光掲示板に流しているか */
   ticker_active?: boolean;
+  /** お知らせを登録した時刻（ホームのお知らせ一覧に表示する） */
+  created_at?: string | null;
 }
 
 export interface EventNoticeInput {

@@ -22,6 +22,8 @@ class EventNoticeResource extends JsonResource
             'ticker_started_at' => optional($this->ticker_started_at)->toISOString(),
             // いま電光掲示板に流しているか
             'ticker_active' => $this->resource->isTickerActiveAt(),
+            // お知らせを登録した時刻（ホームのお知らせ一覧で「お知らせした時間」として表示）
+            'created_at' => optional($this->created_at)->toISOString(),
         ];
 
         return [
