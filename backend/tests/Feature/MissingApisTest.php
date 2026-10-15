@@ -11,6 +11,7 @@ use App\Models\SalesEntry;
 use App\Models\Store;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Schema;
@@ -450,6 +451,38 @@ class MissingApisTest extends TestCase
         $this->assertDatabaseMissing('users', ['login_id' => 'testuser2']);
         $this->assertDatabaseCount('orders', 0);
         $this->assertDatabaseCount('stores', 0);
+    }
+
+    public function test_public_store_register_route_is_removed(): void
+    {
+        $this->postJson('/api/v1/auth/register', [
+            'store_name' => '勝手なブース',
+            'description' => '第三者による登録',
+            'login_id' => 'intruder',
+            'password' => 'password123',
+        ])->assertNotFound();
+
+        $this->assertDatabaseMissing('users', ['login_id' => 'intruder']);
+        $this->assertDatabaseMissing('stores', ['name' => '勝手なブース']);
+    }
+
+    public function test_login_is_rate_limited(): void
+    {
+        Cache::flush();
+        $store = $this->createStore();
+        $this->createStoreUser($store);
+
+        for ($i = 0; $i < 5; $i++) {
+            $this->postJson('/api/v1/booth/auth/login', [
+                'login_id' => 'cafe_admin',
+                'password' => 'wrong-password',
+            ])->assertUnauthorized();
+        }
+
+        $this->postJson('/api/v1/booth/auth/login', [
+            'login_id' => 'cafe_admin',
+            'password' => 'wrong-password',
+        ])->assertStatus(429);
     }
 
     public function test_store_user_can_update_booth_type(): void
