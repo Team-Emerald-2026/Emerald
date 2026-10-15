@@ -14,6 +14,7 @@ class TickerController extends Controller
      */
     public function index()
     {
+        EventNotice::ensureTickerStartedAtColumn();
         $now = now();
 
         $active = EventNotice::query()

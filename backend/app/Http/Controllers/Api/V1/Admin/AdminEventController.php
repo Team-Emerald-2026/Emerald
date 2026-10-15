@@ -25,6 +25,7 @@ class AdminEventController extends Controller
     public function store(Request $request)
     {
         $this->authorizeAdmin($request);
+        EventNotice::ensureTickerStartedAtColumn();
 
         [$data, $tickerNow] = $this->validated($request);
         $event = new EventNotice($data);
@@ -49,6 +50,7 @@ class AdminEventController extends Controller
     public function update(Request $request, string $id)
     {
         $this->authorizeAdmin($request);
+        EventNotice::ensureTickerStartedAtColumn();
 
         $event = EventNotice::query()->findOrFail($id);
         [$data, $tickerNow] = $this->validated($request, false);

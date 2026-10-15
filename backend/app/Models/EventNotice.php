@@ -4,6 +4,8 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
 
 class EventNotice extends Model
 {
@@ -30,6 +32,28 @@ class EventNotice extends Model
 
     /** 開始から何分後まで電光掲示板に流すか（未指定のときの既定値） */
     public const TICKER_DEFAULT_AFTER_MINUTES = 20;
+
+    /**
+     * 本番で ticker_started_at が無いと掲示板の保存・取得が 500 になる。
+     * Schema::hasColumn が誤って true を返すケースがあったので、
+     * 追加を試みて「既にある」エラーだけ無視する。
+     */
+    public static function ensureTickerStartedAtColumn(): void
+    {
+        static $done = false;
+        if ($done) {
+            return;
+        }
+        $done = true;
+
+        try {
+            Schema::table('event_notices', function (Blueprint $table) {
+                $table->timestamp('ticker_started_at')->nullable();
+            });
+        } catch (\Throwable) {
+            // 既にある（またはマイグレーション済み）なら何もしない
+        }
+    }
 
     /**
      * いま電光掲示板に流す時間帯かどうか。
