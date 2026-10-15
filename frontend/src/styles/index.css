@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=Zen+Maru+Gothic:wght@500;700&display=swap');
+/* Webフォントの読み込みは index.html の <link> で行う（preconnect を効かせるため） */
 @import 'tailwindcss';
 @import './theme.css';
 

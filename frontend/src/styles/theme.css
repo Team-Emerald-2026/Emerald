@@ -88,6 +88,8 @@
   --color-info: var(--info);
   --color-info-soft: var(--info-soft);
 
+  /* 見出しのみ Webフォント（Zen Maru Gothic）。本文は端末の標準フォントで表示し、
+   * サイズの大きい Noto Sans JP のダウンロードをなくす。 */
   --font-display: 'Zen Maru Gothic', 'Hiragino Maru Gothic ProN', system-ui, sans-serif;
-  --font-sans: 'Noto Sans JP', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-sans: system-ui, -apple-system, 'Segoe UI', 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', 'Yu Gothic UI', sans-serif;
 }
