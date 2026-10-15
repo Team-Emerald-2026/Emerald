@@ -1,10 +1,15 @@
 import { Fragment, useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { Clock, MapPin } from 'lucide-react';
 import { fetchEvents, type EventNotice } from '../lib/api';
 import {
   EVENT_DAYS,
   buildTimetableRows,
   classifyItem,
   defaultDayKey,
+  eventLocationLabel,
+  eventLocationMapPath,
+  eventTimeRangeLabel,
   getEventDay,
   minutesToTime,
   noticeTimeRangeLabel,
@@ -33,9 +38,34 @@ function ScheduleSkeleton() {
 }
 
 function EventContent({ item }: { item: EventNotice }) {
+  const range = eventTimeRangeLabel(item);
+  const location = eventLocationLabel(item);
+  const mapPath = eventLocationMapPath(item);
+
   return (
     <div>
       <p className="font-display text-base font-bold text-foreground">{item.title}</p>
+      {(range || location) && (
+        <p className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs font-medium text-muted-foreground">
+          {range && (
+            <span className="inline-flex items-center gap-1 tabular-nums">
+              <Clock className="h-3.5 w-3.5" aria-hidden="true" />
+              {range}
+            </span>
+          )}
+          {location && mapPath && (
+            <Link
+              to={mapPath}
+              className="inline-flex items-center gap-1 font-bold underline-offset-2 hover:underline"
+              style={{ color: 'var(--primary)' }}
+              aria-label={`${location} を校内マップで見る`}
+            >
+              <MapPin className="h-3.5 w-3.5" aria-hidden="true" />
+              {location}
+            </Link>
+          )}
+        </p>
+      )}
       {item.body && (
         <p className="mt-0.5 line-clamp-2 text-xs leading-relaxed text-muted-foreground">{item.body}</p>
       )}
@@ -100,14 +130,14 @@ export default function Events() {
             <div className="px-3 py-2.5">内容</div>
           </div>
           {rows.map((row) => (
-            <Fragment key={row.hour}>
-              <div className="grid min-h-14 grid-cols-[4.5rem_1fr] border-b border-border last:border-b-0">
+            <Fragment key={row.minutes}>
+              <div className="grid min-h-12 grid-cols-[4.5rem_1fr] border-b border-border last:border-b-0">
                 <div className="flex items-start border-r border-border bg-muted/30 px-3 py-3">
                   <span className="text-sm font-bold tabular-nums text-foreground">
-                    {timeLabel(row.hour * 60)}
+                    {timeLabel(row.minutes)}
                   </span>
                 </div>
-                <div className="space-y-2 px-3 py-3">
+                <div className="space-y-3 px-3 py-3">
                   {row.exact.length === 0 ? (
                     <span className="text-sm text-muted-foreground/50">—</span>
                   ) : (

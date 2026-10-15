@@ -132,17 +132,21 @@ export function classifyItem(item: EventNotice): ClassifiedItem {
   return { kind: 'orphan', item };
 }
 
+/** 時間割の1行の長さ（分） */
+export const TIMETABLE_SLOT_MINUTES = 30;
+
 export interface TimetableRow {
-  hour: number;
-  /** ちょうど :00 のイベント */
+  /** 行の時刻（0時からの分。30分きざみ） */
+  minutes: number;
+  /** ちょうどこの時刻に始まるイベント（同じ時刻に複数あってもよい） */
   exact: EventNotice[];
-  /** :30 など、その時間と次の時間の間に置くイベント（分の昇順） */
+  /** 14:15 など、この行と次の行の間に始まるイベント（分の昇順） */
   between: { minutes: number; item: EventNotice }[];
 }
 
 /**
  * 1日分の時間割の行を作る。
- * 毎時間の行は常に出し、分つきのイベントはその時間の下に差し込む。
+ * 30分ごとの行は常に出し、半端な時刻のイベントはその行の下に差し込む。
  * 開催時間の外にイベントがあれば、その時間の行も追加して見落とさないようにする。
  */
 export function buildTimetableRows(
@@ -152,32 +156,51 @@ export function buildTimetableRows(
   const day = getEventDay(dayKey);
   if (!day) return [];
 
+  const slotOf = (minutes: number) => Math.floor(minutes / TIMETABLE_SLOT_MINUTES) * TIMETABLE_SLOT_MINUTES;
+
   const entries = classified.filter(
     (c): c is Extract<ClassifiedItem, { kind: 'schedule' }> => c.kind === 'schedule' && c.day === dayKey,
   );
 
-  let startHour = Math.floor(day.startMinutes / 60);
-  let endHour = Math.floor(day.endMinutes / 60);
+  let firstSlot = slotOf(day.startMinutes);
+  let lastSlot = slotOf(day.endMinutes);
   for (const entry of entries) {
-    const hour = Math.floor(entry.minutes / 60);
-    startHour = Math.min(startHour, hour);
-    endHour = Math.max(endHour, hour);
+    firstSlot = Math.min(firstSlot, slotOf(entry.minutes));
+    lastSlot = Math.max(lastSlot, slotOf(entry.minutes));
   }
 
   const rows: TimetableRow[] = [];
-  for (let hour = startHour; hour <= endHour; hour += 1) {
-    const inHour = entries
-      .filter((entry) => Math.floor(entry.minutes / 60) === hour)
+  for (let slot = firstSlot; slot <= lastSlot; slot += TIMETABLE_SLOT_MINUTES) {
+    const inSlot = entries
+      .filter((entry) => slotOf(entry.minutes) === slot)
       .sort((a, b) => a.minutes - b.minutes || Number(a.item.id) - Number(b.item.id));
     rows.push({
-      hour,
-      exact: inHour.filter((entry) => entry.minutes % 60 === 0).map((entry) => entry.item),
-      between: inHour
-        .filter((entry) => entry.minutes % 60 !== 0)
+      minutes: slot,
+      exact: inSlot.filter((entry) => entry.minutes === slot).map((entry) => entry.item),
+      between: inSlot
+        .filter((entry) => entry.minutes !== slot)
         .map((entry) => ({ minutes: entry.minutes, item: entry.item })),
     });
   }
   return rows;
+}
+
+/** イベントの開催時間（例: 14:00〜15:00 / 終わりの指定がなければ 14:00〜） */
+export function eventTimeRangeLabel(item: EventNotice): string | null {
+  const start = jstParts(item.starts_at);
+  if (!start) return null;
+  const end = jstParts(item.ends_at);
+  return `${timeLabel(start.minutes)}〜${end ? timeLabel(end.minutes) : ''}`;
+}
+
+/** イベントの場所（例: 8F・801）。場所がなければ null */
+export function eventLocationLabel(item: EventNotice): string | null {
+  return item.location ? `${item.location.floor}F・${item.location.name}` : null;
+}
+
+/** 校内マップでその場所を開くリンク */
+export function eventLocationMapPath(item: EventNotice): string | null {
+  return item.location ? `/map?facility=${item.location.id}&floor=${item.location.floor}F` : null;
 }
 
 /** 選んだ日のお知らせ（日にちなし＝両日共通を含む） */

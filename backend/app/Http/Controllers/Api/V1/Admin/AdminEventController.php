@@ -14,6 +14,7 @@ class AdminEventController extends Controller
         $this->authorizeAdmin($request);
 
         $events = EventNotice::query()
+            ->with('mapFacility')
             ->orderByDesc('id')
             ->get();
 
@@ -32,7 +33,7 @@ class AdminEventController extends Controller
         $this->applyNoticeTicker($event, $tickerNow);
         $event->save();
 
-        return EventNoticeResource::make($event)
+        return EventNoticeResource::make($event->load('mapFacility'))
             ->response()
             ->setStatusCode(201)
             ->setEncodingOptions(JSON_UNESCAPED_UNICODE);
@@ -58,7 +59,7 @@ class AdminEventController extends Controller
         $this->applyNoticeTicker($event, $tickerNow);
         $event->save();
 
-        return EventNoticeResource::make($event->refresh())
+        return EventNoticeResource::make($event->refresh()->load('mapFacility'))
             ->response()
             ->setEncodingOptions(JSON_UNESCAPED_UNICODE);
     }
@@ -113,6 +114,8 @@ class AdminEventController extends Controller
             'starts_at' => ['nullable', 'date'],
             'ends_at' => ['nullable', 'date', 'after_or_equal:starts_at'],
             'is_published' => ['sometimes', 'boolean'],
+            // 開催場所（校内マップの部屋）。null なら場所なし
+            'map_facility_id' => ['nullable', 'integer', 'exists:map_facilities,id'],
             // 電光掲示板に流す設定。ticker_lead_minutes が null なら流さない
             'ticker_lead_minutes' => ['nullable', 'integer', 'min:0', 'max:180'],
             'ticker_after_minutes' => ['nullable', 'integer', 'min:0', 'max:180'],

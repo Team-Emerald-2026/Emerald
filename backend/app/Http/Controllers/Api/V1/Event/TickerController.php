@@ -18,6 +18,7 @@ class TickerController extends Controller
         $now = now();
 
         $active = EventNotice::query()
+            ->with('mapFacility')
             ->published()
             ->where(function ($query) {
                 $query
@@ -36,8 +37,10 @@ class TickerController extends Controller
                 'id' => (string) $notice->id,
                 'title' => $notice->title,
                 'body' => $notice->body,
-                // お知らせは時刻を出さない
+                // お知らせは時刻・場所を出さない
                 'starts_at' => $notice->type === 'notice' ? null : $notice->starts_at->toISOString(),
+                'ends_at' => $notice->type === 'notice' ? null : $notice->ends_at?->toISOString(),
+                'location' => $notice->type === 'notice' ? null : $notice->locationLabel(),
             ]);
 
         return response()->json(['data' => $items], 200, [], JSON_UNESCAPED_UNICODE);

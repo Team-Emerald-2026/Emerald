@@ -542,6 +542,17 @@ export interface EventNotice {
   ticker_active?: boolean;
   /** お知らせを登録した時刻（ホームのお知らせ一覧に表示する） */
   created_at?: string | null;
+  /** イベントの開催場所（校内マップの部屋）の id。null は場所なし */
+  map_facility_id?: string | null;
+  /** イベントの開催場所（例: 8階の 801） */
+  location?: EventLocation | null;
+}
+
+export interface EventLocation {
+  /** 校内マップの施設 id */
+  id: string;
+  floor: number;
+  name: string;
 }
 
 export interface EventNoticeInput {
@@ -555,6 +566,8 @@ export interface EventNoticeInput {
   ticker_after_minutes?: number | null;
   /** お知らせを掲示板にすぐ流すか（true で流し始め、false で止める） */
   ticker_now?: boolean;
+  /** イベントの開催場所（校内マップの部屋の id）。null で場所なし */
+  map_facility_id?: number | null;
 }
 
 /** ホームの電光掲示板に、いま流すお知らせ */
@@ -564,6 +577,10 @@ export interface TickerItem {
   body: string;
   /** イベントの開始時刻。お知らせは null（時刻を出さない） */
   starts_at: string | null;
+  /** イベントの終了時刻。指定なし・お知らせは null */
+  ends_at?: string | null;
+  /** イベントの場所（例: 8F・801）。指定なし・お知らせは null */
+  location?: string | null;
 }
 
 export function fetchTicker(signal?: AbortSignal) {
