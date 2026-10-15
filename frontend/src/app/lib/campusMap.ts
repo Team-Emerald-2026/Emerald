@@ -26,7 +26,7 @@ export const FACILITY_TYPES = [
   { value: 'toilet_women', label: '女子トイレ', color: '#db2777' },
   { value: 'toilet', label: '男女トイレ', color: '#64748b' },
   { value: 'vending_machine', label: '自販機', color: '#0891b2' },
-  { value: 'emergency_exit', label: '非常口', color: '#16a34a' },
+  { value: 'emergency_exit', label: '非常口', color: '#237f52' },
 ] as const;
 
 /** 場所（マップ編集）だけで使い、店舗には選ばせない種類 */

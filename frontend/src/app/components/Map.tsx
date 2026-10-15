@@ -95,11 +95,18 @@ const typeColor: Record<BoothType, string> = {
   男女トイレ: '#64748b',
   作品展示: '#9333ea',
   自販機: '#0891b2',
-  非常口: '#16a34a',
+  非常口: '#237f52',
   案内: '#0ea5a3',
   救護室: '#e11d48',
   運営サポート: '#d97706',
 };
+
+/** 非常口は、アイコンの代わりに本物の非常口マーク（ISO 7010 E001、パブリックドメイン）を表示する */
+const EXIT_SIGN_SRC = '/icons/emergency-exit.svg';
+
+function ExitSign({ className }: { className: string }) {
+  return <img src={EXIT_SIGN_SRC} alt="" aria-hidden="true" className={`${className} rounded-[3px] shadow-md`} />;
+}
 
 function toBoothType(type: string): BoothType {
   switch (type) {
@@ -280,12 +287,16 @@ export default function CampusMap() {
               : 'border-border bg-card'
           }`}
         >
-          <span
-            className="grid h-9 w-9 shrink-0 place-items-center rounded-lg"
-            style={{ backgroundColor: typeColor[f.type] }}
-          >
-            <Icon className="h-4 w-4 text-white" />
-          </span>
+          {f.type === '非常口' ? (
+            <ExitSign className="h-9 w-9 shrink-0" />
+          ) : (
+            <span
+              className="grid h-9 w-9 shrink-0 place-items-center rounded-lg"
+              style={{ backgroundColor: typeColor[f.type] }}
+            >
+              <Icon className="h-4 w-4 text-white" />
+            </span>
+          )}
           <div className="min-w-0 flex-1">
             <p className="truncate font-medium text-foreground">{f.name}</p>
             <p className="text-xs text-muted-foreground">
@@ -397,14 +408,20 @@ export default function CampusMap() {
               aria-label={roomNote(f) ? `${f.name}（${roomNote(f)}）` : f.name}
               aria-pressed={isSelected}
             >
-              <span
-                className={`grid h-7 w-7 place-items-center rounded-full border-2 border-white shadow-md transition-transform ${
-                  isSelected ? 'scale-125 ring-2 ring-white' : ''
-                }`}
-                style={{ backgroundColor: typeColor[f.type] }}
-              >
-                <PinIcon className="h-3.5 w-3.5 text-white" aria-hidden="true" />
-              </span>
+              {f.type === '非常口' ? (
+                <ExitSign
+                  className={`block h-8 w-8 transition-transform ${isSelected ? 'scale-125 ring-2 ring-white' : ''}`}
+                />
+              ) : (
+                <span
+                  className={`grid h-7 w-7 place-items-center rounded-full border-2 border-white shadow-md transition-transform ${
+                    isSelected ? 'scale-125 ring-2 ring-white' : ''
+                  }`}
+                  style={{ backgroundColor: typeColor[f.type] }}
+                >
+                  <PinIcon className="h-3.5 w-3.5 text-white" aria-hidden="true" />
+                </span>
+              )}
               {isSelected && (
                 <span className="pointer-events-none absolute bottom-full left-1/2 mb-1 max-w-40 -translate-x-1/2 truncate whitespace-nowrap rounded-md bg-black/80 px-2 py-1 text-[11px] font-bold leading-none text-white shadow-md">
                   {f.name}
@@ -427,12 +444,16 @@ export default function CampusMap() {
             const LegendIcon = typeIcon[t];
             return (
               <li key={t} className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                <span
-                  className="grid h-5 w-5 place-items-center rounded-full"
-                  style={{ backgroundColor: typeColor[t] }}
-                >
-                  <LegendIcon className="h-3 w-3 text-white" aria-hidden="true" />
-                </span>
+                {t === '非常口' ? (
+                  <ExitSign className="h-5 w-5" />
+                ) : (
+                  <span
+                    className="grid h-5 w-5 place-items-center rounded-full"
+                    style={{ backgroundColor: typeColor[t] }}
+                  >
+                    <LegendIcon className="h-3 w-3 text-white" aria-hidden="true" />
+                  </span>
+                )}
                 {t}
               </li>
             );
