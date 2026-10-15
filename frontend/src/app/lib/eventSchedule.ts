@@ -61,6 +61,22 @@ export function timeLabel(minutes: number): string {
   return `${Math.floor(minutes / 60)}:${String(minutes % 60).padStart(2, '0')}`;
 }
 
+/**
+ * お知らせの時間帯表示（例: 12:00〜14:00 / 12:00〜 / 〜14:00）。
+ * 時間の指定がない（開始が0:00で終了もない）ときは null。
+ */
+export function noticeTimeRangeLabel(item: EventNotice): string | null {
+  const start = jstParts(item.starts_at);
+  if (!start) return null;
+
+  const end = jstParts(item.ends_at);
+  const from = start.minutes !== 0 ? timeLabel(start.minutes) : null;
+  const to = end && end.minutes !== 0 ? timeLabel(end.minutes) : null;
+  if (!from && !to) return null;
+
+  return `${from ?? ''}〜${to ?? ''}`;
+}
+
 /** 今日が開催日ならその日、そうでなければ初日 */
 export function defaultDayKey(): EventDayKey {
   const today = jstParts(new Date().toISOString())?.day;

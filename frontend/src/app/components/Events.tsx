@@ -7,6 +7,7 @@ import {
   defaultDayKey,
   getEventDay,
   minutesToTime,
+  noticeTimeRangeLabel,
   noticesForDay,
   timeLabel,
   type EventDayKey,
@@ -140,7 +141,14 @@ export default function Events() {
           <ul className="overflow-hidden rounded-2xl border border-border bg-card">
             {notices.map((item, index) => (
               <li key={item.id} className={`px-4 py-3 ${index > 0 ? 'border-t border-border' : ''}`}>
-                <p className="font-display font-bold text-foreground">{item.title}</p>
+                <p className="font-display font-bold text-foreground">
+                  {item.title}
+                  {noticeTimeRangeLabel(item) && (
+                    <span className="ml-2 text-xs font-medium tabular-nums text-muted-foreground">
+                      {noticeTimeRangeLabel(item)}
+                    </span>
+                  )}
+                </p>
                 <p className="mt-1 text-sm text-muted-foreground">{item.body}</p>
               </li>
             ))}

@@ -20,6 +20,7 @@ import {
   getEventDay,
   jstParts,
   minutesToTime,
+  noticeTimeRangeLabel,
   noticesForDay,
   timeLabel,
   timeToMinutes,
@@ -37,6 +38,10 @@ type FormState = {
   day: string;
   /** HH:MM（イベントのみ） */
   time: string;
+  /** お知らせの「何時から」（HH:MM）。'' は指定なし */
+  noticeStart: string;
+  /** お知らせの「何時まで」（HH:MM）。'' は指定なし */
+  noticeEnd: string;
   is_published: boolean;
   /** ホームの電光掲示板に流すか（イベントのみ） */
   ticker: boolean;
@@ -66,6 +71,8 @@ const emptyForm = (day: EventDayKey): FormState => ({
   type: 'event',
   day,
   time: '12:00',
+  noticeStart: '',
+  noticeEnd: '',
   is_published: true,
   ticker: false,
   tickerLead: TICKER_DEFAULT_LEAD,
@@ -95,12 +102,16 @@ function toForm(item: EventNotice, fallbackDay: EventDayKey): FormState {
   const knownDay = parts && getEventDay(parts.day) ? parts.day : '';
 
   if (item.type === 'notice') {
+    const endParts = jstParts(item.ends_at);
     return {
       title: item.title,
       body: item.body,
       type: 'notice',
       day: knownDay,
       time: '12:00',
+      // 0:00 は「時間の指定なし」として扱う（終日のお知らせ）
+      noticeStart: knownDay && parts && parts.minutes !== 0 ? minutesToTime(parts.minutes) : '',
+      noticeEnd: knownDay && endParts && endParts.minutes !== 0 ? minutesToTime(endParts.minutes) : '',
       is_published: item.is_published ?? true,
       ...tickerFields(item),
       // 流す時間が終わったお知らせはオフで開き、チェックし直すと今から流し直す
@@ -119,6 +130,8 @@ function toForm(item: EventNotice, fallbackDay: EventDayKey): FormState {
     type: 'event',
     day: knownDay || fallbackDay,
     time: parts ? minutesToTime(parts.minutes) : '12:00',
+    noticeStart: '',
+    noticeEnd: '',
     is_published: item.is_published ?? true,
     ...tickerFields(item),
     noticeTicker: false,
@@ -238,6 +251,7 @@ export default function AdminEvents() {
     }
 
     let startsAt: string | null = null;
+    let endsAt: string | null = null;
 
     if (form.type === 'event') {
       const day = getEventDay(form.day);
@@ -262,7 +276,19 @@ export default function AdminEvents() {
         setError('表示する日を選び直してください。');
         return;
       }
-      startsAt = toStartsAt(form.day, '00:00');
+      const fromMinutes = form.noticeStart ? timeToMinutes(form.noticeStart) : null;
+      const toMinutesValue = form.noticeEnd ? timeToMinutes(form.noticeEnd) : null;
+      if ((form.noticeStart && fromMinutes == null) || (form.noticeEnd && toMinutesValue == null)) {
+        setError('「何時から」「何時まで」の時間を入力し直してください。');
+        return;
+      }
+      if (fromMinutes != null && toMinutesValue != null && toMinutesValue <= fromMinutes) {
+        setError('「何時まで」は「何時から」より後の時間にしてください。');
+        return;
+      }
+      // 時間が未入力なら 0:00 扱い（終日のお知らせ）
+      startsAt = toStartsAt(form.day, form.noticeStart || '00:00');
+      endsAt = toMinutesValue != null ? toStartsAt(form.day, form.noticeEnd) : null;
     }
 
     // イベントは開始時刻を基準に流す。お知らせは「すぐ流す」で、保存した時から流す
@@ -275,13 +301,13 @@ export default function AdminEvents() {
     }
     const noticeTicker = form.type === 'notice' && form.noticeTicker;
 
-    // 終了時刻は付けない（公開は「公開する」のチェックで切り替える）
     const input: EventNoticeInput = {
       title: form.title.trim(),
       body: form.body.trim(),
       type: form.type,
       starts_at: startsAt,
-      ends_at: null,
+      // お知らせの「何時まで」。イベントには付けない（公開は「公開する」のチェックで切り替える）
+      ends_at: endsAt,
       is_published: form.is_published,
       ticker_lead_minutes: tickerLead,
       ticker_after_minutes: useTicker
@@ -406,6 +432,9 @@ export default function AdminEvents() {
         <p className="font-display font-bold text-foreground">
           <span className="mr-2 rounded-md bg-muted px-1.5 py-0.5 text-xs font-medium text-muted-foreground">
             {noticeDayLabel(item)}
+            {noticeTimeRangeLabel(item) && (
+              <span className="ml-1 tabular-nums">{noticeTimeRangeLabel(item)}</span>
+            )}
           </span>
           {item.title}
           {!item.is_published && (
@@ -562,6 +591,34 @@ export default function AdminEvents() {
                   ))}
                 </select>
               </label>
+
+              {form.type === 'notice' && form.day !== '' && (
+                <div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <label className="block text-sm">
+                      <span className="mb-1 block text-muted-foreground">何時から</span>
+                      <input
+                        type="time"
+                        value={form.noticeStart}
+                        onChange={(e) => updateField('noticeStart', e.target.value)}
+                        className="w-full rounded-lg border border-input bg-background px-3 py-2.5 text-foreground"
+                      />
+                    </label>
+                    <label className="block text-sm">
+                      <span className="mb-1 block text-muted-foreground">何時まで</span>
+                      <input
+                        type="time"
+                        value={form.noticeEnd}
+                        onChange={(e) => updateField('noticeEnd', e.target.value)}
+                        className="w-full rounded-lg border border-input bg-background px-3 py-2.5 text-foreground"
+                      />
+                    </label>
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    お知らせに「12:00〜14:00」のように時間帯が表示されます。未入力のときは終日のお知らせになります。
+                  </p>
+                </div>
+              )}
 
               {form.type === 'event' && (
                 <label className="block text-sm">
