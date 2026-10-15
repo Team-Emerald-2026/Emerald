@@ -1,0 +1,33 @@
+services:
+  # フロントエンド(静的サイト)
+  - type: web
+    name: kyoto-tech-festival-frontend
+    runtime: static
+    rootDir: frontend
+    buildCommand: npm ci && npm run build
+    staticPublishPath: dist
+    # SPA なのでどのURLでも index.html を返す
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    headers:
+      # ビルドされた JS/CSS(ファイル名にハッシュが付くため、永続キャッシュしてよい)
+      - path: /assets/*
+        name: Cache-Control
+        value: public, max-age=31536000, immutable
+      # 動画(hero.mp4 / hero-mobile.mp4)
+      - path: /*.mp4
+        name: Cache-Control
+        value: public, max-age=31536000
+      # 地図画像(campus-map-*.png)などの画像
+      - path: /*.png
+        name: Cache-Control
+        value: public, max-age=31536000
+      - path: /*.jpg
+        name: Cache-Control
+        value: public, max-age=31536000
+      # index.html は毎回サーバーに確認させる(デプロイを即反映させるため)
+      - path: /index.html
+        name: Cache-Control
+        value: no-cache
