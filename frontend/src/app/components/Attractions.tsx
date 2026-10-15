@@ -11,7 +11,7 @@ import {
 import { BUSY_QUEUE_COUNT, getWaitDisplay, waitLevelStyle, type WaitDisplay } from '../lib/waitDisplay';
 import { Skeleton, SkeletonText } from './Skeleton';
 
-type Category = '体験' | 'フード' | 'ステージ';
+type Category = '体験' | 'フード' | '作品展示' | 'ステージ';
 
 interface Booth {
   id: string;
@@ -24,7 +24,7 @@ interface Booth {
 }
 
 // 絞り込みのチップ。「ステージ」は出さない（ステージ・イベントもの のブースは「すべて」で表示される）
-const categories: Array<'すべて' | Category> = ['すべて', '体験', 'フード'];
+const categories: Array<'すべて' | Category> = ['すべて', '体験', 'フード', '作品展示'];
 
 function toCategory(type?: string): Category {
   switch (type) {
@@ -32,6 +32,9 @@ function toCategory(type?: string): Category {
     case 'フード':
     case '飲食ブース':
       return 'フード';
+    case 'exhibit':
+    case '作品展示':
+      return '作品展示';
     case 'stage':
     case 'shop':
     case 'ステージ':
