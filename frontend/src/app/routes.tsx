@@ -1,3 +1,5 @@
+import { lazy, Suspense } from 'react';
+import type { ReactNode } from 'react';
 import { createBrowserRouter } from 'react-router-dom';
 import Layout from './components/Layout';
 import Home from './components/Home';
@@ -5,19 +7,37 @@ import Attractions from './components/Attractions';
 import Restaurants from './components/Restaurants';
 import CampusMap from './components/Map';
 import Events from './components/Events';
-import Monitor from './components/Monitor';
 import NotFound from './components/NotFound';
-import StoreLogin from './components/store/StoreLogin';
-import StorePos from './components/store/StorePos';
-import StoreDashboard from './components/store/StoreDashboard';
-import StoreWaiting from './components/store/StoreWaiting';
-import StoreTicket from './components/store/StoreTicket';
-import StoreServed from './components/store/StoreServed';
-import StoreProfile from './components/store/StoreProfile';
-import AdminDashboard from './components/admin/AdminDashboard';
-import AdminStores from './components/admin/AdminStores';
-import AdminEvents from './components/admin/AdminEvents';
-import AdminMap from './components/admin/AdminMap';
+
+// 店舗用・管理用・モニター画面は来場者が使わないため、
+// アクセスされたときに初めて読み込む（コード分割）
+const Monitor = lazy(() => import('./components/Monitor'));
+const StoreLogin = lazy(() => import('./components/store/StoreLogin'));
+const StorePos = lazy(() => import('./components/store/StorePos'));
+const StoreDashboard = lazy(() => import('./components/store/StoreDashboard'));
+const StoreWaiting = lazy(() => import('./components/store/StoreWaiting'));
+const StoreTicket = lazy(() => import('./components/store/StoreTicket'));
+const StoreServed = lazy(() => import('./components/store/StoreServed'));
+const StoreProfile = lazy(() => import('./components/store/StoreProfile'));
+const AdminDashboard = lazy(() => import('./components/admin/AdminDashboard'));
+const AdminStores = lazy(() => import('./components/admin/AdminStores'));
+const AdminEvents = lazy(() => import('./components/admin/AdminEvents'));
+const AdminMap = lazy(() => import('./components/admin/AdminMap'));
+
+// 遅延読み込み中に表示する簡易ローディング
+function withSuspense(element: ReactNode) {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-screen items-center justify-center text-gray-500">
+          読み込み中...
+        </div>
+      }
+    >
+      {element}
+    </Suspense>
+  );
+}
 
 export const router = createBrowserRouter([
   {
@@ -32,18 +52,18 @@ export const router = createBrowserRouter([
     ],
   },
   // 校内モニター（プロジェクター）向け呼び出し番号一覧（認証不要）
-  { path: '/monitor', element: <Monitor /> },
+  { path: '/monitor', element: withSuspense(<Monitor />) },
   // 店舗向け画面（来場者ナビとは独立）
-  { path: '/store/login', element: <StoreLogin /> },
-  { path: '/store', element: <StorePos /> },
-  { path: '/store/dashboard', element: <StoreDashboard /> },
-  { path: '/store/waiting', element: <StoreWaiting /> },
-  { path: '/store/ticket', element: <StoreTicket /> },
-  { path: '/store/served', element: <StoreServed /> },
-  { path: '/store/profile', element: <StoreProfile /> },
-  { path: '/admin', element: <AdminDashboard /> },
-  { path: '/admin/stores', element: <AdminStores /> },
-  { path: '/admin/map', element: <AdminMap /> },
-  { path: '/admin/events', element: <AdminEvents /> },
+  { path: '/store/login', element: withSuspense(<StoreLogin />) },
+  { path: '/store', element: withSuspense(<StorePos />) },
+  { path: '/store/dashboard', element: withSuspense(<StoreDashboard />) },
+  { path: '/store/waiting', element: withSuspense(<StoreWaiting />) },
+  { path: '/store/ticket', element: withSuspense(<StoreTicket />) },
+  { path: '/store/served', element: withSuspense(<StoreServed />) },
+  { path: '/store/profile', element: withSuspense(<StoreProfile />) },
+  { path: '/admin', element: withSuspense(<AdminDashboard />) },
+  { path: '/admin/stores', element: withSuspense(<AdminStores />) },
+  { path: '/admin/map', element: withSuspense(<AdminMap />) },
+  { path: '/admin/events', element: withSuspense(<AdminEvents />) },
   { path: '*', element: <NotFound /> },
 ]);
