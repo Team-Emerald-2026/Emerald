@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Building2, Pencil, Plus, Power, Trash2, Users } from 'lucide-react';
+import { Building2, Pencil, Plus, Power, Ticket, Trash2, Users } from 'lucide-react';
 import StoreShell from './StoreShell';
 import {
   createBoothMenuItem,
@@ -47,6 +47,12 @@ export default function StoreProfile() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [savingProduct, setSavingProduct] = useState(false);
+  // 整理券の設定（枚数と、非表示にした番号）
+  const [ticketLimitInput, setTicketLimitInput] = useState('50');
+  const [disabledTickets, setDisabledTickets] = useState<number[]>([]);
+  const [ticketError, setTicketError] = useState('');
+  const [ticketMessage, setTicketMessage] = useState('');
+  const [savingTickets, setSavingTickets] = useState(false);
 
   useEffect(() => {
     if (!session?.token) {
@@ -64,6 +70,8 @@ export default function StoreProfile() {
         setBoothType(toBoothKind(data.type));
         setIsOpen(Boolean(data.is_open));
         setMenuItems(items.filter((item) => item.is_available !== false));
+        setTicketLimitInput(String(data.ticket_limit ?? 50));
+        setDisabledTickets((data.disabled_ticket_numbers ?? []).map(Number));
       })
       .catch((err: unknown) => {
         setError(err instanceof Error ? err.message : '店舗情報を取得できませんでした。');
@@ -113,6 +121,60 @@ export default function StoreProfile() {
     } finally {
       setSaving(false);
     }
+  };
+
+  // いま保存されている整理券の枚数（画面の入力途中の値ではなく、サーバーに保存済みの値）
+  const savedTicketLimit = Math.max(1, Number(profile?.ticket_limit) || 50);
+  const parsedTicketLimit = Number(ticketLimitInput);
+  const ticketLimitValid =
+    Number.isInteger(parsedTicketLimit) && parsedTicketLimit >= 1 && parsedTicketLimit <= 999;
+
+  /** 整理券の設定（枚数・非表示の番号）を保存する。店舗名などは保存済みの値を使う */
+  const saveTicketSettings = async (nextLimit: number, nextDisabled: number[]) => {
+    if (!session?.token || !profile) {
+      setTicketError('ログイン情報がありません。再度ログインしてください。');
+      return;
+    }
+
+    setSavingTickets(true);
+    setTicketError('');
+    setTicketMessage('');
+
+    try {
+      const updated = await updateStoreProfile(session.token, profile.id, {
+        name: profile.name,
+        description: profile.description ?? '',
+        is_open: isOpen,
+        ticket_limit: nextLimit,
+        disabled_ticket_numbers: nextDisabled,
+      });
+      setProfile(updated);
+      setTicketLimitInput(String(updated.ticket_limit ?? nextLimit));
+      setDisabledTickets((updated.disabled_ticket_numbers ?? nextDisabled).map(Number));
+      setTicketMessage('整理券の設定を保存しました。');
+    } catch (err: unknown) {
+      setTicketError(err instanceof Error ? err.message : '整理券の設定を保存できませんでした。');
+    } finally {
+      setSavingTickets(false);
+    }
+  };
+
+  /** 番号をタップして、非表示（紛失）と再表示を切り替える */
+  const toggleTicketNumber = (num: number) => {
+    if (savingTickets) return;
+    const next = disabledTickets.includes(num)
+      ? disabledTickets.filter((n) => n !== num)
+      : [...disabledTickets, num].sort((a, b) => a - b);
+    setDisabledTickets(next);
+    void saveTicketSettings(savedTicketLimit, next);
+  };
+
+  const saveTicketLimit = () => {
+    if (!ticketLimitValid) {
+      setTicketError('整理券の枚数は1〜999の整数で入力してください。');
+      return;
+    }
+    void saveTicketSettings(parsedTicketLimit, disabledTickets);
   };
 
   const parsedPrice = Number(productPrice);
@@ -451,6 +513,98 @@ export default function StoreProfile() {
                 ))}
               </ul>
             )}
+          </section>
+
+          <section className="space-y-3 rounded-2xl border border-border bg-card p-5">
+            <div className="flex items-center gap-3">
+              <span
+                className="grid h-12 w-12 shrink-0 place-items-center rounded-xl"
+                style={{ backgroundColor: 'var(--primary)' }}
+              >
+                <Ticket className="h-6 w-6 text-white" />
+              </span>
+              <div>
+                <h2 className="font-display text-lg font-bold text-foreground">整理券</h2>
+                <p className="text-sm text-muted-foreground">
+                  1〜{savedTicketLimit}番を順番に使い回します。無くした番号はタップで非表示にすると、発番のときに飛ばされます。
+                </p>
+              </div>
+            </div>
+
+            {ticketError && (
+              <p className="text-sm" style={{ color: 'var(--busy)' }}>
+                {ticketError}
+              </p>
+            )}
+            {ticketMessage && (
+              <p className="text-sm" style={{ color: 'var(--ok)' }}>
+                {ticketMessage}
+              </p>
+            )}
+
+            <div className="flex items-end gap-2">
+              <label className="block text-sm">
+                <span className="mb-1 block text-muted-foreground">整理券の枚数（増やすと追加）</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={999}
+                  step={1}
+                  value={ticketLimitInput}
+                  onChange={(e) => setTicketLimitInput(e.target.value)}
+                  className="w-28 rounded-lg border border-input bg-background px-3 py-2.5 text-foreground outline-none"
+                />
+              </label>
+              <button
+                type="button"
+                onClick={saveTicketLimit}
+                disabled={savingTickets}
+                className="min-h-11 rounded-xl px-4 py-2.5 font-bold text-white disabled:opacity-60"
+                style={{ backgroundColor: 'var(--primary)' }}
+              >
+                {savingTickets ? '保存中...' : '枚数を保存'}
+              </button>
+            </div>
+
+            <p className="text-sm text-muted-foreground">
+              使用できる番号:{' '}
+              <span className="font-bold text-foreground">
+                {savedTicketLimit - disabledTickets.filter((n) => n <= savedTicketLimit).length}
+              </span>{' '}
+              / {savedTicketLimit} 枚
+              {disabledTickets.filter((n) => n <= savedTicketLimit).length > 0 && (
+                <>
+                  （非表示: {disabledTickets.filter((n) => n <= savedTicketLimit).join(', ')}番）
+                </>
+              )}
+            </p>
+
+            <div className="grid grid-cols-5 gap-1.5 sm:grid-cols-10">
+              {Array.from({ length: savedTicketLimit }, (_, i) => i + 1).map((num) => {
+                const hidden = disabledTickets.includes(num);
+                return (
+                  <button
+                    key={num}
+                    type="button"
+                    role="switch"
+                    aria-checked={!hidden}
+                    aria-label={`整理券${num}番を${hidden ? '再表示' : '非表示に'}する`}
+                    onClick={() => toggleTicketNumber(num)}
+                    disabled={savingTickets}
+                    className={`min-h-10 rounded-lg border text-sm font-bold transition-colors disabled:opacity-60 ${
+                      hidden
+                        ? 'border-border bg-muted text-muted-foreground line-through'
+                        : 'border-border bg-background text-foreground hover:bg-muted'
+                    }`}
+                  >
+                    {num}
+                  </button>
+                );
+              })}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              グレー（取り消し線）の番号は非表示中です。もう一度タップすると再表示されます。
+            </p>
           </section>
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">

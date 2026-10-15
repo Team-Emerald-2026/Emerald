@@ -18,6 +18,11 @@ class DashboardResource extends JsonResource
             'current_queue_count' => (int) $this->current_queue_count,
             'wait_display_mode' => $this->wait_display_mode ?? 'minutes',
             'wait_display_text' => $this->wait_display_text,
+            'ticket_limit' => (int) ($this->ticket_limit ?? 50),
+            'disabled_ticket_numbers' => collect($this->disabled_ticket_numbers ?? [])
+                ->map(fn ($number) => (int) $number)
+                ->values()
+                ->all(),
             'revenue' => (int) ($this->revenue ?? 0),
             'type' => $this->boothType(),
         ];

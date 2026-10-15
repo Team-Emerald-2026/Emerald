@@ -9,6 +9,7 @@ use App\Models\MenuItem;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\Store;
+use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -166,6 +167,8 @@ class AccountingController extends Controller
             ->forStore($storeId)
             ->with(['items' => $this->itemsWithNames()])
             ->where('ticket_number', strtoupper($ticketNumber))
+            // 整理券の番号は使い回すため、同じ番号では最新の会計を返す
+            ->orderByDesc('id')
             ->first();
 
         if (!$order) {
@@ -506,52 +509,82 @@ class AccountingController extends Controller
         ], 404, [], JSON_UNESCAPED_UNICODE);
     }
 
+    /**
+     * 整理券の番号を発番する。
+     *
+     * 整理券は「1〜枚数（店舗ごとに設定、既定50）」を順番に使い回す。
+     * 次の番号は、前回発番した番号の次から探し、上限を超えたら1に戻る。
+     * 以下の番号は飛ばす:
+     * - 非表示（紛失など）にした番号（店舗情報の設定）
+     * - 提供前の注文（提供待ち・呼び出し中）が使っている番号（まだ手元に戻っていない）
+     * すべて埋まっている場合は 409（NO_TICKET_AVAILABLE）を返す。
+     */
     private function generateNextTicketNumber(string $storeId): string
     {
-        // Use a dedicated ticket_counters table to atomically increment per-store counters.
-        // Each store owns its own prefix, so ticket numbers stay readable and unique.
         return DB::transaction(function () use ($storeId) {
-            $prefix = $this->ticketPrefixForStoreId($storeId);
+            $store = Store::query()->whereKey($storeId)->firstOrFail();
+            $prefix = $store->ticket_prefix ?: strtoupper(substr($storeId, -1));
+            $limit = max(1, (int) ($store->ticket_limit ?? 50));
 
+            // 同じ店の発番が同時に走らないよう、カウンター行をロックして直列化する
             $counter = DB::table('ticket_counters')
                 ->where('store_id', $storeId)
                 ->lockForUpdate()
                 ->first();
 
-            // First ticket for this store: determine starting point from existing orders to avoid collisions.
-            if (!$counter) {
-                // Find max numeric suffix from existing ticket_numbers like '<prefix>-<num>'
-                // （CAST ... AS UNSIGNED は MySQL 専用で Postgres では失敗するため、PHP 側で計算する）
-                $max = Order::query()
+            $disabled = collect($store->disabled_ticket_numbers ?? [])
+                ->map(fn ($number) => (int) $number);
+
+            // 提供前（キャンセル以外）の注文が持っている番号
+            // （CAST ... AS UNSIGNED は MySQL 専用で Postgres では失敗するため、PHP 側で計算する）
+            $inUse = Order::query()
+                ->forStore($storeId)
+                ->whereNull('served_at')
+                ->where('status', '!=', 'canceled')
+                ->where('ticket_number', 'like', $prefix . '-%')
+                ->pluck('ticket_number')
+                ->map(fn ($number) => (int) substr((string) $number, strlen($prefix) + 1));
+
+            $unavailable = $disabled->merge($inUse)->flip();
+
+            $last = $counter ? (int) $counter->last_number : 0;
+
+            $next = null;
+            for ($step = 1; $step <= $limit; $step++) {
+                $candidate = (($last + $step - 1) % $limit) + 1;
+                if (! $unavailable->has($candidate)) {
+                    $next = $candidate;
+                    break;
+                }
+            }
+
+            if ($next === null) {
+                throw new HttpResponseException(response()->json([
+                    'error' => [
+                        'code' => 'NO_TICKET_AVAILABLE',
+                        'message' => '使える整理券がありません。提供完了やキャンセルで整理券を戻すか、店舗情報で整理券の枚数を増やしてください。',
+                        'details' => ['ticket_limit' => $limit],
+                    ],
+                ], 409, [], JSON_UNESCAPED_UNICODE));
+            }
+
+            if ($counter) {
+                DB::table('ticket_counters')
                     ->where('store_id', $storeId)
-                    ->where('ticket_number', 'like', $prefix . '-%')
-                    ->pluck('ticket_number')
-                    ->map(fn ($number) => (int) substr((string) $number, strlen($prefix) + 1))
-                    ->max();
-
-                // If no existing tickets, start at 101; otherwise start at max + 1
-                $start = ($max ? (int) $max : 100) + 1;
-
+                    ->update([
+                        'last_number' => $next,
+                        'updated_at' => now(),
+                    ]);
+            } else {
                 DB::table('ticket_counters')->insert([
                     'store_id' => $storeId,
-                    'last_number' => $start,
+                    'last_number' => $next,
                     'created_at' => now(),
                     'updated_at' => now(),
                 ]);
-
-                return $prefix . '-' . $start;
             }
 
-            $nextNumber = (int) $counter->last_number + 1;
-
-            DB::table('ticket_counters')
-                ->where('store_id', $storeId)
-                ->update([
-                    'last_number' => $nextNumber,
-                    'updated_at' => now(),
-                ]);
-
-            return $prefix . '-' . $nextNumber;
+            return $prefix . '-' . $next;
         });
     }
 
@@ -587,12 +620,4 @@ class AccountingController extends Controller
         ], 404, [], JSON_UNESCAPED_UNICODE);
     }
 
-    private function ticketPrefixForStoreId(string $storeId): string
-    {
-        $prefix = Store::query()
-            ->whereKey($storeId)
-            ->value('ticket_prefix');
-
-        return $prefix ?: strtoupper(substr($storeId, -1));
-    }
 }

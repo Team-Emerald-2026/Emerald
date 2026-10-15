@@ -21,6 +21,10 @@ export interface BoothDashboard {
   wait_display_text?: string | null;
   revenue?: number;
   type?: string;
+  /** 整理券の枚数（1〜この番号までを使い回す。既定50） */
+  ticket_limit?: number;
+  /** 非表示（紛失など）にした整理券の番号。発番時に飛ばされる */
+  disabled_ticket_numbers?: number[];
 }
 
 export interface BackendStore {
@@ -844,6 +848,10 @@ export function describeOrderError(error: unknown, fallback: string): string {
     if (error.status === 409 && error.code === 'SOLD_OUT') {
       return `${error.message}。売り切れの商品をカートから外しました。`;
     }
+    if (error.status === 409 && error.code === 'NO_TICKET_AVAILABLE') {
+      // 整理券が全部出払っている（または非表示が多すぎる）とき
+      return error.message;
+    }
     if (error.status === 409) {
       return 'すでに状態が変わっていました。最新の状態に更新しました。';
     }
@@ -930,6 +938,10 @@ export interface StoreProfile {
   current_queue_count: number;
   type?: string;
   revenue?: number;
+  /** 整理券の枚数（1〜この番号までを使い回す。既定50） */
+  ticket_limit?: number;
+  /** 非表示（紛失など）にした整理券の番号。発番時に飛ばされる */
+  disabled_ticket_numbers?: number[];
 }
 
 export function fetchStoreProfile(token: string, signal?: AbortSignal): Promise<StoreProfile> {
@@ -950,6 +962,10 @@ export function updateStoreProfile(
     current_wait_min?: number;
     is_open: boolean;
     type?: BoothKind;
+    /** 整理券の枚数（1〜999）。増やすと整理券の追加になる */
+    ticket_limit?: number;
+    /** 非表示（紛失など）にする整理券の番号 */
+    disabled_ticket_numbers?: number[];
   },
   signal?: AbortSignal,
 ) {

@@ -473,10 +473,10 @@ class AccountingOrderFlowTest extends TestCase
     }
 
     // ------------------------------------------------------------------
-    // 受付番号の採番（本番の Postgres でも動く書き方になっているか）
+    // 整理券の採番（1〜枚数を使い回す。本番の MySQL 以外でも動く書き方になっているか）
     // ------------------------------------------------------------------
 
-    public function test_first_ticket_number_of_a_store_starts_at_101(): void
+    public function test_first_ticket_number_of_a_store_starts_at_1(): void
     {
         $store = $this->createStore();
         $coffee = $this->createMenuItem($store, 'コーヒー', 300);
@@ -485,12 +485,62 @@ class AccountingOrderFlowTest extends TestCase
         $this->postJson('/api/v1/booth/accounting/orders', [
             'items' => [['menu_item_id' => $coffee->id, 'quantity' => 1]],
         ])->assertCreated()
-            ->assertJsonPath('data.ticket_number', 'C-101');
+            ->assertJsonPath('data.ticket_number', 'C-1');
 
         $this->postJson('/api/v1/booth/accounting/orders', [
             'items' => [['menu_item_id' => $coffee->id, 'quantity' => 1]],
         ])->assertCreated()
-            ->assertJsonPath('data.ticket_number', 'C-102');
+            ->assertJsonPath('data.ticket_number', 'C-2');
+    }
+
+    public function test_disabled_ticket_numbers_are_skipped(): void
+    {
+        // 1番と3番の整理券を無くした想定（非表示にしてある）
+        $store = $this->createStore('store-101', ['disabled_ticket_numbers' => [1, 3]]);
+        $coffee = $this->createMenuItem($store, 'コーヒー', 300);
+        $this->loginAsStore($store);
+
+        $this->postJson('/api/v1/booth/accounting/orders', [
+            'items' => [['menu_item_id' => $coffee->id, 'quantity' => 1]],
+        ])->assertCreated()
+            ->assertJsonPath('data.ticket_number', 'C-2');
+
+        $this->postJson('/api/v1/booth/accounting/orders', [
+            'items' => [['menu_item_id' => $coffee->id, 'quantity' => 1]],
+        ])->assertCreated()
+            ->assertJsonPath('data.ticket_number', 'C-4');
+    }
+
+    public function test_ticket_numbers_wrap_around_and_reuse_returned_tickets(): void
+    {
+        $store = $this->createStore('store-101', ['ticket_limit' => 2]);
+        $coffee = $this->createMenuItem($store, 'コーヒー', 300);
+        $this->loginAsStore($store);
+
+        $first = $this->postJson('/api/v1/booth/accounting/orders', [
+            'items' => [['menu_item_id' => $coffee->id, 'quantity' => 1]],
+        ])->assertCreated();
+        $first->assertJsonPath('data.ticket_number', 'C-1');
+
+        $this->postJson('/api/v1/booth/accounting/orders', [
+            'items' => [['menu_item_id' => $coffee->id, 'quantity' => 1]],
+        ])->assertCreated()
+            ->assertJsonPath('data.ticket_number', 'C-2');
+
+        // 整理券が全部出払っている間は発番できない
+        $this->postJson('/api/v1/booth/accounting/orders', [
+            'items' => [['menu_item_id' => $coffee->id, 'quantity' => 1]],
+        ])->assertStatus(409)
+            ->assertJsonPath('error.code', 'NO_TICKET_AVAILABLE');
+
+        // 提供完了で整理券が手元に戻ると、その番号をまた使える
+        $firstId = $first->json('data.id');
+        $this->patchJson("/api/v1/booth/accounting/orders/{$firstId}/serve")->assertOk();
+
+        $this->postJson('/api/v1/booth/accounting/orders', [
+            'items' => [['menu_item_id' => $coffee->id, 'quantity' => 1]],
+        ])->assertCreated()
+            ->assertJsonPath('data.ticket_number', 'C-1');
     }
 
     // ------------------------------------------------------------------
@@ -609,12 +659,12 @@ class AccountingOrderFlowTest extends TestCase
         $this->patchJson('/api/v1/booth/accounting/orders/1/cancel')->assertStatus(401);
     }
 
-    public function test_ticket_number_continues_after_existing_orders_when_counter_is_missing(): void
+    public function test_ticket_number_starts_at_1_even_with_legacy_orders(): void
     {
         $store = $this->createStore();
         $coffee = $this->createMenuItem($store, 'コーヒー', 300);
 
-        // 古いデータ: 注文はあるが、採番用のカウンターの行がない状態
+        // 古いデータ: 旧方式（101から連番）の注文があり、採番用のカウンターの行がない状態
         foreach (['C-101', 'C-109', 'C-105'] as $number) {
             Order::query()->create([
                 'store_id' => $store->id,
@@ -623,6 +673,7 @@ class AccountingOrderFlowTest extends TestCase
                 'status' => 'settled',
                 'ordered_at' => now(),
                 'settled_at' => now(),
+                'served_at' => now(),
             ]);
         }
 
@@ -631,6 +682,6 @@ class AccountingOrderFlowTest extends TestCase
         $this->postJson('/api/v1/booth/accounting/orders', [
             'items' => [['menu_item_id' => $coffee->id, 'quantity' => 1]],
         ])->assertCreated()
-            ->assertJsonPath('data.ticket_number', 'C-110');
+            ->assertJsonPath('data.ticket_number', 'C-1');
     }
 }

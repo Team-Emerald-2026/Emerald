@@ -17,6 +17,8 @@ class Store extends Model
         'name',
         'description',
         'ticket_prefix',
+        'ticket_limit',
+        'disabled_ticket_numbers',
         'is_open',
         'is_visible',
         'current_wait_min',
@@ -30,6 +32,8 @@ class Store extends Model
         'is_visible' => 'boolean',
         'current_wait_min' => 'integer',
         'current_queue_count' => 'integer',
+        'ticket_limit' => 'integer',
+        'disabled_ticket_numbers' => 'array',
     ];
 
     public function menuItems(): HasMany

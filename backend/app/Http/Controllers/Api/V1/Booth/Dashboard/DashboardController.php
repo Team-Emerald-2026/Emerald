@@ -45,7 +45,24 @@ class DashboardController extends Controller
             $rules['wait_display_text'] = ['nullable', 'string', 'max:255'];
         }
 
+        if (Schema::hasColumn('stores', 'ticket_limit')) {
+            // 整理券の枚数（1〜この番号までを使い回す）
+            $rules['ticket_limit'] = ['sometimes', 'integer', 'min:1', 'max:999'];
+            // 非表示（紛失など）にした整理券の番号。発番時に飛ばす
+            $rules['disabled_ticket_numbers'] = ['sometimes', 'array', 'max:999'];
+            $rules['disabled_ticket_numbers.*'] = ['integer', 'min:1', 'max:999'];
+        }
+
         $validated = $request->validate($rules);
+
+        if (array_key_exists('disabled_ticket_numbers', $validated)) {
+            $validated['disabled_ticket_numbers'] = collect($validated['disabled_ticket_numbers'])
+                ->map(fn ($number) => (int) $number)
+                ->unique()
+                ->sort()
+                ->values()
+                ->all();
+        }
         $boothType = $validated['type'] ?? null;
         unset($validated['type']);
 
@@ -73,6 +90,10 @@ class DashboardController extends Controller
         if (Schema::hasColumn('stores', 'wait_display_mode')) {
             $columns[] = 'wait_display_mode';
             $columns[] = 'wait_display_text';
+        }
+        if (Schema::hasColumn('stores', 'ticket_limit')) {
+            $columns[] = 'ticket_limit';
+            $columns[] = 'disabled_ticket_numbers';
         }
 
         return $this->loadDashboardStore($storeId, $columns);
