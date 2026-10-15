@@ -866,7 +866,7 @@ export default function AdminEvents() {
         <section className="mt-5 space-y-2">
           <h3 className="px-1 text-sm font-bold text-red-500">日程外のデータ（修正または削除してください）</h3>
           <p className="px-1 text-xs text-muted-foreground">
-            開催日（10/24・10/25・10/15）に入っていないため、来場者画面には表示されません。
+            開催日（10/24・10/25）に入っていないため、来場者画面には表示されません。
           </p>
           <ul className="overflow-hidden rounded-2xl border border-border bg-card">
             {orphans.map((item, index) => renderNoticeItem(item, index))}
