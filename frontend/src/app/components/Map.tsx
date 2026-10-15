@@ -326,7 +326,7 @@ export default function CampusMap() {
         </label>
       </div>
 
-      <p className="px-1 text-sm font-bold text-foreground">{floor} の地図</p>
+      <p className="px-1 text-lg font-bold text-foreground">{floor} の地図</p>
       <div
         className={`relative isolate aspect-[1042/745] min-h-52 w-full overflow-hidden rounded-2xl border border-border bg-muted ${
           import.meta.env.DEV ? 'cursor-crosshair' : ''
