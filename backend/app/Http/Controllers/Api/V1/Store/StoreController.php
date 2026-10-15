@@ -5,31 +5,36 @@ namespace App\Http\Controllers\Api\V1\Store;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\StoreResource;
 use App\Models\Store;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Schema;
 
 class StoreController extends Controller
 {
     public function index()
     {
-        $columns = ['id', 'name', 'description', 'is_open', 'current_wait_min', 'current_queue_count'];
-        if (Schema::hasColumn('stores', 'is_visible')) {
-            $columns[] = 'is_visible';
-        }
-        if (Schema::hasColumn('stores', 'wait_display_mode')) {
-            $columns[] = 'wait_display_mode';
-            $columns[] = 'wait_display_text';
-        }
+        // 全員が同じ一覧を見るため、短時間キャッシュしてDB負荷を抑える
+        // （秒数は config/cache.php の api_list_ttl。0でキャッシュ無効）
+        $payload = Cache::remember('api:v1:restaurants:index', config('cache.api_list_ttl'), function () {
+            $columns = ['id', 'name', 'description', 'is_open', 'current_wait_min', 'current_queue_count'];
+            if (Schema::hasColumn('stores', 'is_visible')) {
+                $columns[] = 'is_visible';
+            }
+            if (Schema::hasColumn('stores', 'wait_display_mode')) {
+                $columns[] = 'wait_display_mode';
+                $columns[] = 'wait_display_text';
+            }
 
-        $stores = Store::query()
-            ->select($columns)
-            ->when(Schema::hasColumn('stores', 'is_visible'), fn ($query) => $query->where('is_visible', true))
-            ->with(['mapFacility:id,store_id'])
-            ->orderBy('id')
-            ->get();
+            $stores = Store::query()
+                ->select($columns)
+                ->when(Schema::hasColumn('stores', 'is_visible'), fn ($query) => $query->where('is_visible', true))
+                ->with(['mapFacility:id,store_id'])
+                ->orderBy('id')
+                ->get();
 
-        return StoreResource::collection($stores)
-            ->response()
-            ->setEncodingOptions(JSON_UNESCAPED_UNICODE);
+            return StoreResource::collection($stores)->resolve();
+        });
+
+        return response()->json(['data' => $payload], 200, [], JSON_UNESCAPED_UNICODE);
     }
 
     public function show(string $id)
