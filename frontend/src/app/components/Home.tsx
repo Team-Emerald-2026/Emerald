@@ -9,7 +9,7 @@ import {
   type BackendStore,
   type EventNotice,
 } from '../lib/api';
-import { jstParts, timeLabel } from '../lib/eventSchedule';
+import { isNoticeVisibleAt, jstParts, timeLabel } from '../lib/eventSchedule';
 import {
   BUSY_QUEUE_COUNT,
   getWaitDisplay,
@@ -182,7 +182,7 @@ export default function Home() {
     fetchEvents(controller.signal)
       .then((items) => {
         const next = items
-          .filter((item) => item.type === 'notice')
+          .filter((item) => item.type === 'notice' && isNoticeVisibleAt(item))
           .sort((a, b) => (b.created_at ?? '').localeCompare(a.created_at ?? ''))
           .slice(0, HOME_NOTICE_COUNT);
         setNotices(next);

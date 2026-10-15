@@ -79,6 +79,31 @@ export function noticeTimeRangeLabel(item: EventNotice): string | null {
   return `${from ?? ''}〜${to ?? ''}`;
 }
 
+/**
+ * いまホームに出しておいてよいか。
+ * - 日付指定あり: その日だけ（10/24 のお知らせは 10/15 には出さない）
+ * - 時間指定あり: その時間のあいだだけ
+ * - 日付なし（両日共通）: 時間の指定が無ければいつでも出す
+ */
+export function isNoticeVisibleAt(item: EventNotice, at: Date = new Date()): boolean {
+  if (item.type && item.type !== 'notice') return false;
+
+  const nowMs = at.getTime();
+  const now = jstParts(at.toISOString());
+  if (!now) return false;
+
+  const start = jstParts(item.starts_at);
+  if (start && start.day !== now.day) return false;
+
+  if (item.starts_at && start && start.minutes !== 0 && nowMs < new Date(item.starts_at).getTime()) {
+    return false;
+  }
+  if (item.ends_at && nowMs > new Date(item.ends_at).getTime()) {
+    return false;
+  }
+  return true;
+}
+
 /** 今日が開催日ならその日、そうでなければ初日 */
 export function defaultDayKey(): EventDayKey {
   const today = jstParts(new Date().toISOString())?.day;
