@@ -512,6 +512,21 @@ class MissingApisTest extends TestCase
             'store_id' => $store->id,
             'type' => 'food',
         ]);
+
+        $profile = [
+            'name' => $store->name,
+            'description' => $store->description,
+            'current_wait_min' => 5,
+            'is_open' => true,
+        ];
+
+        $this->patchJson("/api/v1/booth/dashboard/{$store->id}", [...$profile, 'type' => 'exhibit'])
+            ->assertOk()
+            ->assertJsonPath('data.attributes.type', 'exhibit');
+
+        // 自販機・非常口は場所専用なので、店舗画面からは選べない
+        $this->patchJson("/api/v1/booth/dashboard/{$store->id}", [...$profile, 'type' => 'vending_machine'])
+            ->assertUnprocessable();
     }
 
     public function test_store_user_can_manage_menu_items(): void

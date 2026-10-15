@@ -8,7 +8,7 @@ export interface BoothLoginResponse {
   role?: 'store' | 'admin';
 }
 
-export type BoothKind = 'booth' | 'food' | 'information' | 'shop';
+export type BoothKind = 'booth' | 'food' | 'exhibit' | 'information' | 'shop';
 
 export interface BoothDashboard {
   id: string;

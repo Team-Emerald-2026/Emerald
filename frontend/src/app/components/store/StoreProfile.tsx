@@ -18,6 +18,7 @@ import { useFestival } from '../../lib/festivalStore';
 const boothTypes: Array<{ value: BoothKind; label: string }> = [
   { value: 'food', label: 'フード' },
   { value: 'booth', label: '体験' },
+  { value: 'exhibit', label: '作品展示' },
   { value: 'information', label: '案内' },
   { value: 'shop', label: '金券販売' },
 ];
@@ -25,7 +26,7 @@ const boothTypes: Array<{ value: BoothKind; label: string }> = [
 const yen = (value: number) => `¥${value.toLocaleString('ja-JP')}`;
 
 function toBoothKind(type?: string | null): BoothKind {
-  if (type === 'food' || type === 'information' || type === 'shop') return type;
+  if (type === 'food' || type === 'exhibit' || type === 'information' || type === 'shop') return type;
   // 体験のほか、廃止した種類（イベントもの・トイレなど）は体験として扱う
   return 'booth';
 }
