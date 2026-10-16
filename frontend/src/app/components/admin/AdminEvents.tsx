@@ -288,10 +288,6 @@ export default function AdminEvents() {
       setError('タイトルを入力してください。');
       return;
     }
-    if (!form.body.trim()) {
-      setError('内容を入力してください。');
-      return;
-    }
 
     let startsAt: string | null = null;
     let endsAt: string | null = null;
@@ -759,11 +755,12 @@ export default function AdminEvents() {
               </label>
 
               <label className="block text-sm">
-                <span className="mb-1 block text-muted-foreground">内容</span>
+                <span className="mb-1 block text-muted-foreground">内容（任意）</span>
                 <textarea
                   value={form.body}
                   onChange={(e) => updateField('body', e.target.value)}
                   rows={4}
+                  placeholder="詳しく書く必要がなければ空のままで大丈夫です"
                   className="w-full rounded-lg border border-input bg-background px-3 py-2.5 text-foreground outline-none"
                 />
               </label>

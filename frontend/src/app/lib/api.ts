@@ -557,7 +557,8 @@ export interface EventLocation {
 
 export interface EventNoticeInput {
   title: string;
-  body: string;
+  /** 空でもよい（未入力のときは空文字で保存する） */
+  body?: string;
   type: 'event' | 'notice';
   starts_at?: string | null;
   ends_at?: string | null;

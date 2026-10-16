@@ -1026,4 +1026,33 @@ class MissingApisTest extends TestCase
 
         $this->getJson('/api/v1/ticker')->assertOk()->assertExactJson(['data' => []]);
     }
+
+    public function test_event_and_notice_can_be_created_without_body(): void
+    {
+        Sanctum::actingAs($this->createAdmin());
+
+        $event = $this->postJson('/api/v1/admin/events', [
+            'title' => '内容なしイベント',
+            'type' => 'event',
+            'starts_at' => '2026-10-24T05:00:00Z',
+            'is_published' => true,
+        ])->assertCreated();
+
+        $this->assertSame('', $event->json('data.attributes.body') ?? $event->json('data.body'));
+        $this->assertDatabaseHas('event_notices', [
+            'id' => $event->json('data.id'),
+            'body' => '',
+        ]);
+
+        $notice = $this->postJson('/api/v1/admin/events', [
+            'title' => '内容なしお知らせ',
+            'type' => 'notice',
+            'is_published' => true,
+        ])->assertCreated();
+
+        $this->assertDatabaseHas('event_notices', [
+            'id' => $notice->json('data.id'),
+            'body' => '',
+        ]);
+    }
 }
