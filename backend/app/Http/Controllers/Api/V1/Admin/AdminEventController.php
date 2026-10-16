@@ -109,7 +109,8 @@ class AdminEventController extends Controller
 
         $data = $request->validate([
             'title' => [$required, 'string', 'max:255'],
-            'body' => [$required, 'string', 'max:5000'],
+            // 内容は任意。空・未指定のときは空文字で保存する（DB は NOT NULL）
+            'body' => ['nullable', 'string', 'max:5000'],
             'type' => [$required, 'string', 'in:event,notice'],
             'starts_at' => ['nullable', 'date'],
             'ends_at' => ['nullable', 'date', 'after_or_equal:starts_at'],
@@ -122,6 +123,12 @@ class AdminEventController extends Controller
             // お知らせを電光掲示板にすぐ流すか。流す時間は ticker_after_minutes（null なら止めるまで）
             'ticker_now' => ['sometimes', 'boolean'],
         ]);
+
+        if (array_key_exists('body', $data)) {
+            $data['body'] = $data['body'] ?? '';
+        } elseif ($creating) {
+            $data['body'] = '';
+        }
 
         $tickerNow = array_key_exists('ticker_now', $data) ? (bool) $data['ticker_now'] : null;
         unset($data['ticker_now']);
