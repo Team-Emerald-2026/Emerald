@@ -362,80 +362,83 @@ export default function CampusMap() {
       </div>
 
       <p className="px-1 text-lg font-bold text-foreground">{floor} の地図</p>
-      <div
-        className={`relative isolate aspect-[1324/745] min-h-52 w-full overflow-hidden rounded-2xl border border-border bg-muted ${
-          import.meta.env.DEV ? 'cursor-crosshair' : ''
-        }`}
-        onClick={(e) => {
-          if (!import.meta.env.DEV) return;
-          const rect = e.currentTarget.getBoundingClientRect();
-          const x = Math.round(((e.clientX - rect.left) / rect.width) * 100);
-          const y = Math.round(((e.clientY - rect.top) / rect.height) * 100);
-          setClickPos({ x, y });
-        }}
-      >
-        <img
-          src={mapImageByFloor[floor]}
-          alt={`${floor} 校内マップ`}
-          className="absolute inset-0 h-full w-full object-fill"
-        />
-        {/* 右上の建物のない余白に現在のフロア名を重ねて表示する */}
-        <span
-          aria-hidden="true"
-          className="pointer-events-none absolute -translate-x-1/2 -translate-y-1/2 select-none font-display text-2xl font-bold text-black"
-          style={{ left: '88%', top: '12%' }}
+      {/* 比率は画像と同じまま左右の余白だけ広げて、階を切り替えてもピンの位置がずれないようにする */}
+      <div className="-mx-4">
+        <div
+          className={`relative isolate aspect-[1324/745] w-full overflow-hidden border-y border-border bg-muted sm:rounded-2xl sm:border ${
+            import.meta.env.DEV ? 'cursor-crosshair' : ''
+          }`}
+          onClick={(e) => {
+            if (!import.meta.env.DEV) return;
+            const rect = e.currentTarget.getBoundingClientRect();
+            const x = Math.round(((e.clientX - rect.left) / rect.width) * 100);
+            const y = Math.round(((e.clientY - rect.top) / rect.height) * 100);
+            setClickPos({ x, y });
+          }}
         >
-          {floor}
-        </span>
-        {filtered.map((f) => {
-          const isSelected = selectedFacility?.id === f.id;
-          const hasSelection = selectedFacility != null;
-          const PinIcon = typeIcon[f.type];
-          return (
-            // 外側のボタンの余白で、指で押せる範囲（約44px）を確保する
-            <button
-              key={f.id}
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                selectFacility(f);
-              }}
-              className={`absolute -translate-x-1/2 -translate-y-1/2 p-1.5 transition ${
-                isSelected ? 'z-20' : hasSelection ? 'z-0 opacity-55' : 'z-0'
-              }`}
-              style={{ left: `${f.x}%`, top: `${f.y}%` }}
-              title={pinText(f)}
-              aria-label={roomNote(f) ? `${f.name}（${roomNote(f)}）` : f.name}
-              aria-pressed={isSelected}
-            >
-              {f.type === '非常口' ? (
-                <ExitSign
-                  className={`block h-8 w-8 transition-transform ${isSelected ? 'scale-125 ring-2 ring-white' : ''}`}
-                />
-              ) : (
-                <span
-                  className={`grid h-7 w-7 place-items-center rounded-full border-2 border-white shadow-md transition-transform ${
-                    isSelected ? 'scale-125 ring-2 ring-white' : ''
-                  }`}
-                  style={{ backgroundColor: typeColor[f.type] }}
-                >
-                  <PinIcon className="h-3.5 w-3.5 text-white" aria-hidden="true" />
-                </span>
-              )}
-              {isSelected && (
-                <span className="pointer-events-none absolute bottom-full left-1/2 mb-1 max-w-40 -translate-x-1/2 truncate whitespace-nowrap rounded-md bg-black/80 px-2 py-1 text-[11px] font-bold leading-none text-white shadow-md">
-                  {f.name}
-                  {roomNote(f) ? `（${roomNote(f)}）` : ''}
-                </span>
-              )}
-            </button>
-          );
-        })}
-        {filtered.length === 0 && (
-          <p className="absolute bottom-3 left-1/2 z-10 -translate-x-1/2 rounded-full bg-white/90 px-3 py-1 text-xs text-muted-foreground">
-            この階に表示できるブースはありません
-          </p>
-        )}
+          <img
+            src={mapImageByFloor[floor]}
+            alt={`${floor} 校内マップ`}
+            className="absolute inset-0 h-full w-full object-fill"
+          />
+          {/* 右上の建物のない余白に現在のフロア名を重ねて表示する */}
+          <span
+            aria-hidden="true"
+            className="pointer-events-none absolute -translate-x-1/2 -translate-y-1/2 select-none font-display text-2xl font-bold text-black"
+            style={{ left: '88%', top: '12%' }}
+          >
+            {floor}
+          </span>
+          {filtered.map((f) => {
+            const isSelected = selectedFacility?.id === f.id;
+            const hasSelection = selectedFacility != null;
+            const PinIcon = typeIcon[f.type];
+            return (
+              // 外側のボタンの余白で、指で押せる範囲を確保する（見た目のピンは小さめ）
+              <button
+                key={f.id}
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  selectFacility(f);
+                }}
+                className={`absolute -translate-x-1/2 -translate-y-1/2 p-1 transition ${
+                  isSelected ? 'z-20' : hasSelection ? 'z-0 opacity-55' : 'z-0'
+                }`}
+                style={{ left: `${f.x}%`, top: `${f.y}%` }}
+                title={pinText(f)}
+                aria-label={roomNote(f) ? `${f.name}（${roomNote(f)}）` : f.name}
+                aria-pressed={isSelected}
+              >
+                {f.type === '非常口' ? (
+                  <ExitSign
+                    className={`block h-5 w-5 transition-transform ${isSelected ? 'scale-125 ring-2 ring-white' : ''}`}
+                  />
+                ) : (
+                  <span
+                    className={`grid h-5 w-5 place-items-center rounded-full border-2 border-white shadow-md transition-transform ${
+                      isSelected ? 'scale-125 ring-2 ring-white' : ''
+                    }`}
+                    style={{ backgroundColor: typeColor[f.type] }}
+                  >
+                    <PinIcon className="h-2.5 w-2.5 text-white" aria-hidden="true" />
+                  </span>
+                )}
+                {isSelected && (
+                  <span className="pointer-events-none absolute bottom-full left-1/2 mb-1 max-w-40 -translate-x-1/2 truncate whitespace-nowrap rounded-md bg-black/80 px-2 py-1 text-[11px] font-bold leading-none text-white shadow-md">
+                    {f.name}
+                    {roomNote(f) ? `（${roomNote(f)}）` : ''}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+          {filtered.length === 0 && (
+            <p className="absolute bottom-3 left-1/2 z-10 -translate-x-1/2 rounded-full bg-white/90 px-3 py-1 text-xs text-muted-foreground">
+              この階に表示できるブースはありません
+            </p>
+          )}
+        </div>
       </div>
 
       {boothTypes.length > 0 && (
