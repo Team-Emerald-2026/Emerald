@@ -113,6 +113,9 @@ class AdminStoreController extends Controller
             if (Schema::hasColumn('stores', 'show_on_monitor')) {
                 $attributes['show_on_monitor'] = $validated['show_on_monitor'] ?? false;
             }
+            if (Schema::hasColumn('stores', 'ticket_limit')) {
+                $attributes['ticket_limit'] = 20;
+            }
 
             $store = Store::query()->create($attributes);
 

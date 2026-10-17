@@ -512,7 +512,7 @@ class AccountingController extends Controller
     /**
      * 整理券の番号を発番する（数字だけ。紙の整理券に店名があるため頭文字は付けない）。
      *
-     * 整理券は「1〜枚数（店舗ごとに設定、既定50）」を順番に使い回す。
+     * 整理券は「1〜枚数（店舗ごとに設定、既定20）」を順番に使い回す。
      * 次の番号は、前回発番した番号の次から探し、上限を超えたら1に戻る。
      * 以下の番号は飛ばす:
      * - 非表示（紛失など）にした番号（店舗情報の設定）
@@ -523,7 +523,7 @@ class AccountingController extends Controller
     {
         return DB::transaction(function () use ($storeId) {
             $store = Store::query()->whereKey($storeId)->firstOrFail();
-            $limit = max(1, (int) ($store->ticket_limit ?? 50));
+            $limit = max(1, (int) ($store->ticket_limit ?? 20));
 
             // 同じ店の発番が同時に走らないよう、カウンター行をロックして直列化する
             $counter = DB::table('ticket_counters')

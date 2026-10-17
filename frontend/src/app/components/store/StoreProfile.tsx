@@ -49,7 +49,7 @@ export default function StoreProfile() {
   const [saving, setSaving] = useState(false);
   const [savingProduct, setSavingProduct] = useState(false);
   // 整理券の設定（枚数と、非表示にした番号）
-  const [ticketLimitInput, setTicketLimitInput] = useState('50');
+  const [ticketLimitInput, setTicketLimitInput] = useState('20');
   const [disabledTickets, setDisabledTickets] = useState<number[]>([]);
   const [ticketError, setTicketError] = useState('');
   const [ticketMessage, setTicketMessage] = useState('');
@@ -71,7 +71,7 @@ export default function StoreProfile() {
         setBoothType(toBoothKind(data.type));
         setIsOpen(Boolean(data.is_open));
         setMenuItems(items.filter((item) => item.is_available !== false));
-        setTicketLimitInput(String(data.ticket_limit ?? 50));
+        setTicketLimitInput(String(data.ticket_limit ?? 20));
         setDisabledTickets((data.disabled_ticket_numbers ?? []).map(Number));
       })
       .catch((err: unknown) => {
@@ -125,7 +125,7 @@ export default function StoreProfile() {
   };
 
   // いま保存されている整理券の枚数（画面の入力途中の値ではなく、サーバーに保存済みの値）
-  const savedTicketLimit = Math.max(1, Number(profile?.ticket_limit) || 50);
+  const savedTicketLimit = Math.max(1, Number(profile?.ticket_limit) || 20);
   const parsedTicketLimit = Number(ticketLimitInput);
   const ticketLimitValid =
     Number.isInteger(parsedTicketLimit) && parsedTicketLimit >= 1 && parsedTicketLimit <= 999;

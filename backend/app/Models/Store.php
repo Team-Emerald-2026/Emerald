@@ -15,6 +15,10 @@ class Store extends Model
 
     protected $keyType = 'string';
 
+    protected $attributes = [
+        'ticket_limit' => 20,
+    ];
+
     protected $fillable = [
         'id',
         'name',
