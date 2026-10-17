@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Ticket, Flame, MapPin, Info, ShoppingBag, ChevronDown, ChevronUp } from 'lucide-react';
+import { Ticket, Flame, MapPin, Info, ShoppingBag, ChevronDown, ChevronUp, Armchair } from 'lucide-react';
 import {
   fetchMapFacilities,
   fetchRestaurant,
@@ -155,7 +155,7 @@ function BoothDetail({ booth, detail }: { booth: Booth; detail?: DetailState }) 
 
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-muted-foreground">
         <span>場所: {booth.area}</span>
-        <span>待ち状況: {booth.wait.label}</span>
+        <span>列の待ち: {booth.wait.label}</span>
       </div>
     </div>
   );
@@ -350,17 +350,16 @@ export default function Attractions() {
                   className="flex w-full items-start justify-between gap-3 text-left"
                 >
                   <div className="min-w-0">
-                    <div className="flex min-w-0 items-center gap-2">
-                      <h3 className="truncate font-bold text-foreground">{b.name}</h3>
-                      {crowdLevel && crowdColors && (
-                        <span
-                          className="shrink-0 rounded-md px-2 py-0.5 text-xs font-bold"
-                          style={{ backgroundColor: crowdColors.bg, color: crowdColors.fg }}
-                        >
+                    <h3 className="truncate font-bold text-foreground">{b.name}</h3>
+                    {crowdLevel && crowdColors && (
+                      <p className="mt-0.5 flex items-center gap-1 text-xs">
+                        <Armchair className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                        <span className="text-muted-foreground">店内</span>
+                        <span className="font-bold" style={{ color: crowdColors.fg }}>
                           {crowdLevelLabel(crowdLevel)}
                         </span>
-                      )}
-                    </div>
+                      </p>
+                    )}
                     <p className="mt-0.5 flex items-center gap-1 text-sm text-muted-foreground">
                       <MapPin className="h-3.5 w-3.5" />
                       {b.area}
@@ -373,7 +372,7 @@ export default function Attractions() {
                     >
                       {b.wait.label}
                     </span>
-                    <p className="mt-1 text-[11px] text-muted-foreground">待ち状況</p>
+                    <p className="mt-1 text-[11px] text-muted-foreground">列の待ち</p>
                   </div>
                 </button>
 
@@ -451,7 +450,7 @@ export default function Attractions() {
       >
         <Info className="mt-0.5 h-4 w-4 shrink-0" />
         <p>
-          待ち人数は、ページを開いた時点の目安です。最新の状況は、画面を更新してご確認ください。
+          「待ち人数」は列の長さ、「店内」は座席の埋まりです。待ち人数はページを開いた時点の目安なので、最新は画面を更新してご確認ください。
         </p>
       </div>
     </div>
