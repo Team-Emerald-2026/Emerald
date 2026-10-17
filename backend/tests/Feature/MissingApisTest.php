@@ -400,12 +400,43 @@ class MissingApisTest extends TestCase
         config(['admin.login_id' => 'admin', 'admin.password' => 'password']);
         $this->seed(\Database\Seeders\AdminUserSeeder::class);
 
-        $this->postJson('/api/v1/booth/auth/login', [
+        $this->postJson('/api/v1/admin/auth/login', [
             'login_id' => 'admin',
             'password' => 'password',
         ])
             ->assertOk()
             ->assertJsonPath('role', 'admin');
+    }
+
+    public function test_store_and_admin_login_apis_only_accept_their_own_role(): void
+    {
+        $store = $this->createStore();
+        $this->createStoreUser($store);
+        $this->createAdmin();
+
+        $this->postJson('/api/v1/booth/auth/login', [
+            'login_id' => 'cafe_admin',
+            'password' => 'password123',
+        ])
+            ->assertOk()
+            ->assertJsonPath('role', 'store');
+
+        $this->postJson('/api/v1/admin/auth/login', [
+            'login_id' => 'admin',
+            'password' => 'password123',
+        ])
+            ->assertOk()
+            ->assertJsonPath('role', 'admin');
+
+        $this->postJson('/api/v1/booth/auth/login', [
+            'login_id' => 'admin',
+            'password' => 'password123',
+        ])->assertUnauthorized();
+
+        $this->postJson('/api/v1/admin/auth/login', [
+            'login_id' => 'cafe_admin',
+            'password' => 'password123',
+        ])->assertUnauthorized();
     }
 
     public function test_admin_seeder_skips_without_credentials(): void

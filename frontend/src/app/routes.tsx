@@ -19,6 +19,7 @@ const StoreWaiting = lazy(() => import('./components/store/StoreWaiting'));
 const StoreTicket = lazy(() => import('./components/store/StoreTicket'));
 const StoreServed = lazy(() => import('./components/store/StoreServed'));
 const StoreProfile = lazy(() => import('./components/store/StoreProfile'));
+const AdminLogin = lazy(() => import('./components/admin/AdminLogin'));
 const AdminDashboard = lazy(() => import('./components/admin/AdminDashboard'));
 const AdminStores = lazy(() => import('./components/admin/AdminStores'));
 const AdminEvents = lazy(() => import('./components/admin/AdminEvents'));
@@ -61,6 +62,7 @@ export const router = createBrowserRouter([
   { path: '/store/ticket', element: withSuspense(<StoreTicket />) },
   { path: '/store/served', element: withSuspense(<StoreServed />) },
   { path: '/store/profile', element: withSuspense(<StoreProfile />) },
+  { path: '/admin/login', element: withSuspense(<AdminLogin />) },
   { path: '/admin', element: withSuspense(<AdminDashboard />) },
   { path: '/admin/stores', element: withSuspense(<AdminStores />) },
   { path: '/admin/map', element: withSuspense(<AdminMap />) },

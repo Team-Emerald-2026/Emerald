@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { Store, KeyRound, Eye, EyeOff } from 'lucide-react';
-import { useFestival, loginAdminSession, loginStore } from '../../lib/festivalStore';
+import { useFestival, loginStore } from '../../lib/festivalStore';
 import { ApiError, loginBooth } from '../../lib/api';
 
 export default function StoreLogin() {
@@ -32,11 +32,6 @@ export default function StoreLogin() {
     setError('');
     try {
       const result = await loginBooth(id.trim(), pw);
-      if (result.role === 'admin') {
-        loginAdminSession(id.trim(), result.token);
-        navigate('/admin');
-        return;
-      }
       if (!result.store_id) {
         setError('店舗情報がないアカウントです。');
         return;
@@ -124,7 +119,7 @@ export default function StoreLogin() {
           </button>
 
           <p className="text-center text-xs text-muted-foreground">
-            管理者IDでログインすると管理画面に移動します。
+            管理者の方は管理者ログインページをご利用ください。
           </p>
           <p className="text-center text-xs text-muted-foreground">
             ログインできない、またはID・パスワードを忘れた場合は、1F総合案内または2F運営サポート本部までお越しください。
