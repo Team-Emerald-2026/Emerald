@@ -24,7 +24,7 @@ class StoreResource extends JsonResource
             'wait_time' => (int) $this->current_wait_min,
             'wait_display_mode' => $this->wait_display_mode ?? 'minutes',
             'wait_display_text' => $this->wait_display_text,
-            'crowd_level' => $this->crowd_level,
+            'crowd_level' => $this->resource->resolvedCrowdLevel(),
             'map_facility_id' => $this->relationLoaded('mapFacility')
                 ? ($this->mapFacility?->id !== null ? (string) $this->mapFacility->id : null)
                 : null,

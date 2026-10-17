@@ -3,7 +3,15 @@ import StoreShell from './StoreShell';
 import { useFestival, logoutStore } from '../../lib/festivalStore';
 import { Plus, Minus, Users, Undo2, Armchair } from 'lucide-react';
 import { ApiError, fetchBoothDashboard, updateWaitTime, type CrowdLevel } from '../../lib/api';
-import { crowdLevelLabel, crowdLevelOptions, crowdLevelStyle, parseCrowdLevel } from '../../lib/crowdDisplay';
+import {
+  crowdBackupText,
+  crowdLevelLabel,
+  crowdLevelOptions,
+  crowdLevelStyle,
+  isCrowdBackupText,
+  parseCrowdFromStore,
+  parseCrowdLevel,
+} from '../../lib/crowdDisplay';
 
 /** サーバーの待ち人数を取りに行く間隔（ミリ秒） */
 const POLL_INTERVAL_MS = 5000;
@@ -46,6 +54,8 @@ export default function StoreWaiting() {
   const crowdSavingRef = useRef(false);
   /** 店内混雑の保存のたびに増やす。保存より前に始まった取得で「未設定」に戻さない */
   const crowdVersionRef = useRef(0);
+  const waitModeRef = useRef<'minutes' | 'text'>('minutes');
+  const waitTextRef = useRef<string | null>(null);
 
   const setServerCount = (value: number) => {
     serverCountRef.current = value;
@@ -69,8 +79,10 @@ export default function StoreWaiting() {
         if (inFlightRef.current === 0 && version === sendVersionRef.current) {
           setServerCount(Number(dashboard.current_queue_count) || 0);
         }
+        waitModeRef.current = dashboard.wait_display_mode === 'text' ? 'text' : 'minutes';
+        waitTextRef.current = dashboard.wait_display_text ?? null;
         if (!crowdSavingRef.current && crowdVersion === crowdVersionRef.current) {
-          setCrowdLevel(parseCrowdLevel(dashboard.crowd_level));
+          setCrowdLevel(parseCrowdFromStore(dashboard));
         }
         setLoadError('');
       } catch (err) {
@@ -120,9 +132,25 @@ export default function StoreWaiting() {
     setCrowdFlash(null);
     setCrowdLevel(level);
     try {
-      const updated = await updateWaitTime(token, { crowd_level: level });
+      const canBackup =
+        waitModeRef.current !== 'text' ||
+        isCrowdBackupText(waitTextRef.current) ||
+        !waitTextRef.current?.trim();
+      const updated = await updateWaitTime(token, {
+        crowd_level: level,
+        ...(canBackup
+          ? {
+              wait_display_mode: 'minutes' as const,
+              wait_display_text: crowdBackupText(level),
+            }
+          : {}),
+      });
       if (crowdVersion !== crowdVersionRef.current) return;
-      setCrowdLevel(parseCrowdLevel(updated.crowd_level) ?? level);
+      if (canBackup) {
+        waitModeRef.current = 'minutes';
+        waitTextRef.current = crowdBackupText(level);
+      }
+      setCrowdLevel(parseCrowdFromStore(updated) ?? parseCrowdLevel(updated.crowd_level) ?? level);
       setCrowdFlash(`店内を「${crowdLevelLabel(level)}」にしました`);
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) {

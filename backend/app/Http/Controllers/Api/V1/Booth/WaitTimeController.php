@@ -53,12 +53,38 @@ class WaitTimeController extends Controller
                 $validated['current_queue_count'] = max(0, min(999, (int) $store->current_queue_count + $delta));
             }
 
+            if (array_key_exists('crowd_level', $validated)) {
+                $level = $validated['crowd_level'];
+                $currentText = trim((string) ($validated['wait_display_text'] ?? $store->wait_display_text ?? ''));
+                $currentMode = $validated['wait_display_mode'] ?? $store->wait_display_mode ?? 'minutes';
+                $canBackup = $currentMode !== 'text'
+                    || str_starts_with($currentText, Store::CROWD_TEXT_PREFIX)
+                    || $currentText === '';
+                if (is_string($level) && $level !== '' && $canBackup) {
+                    $validated['wait_display_text'] = Store::CROWD_TEXT_PREFIX.$level;
+                    $validated['wait_display_mode'] = 'minutes';
+                }
+                if (! Store::hasCrowdLevelColumn()) {
+                    unset($validated['crowd_level']);
+                }
+            }
+
             $store->fill($validated);
-            $store->save();
+            try {
+                $store->save();
+            } catch (\Throwable $exception) {
+                if (! array_key_exists('crowd_level', $validated)) {
+                    throw $exception;
+                }
+                unset($validated['crowd_level']);
+                $store->offsetUnset('crowd_level');
+                $store->fill($validated);
+                $store->save();
+            }
 
             Cache::forget('api:v1:restaurants:index');
 
-            return $store;
+            return $store->refresh();
         });
 
         return WaitTimeResource::make($store)

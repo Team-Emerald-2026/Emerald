@@ -25,7 +25,9 @@ class StoreController extends Controller
                 $columns[] = 'wait_display_mode';
                 $columns[] = 'wait_display_text';
             }
-            $columns[] = 'crowd_level';
+            if (Store::hasCrowdLevelColumn()) {
+                $columns[] = 'crowd_level';
+            }
 
             $stores = Store::query()
                 ->select($columns)

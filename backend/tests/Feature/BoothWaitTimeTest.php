@@ -144,6 +144,7 @@ class BoothWaitTimeTest extends TestCase
         $this->patchJson('/api/v1/booth/wait-time', ['crowd_level' => 'moderate'])
             ->assertOk()
             ->assertJsonPath('data.crowd_level', 'moderate')
+            ->assertJsonPath('data.wait_display_text', '__crowd__:moderate')
             ->assertJsonPath('data.current_queue_count', 3);
 
         $this->patchJson('/api/v1/booth/wait-time', ['crowd_level' => 'crowded'])
@@ -159,9 +160,14 @@ class BoothWaitTimeTest extends TestCase
             ->assertOk()
             ->assertJsonPath('data.crowd_level', 'crowded');
 
+        $this->getJson('/api/v1/restaurants')
+            ->assertOk()
+            ->assertJsonPath('data.0.crowd_level', 'crowded');
+
         $this->getJson('/api/v1/booth/dashboard')
             ->assertOk()
-            ->assertJsonPath('data.crowd_level', 'crowded');
+            ->assertJsonPath('data.crowd_level', 'crowded')
+            ->assertJsonPath('data.wait_display_text', '__crowd__:crowded');
     }
 
     public function test_dashboard_update_does_not_require_wait_minutes(): void

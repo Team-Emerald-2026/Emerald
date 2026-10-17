@@ -12,6 +12,7 @@ use App\Models\SalesEntry;
 use App\Models\Store;
 use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Schema;
@@ -267,8 +268,25 @@ class AdminStoreController extends Controller
 
         $validated = $request->validate($rules);
 
+        if (array_key_exists('crowd_level', $validated)) {
+            $level = $validated['crowd_level'];
+            $currentText = trim((string) ($validated['wait_display_text'] ?? $store->wait_display_text ?? ''));
+            $currentMode = $validated['wait_display_mode'] ?? $store->wait_display_mode ?? 'minutes';
+            $canBackup = $currentMode !== 'text'
+                || str_starts_with($currentText, Store::CROWD_TEXT_PREFIX)
+                || $currentText === '';
+            if (is_string($level) && $level !== '' && $canBackup) {
+                $validated['wait_display_text'] = Store::CROWD_TEXT_PREFIX.$level;
+                $validated['wait_display_mode'] = 'minutes';
+            }
+            if (! Store::hasCrowdLevelColumn()) {
+                unset($validated['crowd_level']);
+            }
+        }
+
         $store->fill($validated);
         $store->save();
+        Cache::forget('api:v1:restaurants:index');
 
         return WaitTimeResource::make($store)
             ->response()

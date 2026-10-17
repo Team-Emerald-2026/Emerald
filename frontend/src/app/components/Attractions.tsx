@@ -9,7 +9,7 @@ import {
   type BackendStore,
 } from '../lib/api';
 import { BUSY_QUEUE_COUNT, getWaitDisplay, waitLevelStyle, type WaitDisplay } from '../lib/waitDisplay';
-import { crowdLevelLabel, crowdLevelStyle, parseCrowdLevel } from '../lib/crowdDisplay';
+import { crowdLevelLabel, crowdLevelStyle, parseCrowdFromStore } from '../lib/crowdDisplay';
 import { Skeleton, SkeletonText } from './Skeleton';
 
 /** ブース詳細を開いているあいだ、店内混雑などを取り直す間隔（ミリ秒） */
@@ -22,6 +22,7 @@ interface Booth {
   name: string;
   area: string;
   wait: WaitDisplay; // 待ち人数の表示（文字表示モードのときは文字）
+  crowdLevel: ReturnType<typeof parseCrowdFromStore>;
   category: Category;
   ticket?: boolean; // 整理券対応
   popular?: boolean; // 人気ブース
@@ -64,6 +65,7 @@ function toBooth(store: BackendStore, facility?: BackendMapFacility): Booth {
     name: store.name,
     area: toArea(store, facility),
     wait,
+    crowdLevel: parseCrowdFromStore(store),
     category: toCategory(facility?.type),
     popular: store.is_open && wait.queueCount >= BUSY_QUEUE_COUNT,
   };
@@ -103,7 +105,7 @@ function BoothDetail({ booth, detail }: { booth: Booth; detail?: DetailState }) 
   const menuItems = detail.store.menu_items ?? [];
   // 体験ブースなどは、メニューがなくて普通なので、メニューがあるときだけ出す（フードは未登録の案内も出す）
   const showMenu = menuItems.length > 0 || booth.category === 'フード';
-  const crowdLevel = detail.store.is_open ? parseCrowdLevel(detail.store.crowd_level) : null;
+  const crowdLevel = parseCrowdFromStore(detail.store) ?? booth.crowdLevel;
   const crowdColors = crowdLevel ? crowdLevelStyle(crowdLevel) : null;
 
   return (

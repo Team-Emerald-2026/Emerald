@@ -15,7 +15,7 @@ class WaitTimeResource extends JsonResource
             'current_queue_count' => (int) $this->current_queue_count,
             'wait_display_mode' => $this->wait_display_mode ?? 'minutes',
             'wait_display_text' => $this->wait_display_text,
-            'crowd_level' => $this->crowd_level,
+            'crowd_level' => $this->resource->resolvedCrowdLevel(),
             'updated_at' => optional($this->updated_at)->toISOString(),
         ];
     }

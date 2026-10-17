@@ -164,10 +164,11 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function flattenResource<T extends { id: string }>(item: Record<string, unknown>): T {
-  const attributes = isRecord(item.attributes) ? item.attributes : item;
+  const nested = isRecord(item.attributes) ? item.attributes : null;
+  const merged = nested ? { ...item, ...nested } : item;
   return {
-    ...attributes,
-    id: String(attributes.id ?? item.id ?? ''),
+    ...merged,
+    id: String(merged.id ?? item.id ?? ''),
   } as T;
 }
 

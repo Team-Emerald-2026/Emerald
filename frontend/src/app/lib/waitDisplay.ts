@@ -27,7 +27,7 @@ export function getWaitDisplay(store: WaitSource): WaitDisplay {
   const queueCount = Number.isFinite(count) && count > 0 ? Math.floor(count) : 0;
 
   const text = store.wait_display_text?.trim();
-  if (store.wait_display_mode === 'text' && text) {
+  if (store.wait_display_mode === 'text' && text && !text.startsWith('__crowd__:')) {
     return { label: text, level: 'text', queueCount };
   }
 

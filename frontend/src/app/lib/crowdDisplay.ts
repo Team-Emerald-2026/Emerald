@@ -12,8 +12,32 @@ export const crowdLevelOptions: Array<{ value: CrowdLevel; label: string }> = [
   { value: 'crowded', label: '混雑' },
 ];
 
+export const CROWD_TEXT_PREFIX = '__crowd__:';
+
 export function parseCrowdLevel(value: unknown): CrowdLevel | null {
   return CROWD_LEVELS.includes(value as CrowdLevel) ? (value as CrowdLevel) : null;
+}
+
+/** 専用列が無い本番でも、待ち表示テキストに退避した値から読む */
+export function parseCrowdFromStore(store: {
+  crowd_level?: unknown;
+  wait_display_text?: string | null;
+}): CrowdLevel | null {
+  const direct = parseCrowdLevel(store.crowd_level);
+  if (direct) return direct;
+  const text = store.wait_display_text?.trim() ?? '';
+  if (text.startsWith(CROWD_TEXT_PREFIX)) {
+    return parseCrowdLevel(text.slice(CROWD_TEXT_PREFIX.length));
+  }
+  return null;
+}
+
+export function crowdBackupText(level: CrowdLevel): string {
+  return `${CROWD_TEXT_PREFIX}${level}`;
+}
+
+export function isCrowdBackupText(value: string | null | undefined): boolean {
+  return (value ?? '').startsWith(CROWD_TEXT_PREFIX);
 }
 
 export function crowdLevelLabel(level: CrowdLevel): string {

@@ -99,6 +99,8 @@ class Store extends Model
         }
     }
 
+    private static ?bool $hasCrowdLevelColumn = null;
+
     /** 本番でマイグレーション未適用でも、店内混雑列だけ先に用意する */
     public static function ensureCrowdLevelColumn(): void
     {
@@ -118,21 +120,66 @@ class Store extends Model
                     $table->string('crowd_level', 16)->nullable();
                 });
             }
-        } catch (\Throwable $exception) {
-            if (self::hasCrowdLevelColumn()) {
-                return;
-            }
-
-            throw $exception;
+        } catch (\Throwable) {
+            // 既にある／権限がないときは、wait_display_text の退避に回す
         }
+
+        self::$hasCrowdLevelColumn = null;
+        self::hasCrowdLevelColumn();
     }
 
     public static function hasCrowdLevelColumn(): bool
     {
-        try {
-            return Schema::hasColumn((new static)->getTable(), 'crowd_level');
-        } catch (\Throwable) {
-            return false;
+        if (self::$hasCrowdLevelColumn !== null) {
+            return self::$hasCrowdLevelColumn;
         }
+
+        try {
+            $table = (new static)->getTable();
+            $connection = Schema::getConnection();
+            $driver = $connection->getDriverName();
+
+            if ($driver === 'pgsql') {
+                $present = $connection->selectOne(
+                    'select 1 as present from information_schema.columns where table_schema = current_schema() and table_name = ? and column_name = ? limit 1',
+                    [$table, 'crowd_level']
+                );
+            } elseif (in_array($driver, ['mysql', 'mariadb'], true)) {
+                $present = $connection->selectOne(
+                    'select 1 as present from information_schema.columns where table_schema = ? and table_name = ? and column_name = ? limit 1',
+                    [$connection->getDatabaseName(), $table, 'crowd_level']
+                );
+            } else {
+                return self::$hasCrowdLevelColumn = Schema::hasColumn($table, 'crowd_level');
+            }
+
+            return self::$hasCrowdLevelColumn = $present !== null;
+        } catch (\Throwable) {
+            return self::$hasCrowdLevelColumn = false;
+        }
+    }
+
+    public const CROWD_TEXT_PREFIX = '__crowd__:';
+
+    public static function parseCrowdLevelValue(mixed $crowdLevel, mixed $waitDisplayText): ?string
+    {
+        $allowed = ['empty', 'moderate', 'crowded'];
+        if (is_string($crowdLevel) && in_array($crowdLevel, $allowed, true)) {
+            return $crowdLevel;
+        }
+
+        $text = is_string($waitDisplayText) ? trim($waitDisplayText) : '';
+        if (str_starts_with($text, self::CROWD_TEXT_PREFIX)) {
+            $fromText = substr($text, strlen(self::CROWD_TEXT_PREFIX));
+
+            return in_array($fromText, $allowed, true) ? $fromText : null;
+        }
+
+        return null;
+    }
+
+    public function resolvedCrowdLevel(): ?string
+    {
+        return self::parseCrowdLevelValue($this->crowd_level ?? null, $this->wait_display_text ?? null);
     }
 }
