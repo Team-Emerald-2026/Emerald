@@ -6,14 +6,19 @@ import {
   ApiError,
   createAdminStore,
   deleteAdminStorePermanently,
+  fetchAdminFestivalDay,
   fetchAdminMapFacilities,
   fetchAdminStores,
   hideAdminStore,
+  updateAdminFestivalDay,
   updateAdminStore,
   updateAdminStoreMonitor,
   type AdminMapFacility,
   type AdminStore,
   type AdminStoreInput,
+  type ExhibitionDay,
+  type FestivalDay,
+  type FestivalDayInfo,
 } from '../../lib/api';
 import { facilityTypeInfo } from '../../lib/campusMap';
 import { logoutAdminSession, useFestival } from '../../lib/festivalStore';
@@ -23,6 +28,15 @@ const yen = (value: number) => `¥${value.toLocaleString('ja-JP')}`;
 
 const typeLabel = (type: string) => facilityTypeInfo(type).label;
 
+const exhibitionDayLabel = (day: ExhibitionDay | undefined) => {
+  if (day === 'day1') return '10月24日(土)のみ';
+  if (day === 'day2') return '10月25日(日)のみ';
+  return '両日';
+};
+
+const festivalDayLabel = (day: FestivalDay) =>
+  day === 'day2' ? '10月25日(日)' : '10月24日(土)';
+
 function toStoreInput(store: AdminStore, overrides: Partial<AdminStoreInput> = {}): AdminStoreInput {
   return {
     name: store.name,
@@ -31,6 +45,7 @@ function toStoreInput(store: AdminStore, overrides: Partial<AdminStoreInput> = {
     floor: store.floor,
     map_x: store.map_x,
     map_y: store.map_y,
+    exhibition_day: store.exhibition_day ?? 'both',
     is_open: store.is_open,
     is_visible: store.is_visible,
     show_on_monitor: Boolean(store.show_on_monitor),
@@ -48,8 +63,10 @@ export default function AdminStores() {
   const [showForm, setShowForm] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [switchingDay, setSwitchingDay] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
+  const [festivalDay, setFestivalDay] = useState<FestivalDayInfo>({ current_day: 'day1' });
 
   const loadStores = (signal?: AbortSignal) => {
     if (!adminSession && !ADMIN_PUBLIC_ACCESS) return Promise.resolve();
@@ -58,6 +75,10 @@ export default function AdminStores() {
     // 場所の一覧は店舗の位置の候補に使う。取得できなくても店舗一覧は表示する
     void fetchAdminMapFacilities(adminSession?.token, signal)
       .then((data) => setLocations(data))
+      .catch(() => undefined);
+
+    void fetchAdminFestivalDay(adminSession?.token, signal)
+      .then((data) => setFestivalDay(data))
       .catch(() => undefined);
 
     return fetchAdminStores(adminSession?.token, signal)
@@ -91,6 +112,35 @@ export default function AdminStores() {
         item.y === store.map_y,
     );
     return place ? `${store.floor}F ${place.name}` : `${store.floor}F（X:${store.map_x}% Y:${store.map_y}%）`;
+  };
+
+  const switchFestivalDay = async (day: FestivalDay) => {
+    if ((!adminSession && !ADMIN_PUBLIC_ACCESS) || switchingDay || festivalDay.current_day === day) {
+      return;
+    }
+    const confirmed = window.confirm(
+      `学園祭の「本日」を「${festivalDayLabel(day)}」にしますか？\n` +
+        `来場者画面の初期表示日と、モニターの表示日が切り替わります。`,
+    );
+    if (!confirmed) return;
+
+    setSwitchingDay(true);
+    setError('');
+    setMessage('');
+    try {
+      const updated = await updateAdminFestivalDay(adminSession?.token, day);
+      setFestivalDay(updated);
+      await loadStores();
+      setMessage(`今日を${festivalDayLabel(updated.current_day)}に切り替えました。`);
+    } catch (err: unknown) {
+      if (err instanceof ApiError && err.status === 401) {
+        logoutAdminSession();
+        return;
+      }
+      setError(err instanceof Error ? err.message : '出展日の切り替えに失敗しました。');
+    } finally {
+      setSwitchingDay(false);
+    }
   };
 
   const openCreate = () => {
@@ -205,6 +255,51 @@ export default function AdminStores() {
 
   return (
     <AdminShell title="店舗管理">
+      <section className="mb-4 rounded-2xl border border-border bg-card p-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="font-display text-lg font-bold text-foreground">本日の開催日</h2>
+            <p className="text-sm text-muted-foreground">
+              現在: {festivalDayLabel(festivalDay.current_day)}
+              {festivalDay.store_counts
+                ? `（24日のみ ${festivalDay.store_counts.day1} / 25日のみ ${festivalDay.store_counts.day2} / 両日 ${festivalDay.store_counts.both}）`
+                : ''}
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              来場者は日付タブで両日を見られます。ここは「本日」の初期表示とモニター用です。
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              disabled={switchingDay || festivalDay.current_day === 'day1'}
+              onClick={() => void switchFestivalDay('day1')}
+              className="rounded-xl px-4 py-2 text-sm font-bold disabled:opacity-70"
+              style={
+                festivalDay.current_day === 'day1'
+                  ? { backgroundColor: 'var(--primary)', color: '#fff' }
+                  : { border: '1px solid var(--border)', color: 'var(--foreground)' }
+              }
+            >
+              10月24日(土)
+            </button>
+            <button
+              type="button"
+              disabled={switchingDay || festivalDay.current_day === 'day2'}
+              onClick={() => void switchFestivalDay('day2')}
+              className="rounded-xl px-4 py-2 text-sm font-bold disabled:opacity-70"
+              style={
+                festivalDay.current_day === 'day2'
+                  ? { backgroundColor: 'var(--primary)', color: '#fff' }
+                  : { border: '1px solid var(--border)', color: 'var(--foreground)' }
+              }
+            >
+              10月25日(日)
+            </button>
+          </div>
+        </div>
+      </section>
+
       <div className="mb-4 flex items-center justify-between gap-3">
         <div>
           <h2 className="font-display text-xl font-bold text-foreground">店舗一覧</h2>
@@ -286,7 +381,8 @@ export default function AdminStores() {
                   </div>
                   <p className="mt-1 text-sm text-muted-foreground">{store.description}</p>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    ID: {store.id} / ログインID: {store.login_id ?? '未設定'}
+                    ID: {store.id} / ログインID: {store.login_id ?? '未設定'} / 出展日:{' '}
+                    {exhibitionDayLabel(store.exhibition_day)}
                   </p>
                   <p className="mt-1 text-xs text-muted-foreground">
                     種類: {typeLabel(store.type)} / 位置: {locationLabel(store)}

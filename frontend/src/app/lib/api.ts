@@ -64,6 +64,12 @@ export interface AdminLoginResponse {
   login_id: string;
 }
 
+/** 出展日: 1日目のみ / 2日目のみ / 両日 */
+export type ExhibitionDay = 'day1' | 'day2' | 'both';
+
+/** 学園祭の「今日」（1日目 or 2日目） */
+export type FestivalDay = 'day1' | 'day2';
+
 export interface AdminStore {
   id: string;
   name: string;
@@ -74,6 +80,7 @@ export interface AdminStore {
   map_y: number;
   /** 使っていない（受付番号は数字だけ）。古いAPI互換のため残している */
   ticket_prefix?: string | null;
+  exhibition_day: ExhibitionDay;
   is_open: boolean;
   is_visible: boolean;
   show_on_monitor: boolean;
@@ -82,6 +89,15 @@ export interface AdminStore {
   login_id: string | null;
   revenue: number;
   order_count: number;
+}
+
+export interface FestivalDayInfo {
+  current_day: FestivalDay;
+  store_counts?: {
+    day1: number;
+    day2: number;
+    both: number;
+  };
 }
 
 export interface AdminAnalyticsStore {
@@ -110,6 +126,7 @@ export interface AdminStoreInput {
   map_y: number;
   login_id?: string;
   password?: string;
+  exhibition_day: ExhibitionDay;
   is_open: boolean;
   is_visible: boolean;
   show_on_monitor: boolean;
@@ -242,20 +259,40 @@ async function request(path: string, options: RequestOptions = {}): Promise<unkn
   return response.json() as Promise<unknown>;
 }
 
-export function fetchRestaurants(signal?: AbortSignal) {
-  return request('/v1/restaurants', { signal }).then((payload) =>
-    normalizeCollection<BackendStore>(payload),
-  );
+export function fetchFestivalDay(signal?: AbortSignal) {
+  return request('/v1/festival-day', { signal }).then((payload) => {
+    if (isRecord(payload) && isRecord(payload.data) && typeof payload.data.current_day === 'string') {
+      return payload.data.current_day as FestivalDay;
+    }
+    return 'day1' as FestivalDay;
+  });
 }
 
-export function fetchRestaurant(id: string, signal?: AbortSignal) {
-  return request(`/v1/restaurants/${encodeURIComponent(id)}`, { signal }).then((payload) =>
+export function fetchRestaurants(signal?: AbortSignal, day?: FestivalDay) {
+  const query = day ? `?day=${encodeURIComponent(day)}` : '';
+  return request(`/v1/restaurants${query}`, { signal }).then((payload) => {
+    const stores = normalizeCollection<BackendStore>(payload);
+    const meta =
+      isRecord(payload) && isRecord(payload.meta)
+        ? {
+            current_day: (payload.meta.current_day as FestivalDay | undefined) ?? 'day1',
+            filter_day: (payload.meta.filter_day as FestivalDay | undefined) ?? day ?? 'day1',
+          }
+        : undefined;
+    return { stores, meta };
+  });
+}
+
+export function fetchRestaurant(id: string, signal?: AbortSignal, day?: FestivalDay) {
+  const query = day ? `?day=${encodeURIComponent(day)}` : '';
+  return request(`/v1/restaurants/${encodeURIComponent(id)}${query}`, { signal }).then((payload) =>
     normalizeItem<BackendStore>(payload),
   );
 }
 
-export function fetchMapFacilities(signal?: AbortSignal) {
-  return request('/v1/map/facilities', { signal }).then((payload) =>
+export function fetchMapFacilities(signal?: AbortSignal, day?: FestivalDay) {
+  const query = day ? `?day=${encodeURIComponent(day)}` : '';
+  return request(`/v1/map/facilities${query}`, { signal }).then((payload) =>
     normalizeCollection<BackendMapFacility>(payload),
   );
 }
@@ -384,10 +421,38 @@ export function fetchAdminStores(token?: string, signal?: AbortSignal) {
     if (isRecord(payload) && Array.isArray(payload.data)) {
       return (payload.data as AdminStore[]).map((store) => ({
         ...store,
+        exhibition_day: (store.exhibition_day ?? 'both') as ExhibitionDay,
         show_on_monitor: Boolean(store.show_on_monitor),
       }));
     }
     return [];
+  });
+}
+
+export function fetchAdminFestivalDay(token?: string, signal?: AbortSignal) {
+  return request('/v1/admin/festival-day', { signal, token }).then((payload) => {
+    if (isRecord(payload) && isRecord(payload.data)) {
+      return payload.data as FestivalDayInfo;
+    }
+    return { current_day: 'day1' as FestivalDay };
+  });
+}
+
+export function updateAdminFestivalDay(
+  token: string | undefined,
+  day: FestivalDay,
+  signal?: AbortSignal,
+) {
+  return request('/v1/admin/festival-day', {
+    method: 'PATCH',
+    signal,
+    token,
+    body: { day },
+  }).then((payload) => {
+    if (isRecord(payload) && isRecord(payload.data)) {
+      return payload.data as FestivalDayInfo;
+    }
+    return { current_day: day };
   });
 }
 

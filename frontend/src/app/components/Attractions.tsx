@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Ticket, Flame, MapPin, Info, ShoppingBag, ChevronDown, ChevronUp, Armchair } from 'lucide-react';
 import {
+  fetchFestivalDay,
   fetchMapFacilities,
   fetchRestaurant,
   fetchRestaurants,
@@ -10,6 +11,12 @@ import {
 } from '../lib/api';
 import { BUSY_QUEUE_COUNT, getWaitDisplay, waitLevelStyle, type WaitDisplay } from '../lib/waitDisplay';
 import { crowdLevelLabel, crowdLevelStyle, parseCrowdFromStore } from '../lib/crowdDisplay';
+import {
+  eventKeyToFestivalDay,
+  festivalDayToEventKey,
+  type EventDayKey,
+} from '../lib/eventSchedule';
+import EventDayTabs from './EventDayTabs';
 import { Skeleton, SkeletonText } from './Skeleton';
 
 /** ブース詳細を開いているあいだ、店内混雑などを取り直す間隔（ミリ秒） */
@@ -185,6 +192,8 @@ function BoothCardSkeleton() {
 export default function Attractions() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [filter, setFilter] = useState<'すべて' | Category>('すべて');
+  const [dayKey, setDayKey] = useState<EventDayKey | null>(null);
+  const [todayKey, setTodayKey] = useState<EventDayKey | null>(null);
   const [booths, setBooths] = useState<Booth[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -208,7 +217,7 @@ export default function Attractions() {
     );
 
     const load = () =>
-      fetchRestaurant(detailId, controller.signal)
+      fetchRestaurant(detailId, controller.signal, dayKey ? eventKeyToFestivalDay(dayKey) : undefined)
         .then((store) => {
           if (controller.signal.aborted) return;
           if (!store) throw new Error('empty response');
@@ -240,7 +249,7 @@ export default function Attractions() {
       controller.abort();
       window.clearInterval(timer);
     };
-  }, [detailId, selectedBooth]);
+  }, [detailId, selectedBooth, dayKey]);
 
   // 詳細を開いたら、その位置までスクロールして見える場所に出す
   useEffect(() => {
@@ -260,19 +269,51 @@ export default function Attractions() {
     setSearchParams(next);
   };
 
+  // 学園祭の「本日」を取得して、初期の日付タブにする
   useEffect(() => {
     const controller = new AbortController();
+    fetchFestivalDay(controller.signal)
+      .then((current) => {
+        if (controller.signal.aborted) return;
+        const key = festivalDayToEventKey(current);
+        setTodayKey(key);
+        setDayKey((prev) => prev ?? key);
+      })
+      .catch(() => {
+        if (controller.signal.aborted) return;
+        const fallback = festivalDayToEventKey('day1');
+        setTodayKey(fallback);
+        setDayKey((prev) => prev ?? fallback);
+      });
+    return () => controller.abort();
+  }, []);
+
+  useEffect(() => {
+    if (!dayKey) return;
+
+    const controller = new AbortController();
+    const festivalDay = eventKeyToFestivalDay(dayKey);
 
     setLoading(true);
     setError(null);
 
     Promise.all([
-      fetchRestaurants(controller.signal),
-      fetchMapFacilities(controller.signal),
+      fetchRestaurants(controller.signal, festivalDay),
+      fetchMapFacilities(controller.signal, festivalDay),
     ])
-      .then(([stores, facilities]) => {
+      .then(([restaurantResult, facilities]) => {
         const facilityByStoreId = new Map(facilities.map((facility) => [facility.store_id, facility]));
-        setBooths(stores.map((store) => toBooth(store, facilityByStoreId.get(store.id))));
+        const nextBooths = restaurantResult.stores.map((store) =>
+          toBooth(store, facilityByStoreId.get(store.id)),
+        );
+        setBooths(nextBooths);
+
+        // 日付を変えたあと、一覧にない詳細は閉じる
+        if (detailId && !nextBooths.some((booth) => booth.id === detailId)) {
+          const next = new URLSearchParams(searchParams);
+          next.delete('detail');
+          setSearchParams(next, { replace: true });
+        }
       })
       .catch((err: unknown) => {
         if (err instanceof DOMException && err.name === 'AbortError') return;
@@ -283,11 +324,22 @@ export default function Attractions() {
       });
 
     return () => controller.abort();
-  }, []);
+  }, [dayKey]);
 
   return (
     <div className="space-y-4 p-4">
       <h1 className="font-display text-2xl font-bold text-foreground">ブース待ち状況</h1>
+
+      {dayKey && (
+        <EventDayTabs
+          value={dayKey}
+          todayKey={todayKey}
+          onChange={(next) => {
+            setDayKey(next);
+            setFilter('すべて');
+          }}
+        />
+      )}
 
       {/* カテゴリフィルタ（チップ） */}
       <div className="flex flex-wrap gap-2" role="tablist" aria-label="カテゴリ">

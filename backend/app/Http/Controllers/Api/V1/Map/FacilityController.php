@@ -4,16 +4,26 @@ namespace App\Http\Controllers\Api\V1\Map;
 
 use App\Http\Controllers\Controller;
 use App\Http\Resources\MapFacilityResource;
+use App\Models\FestivalSetting;
 use App\Models\MapFacilities;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Validation\Rule;
 
 class FacilityController extends Controller
 {
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
+        $validated = $request->validate([
+            'day' => ['nullable', 'string', Rule::in(FestivalSetting::allowedDays())],
+        ]);
+
         // 場所の名前（部屋番号など）。店舗が入った枠でも、同じ位置にある空き枠の名前を引けるようにする
         $slotLabels = MapFacilities::slotLabels();
+
+        $adminCurrentDay = FestivalSetting::currentDay();
+        $filterDay = $validated['day'] ?? $adminCurrentDay;
 
         $facilities = MapFacilities::query()
             ->leftJoin('stores', 'map_facilities.store_id', '=', 'stores.id')
@@ -21,6 +31,13 @@ class FacilityController extends Controller
                 $query->where(function ($inner) {
                     $inner->whereNull('map_facilities.store_id')
                         ->orWhere('stores.is_visible', true);
+                });
+            })
+            ->when(Schema::hasColumn('stores', 'exhibition_day'), function ($query) use ($filterDay) {
+                $query->where(function ($inner) use ($filterDay) {
+                    $inner->whereNull('map_facilities.store_id')
+                        ->orWhere('stores.exhibition_day', $filterDay)
+                        ->orWhere('stores.exhibition_day', FestivalSetting::DAY_BOTH);
                 });
             })
             ->select([
@@ -49,6 +66,12 @@ class FacilityController extends Controller
             });
 
         return MapFacilityResource::collection($facilities)
+            ->additional([
+                'meta' => [
+                    'current_day' => $adminCurrentDay,
+                    'filter_day' => $filterDay,
+                ],
+            ])
             ->response()
             ->setEncodingOptions(JSON_UNESCAPED_UNICODE);
     }

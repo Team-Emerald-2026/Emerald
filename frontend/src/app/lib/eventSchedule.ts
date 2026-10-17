@@ -1,15 +1,24 @@
 import type { EventNotice } from './api';
 
-/** 学園祭の開催日と開催時間（時間割・お知らせの日別表示で共通利用） */
+/** 学園祭の開催日と開催時間（時間割・お知らせ・ブース日別表示で共通利用） */
 export const EVENT_DAYS = [
-  { key: '2026-10-24', label: '10/24（土）', short: '10/24', startMinutes: 11 * 60, endMinutes: 16 * 60 + 30 },
-  { key: '2026-10-25', label: '10/25（日）', short: '10/25', startMinutes: 11 * 60, endMinutes: 16 * 60 },
+  { key: '2026-10-24', label: '10月24日(土)', short: '10/24', festivalDay: 'day1', startMinutes: 11 * 60, endMinutes: 16 * 60 + 30 },
+  { key: '2026-10-25', label: '10月25日(日)', short: '10/25', festivalDay: 'day2', startMinutes: 11 * 60, endMinutes: 16 * 60 },
   // 当日以外で先生に見せるとき: 下を1行足してデプロイ。見終わったら消す。
-  // { key: '2026-10-15', label: '10/15（木）', short: '10/15', startMinutes: 11 * 60, endMinutes: 16 * 60 + 30 },
+  // { key: '2026-10-15', label: '10月15日(木)', short: '10/15', festivalDay: 'day1', startMinutes: 11 * 60, endMinutes: 16 * 60 + 30 },
 ] as const;
 
 export type EventDay = (typeof EVENT_DAYS)[number];
 export type EventDayKey = EventDay['key'];
+export type FestivalDayKey = EventDay['festivalDay'];
+
+export function eventKeyToFestivalDay(key: EventDayKey): FestivalDayKey {
+  return getEventDay(key)?.festivalDay ?? EVENT_DAYS[0].festivalDay;
+}
+
+export function festivalDayToEventKey(day: FestivalDayKey | string | null | undefined): EventDayKey {
+  return EVENT_DAYS.find((item) => item.festivalDay === day)?.key ?? EVENT_DAYS[0].key;
+}
 
 export function getEventDay(key: string): EventDay | undefined {
   return EVENT_DAYS.find((day) => day.key === key);

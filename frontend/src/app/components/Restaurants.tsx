@@ -61,7 +61,7 @@ export default function Restaurants() {
     setError(null);
 
     fetchRestaurants(controller.signal)
-      .then((backendStores) => {
+      .then(({ stores: backendStores }) => {
         setStores(
           backendStores
             .filter((store) => (store.type ?? 'food') === 'food')
