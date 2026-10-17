@@ -145,8 +145,8 @@ export default function AdminStores() {
       );
       setMessage(
         store.show_on_monitor
-          ? `${store.name} を校内モニターから外しました。`
-          : `${store.name} を校内モニターに表示します。`,
+          ? `${store.name} を校内モニターで非表示にしました。`
+          : `${store.name} を校内モニターに表示しました。`,
       );
       await loadStores();
     } catch (err: unknown) {
@@ -270,14 +270,15 @@ export default function AdminStores() {
                     >
                       {store.is_visible ? (store.is_open ? '表示中・営業中' : '表示中・準備中') : '非表示'}
                     </span>
-                    {store.show_on_monitor && (
-                      <span
-                        className="rounded-md px-2 py-0.5 text-xs font-bold"
-                        style={{ backgroundColor: 'var(--ok-soft)', color: 'var(--ok)' }}
-                      >
-                        モニター表示
-                      </span>
-                    )}
+                    <span
+                      className="rounded-md px-2 py-0.5 text-xs font-bold"
+                      style={{
+                        backgroundColor: store.show_on_monitor ? 'var(--ok-soft)' : 'var(--busy-soft)',
+                        color: store.show_on_monitor ? 'var(--ok)' : 'var(--busy)',
+                      }}
+                    >
+                      {store.show_on_monitor ? 'モニター表示' : 'モニター非表示'}
+                    </span>
                   </div>
                   <p className="mt-1 text-sm text-muted-foreground">{store.description}</p>
                   <p className="mt-1 text-xs text-muted-foreground">
@@ -310,7 +311,7 @@ export default function AdminStores() {
                   className="inline-flex items-center justify-center gap-1 rounded-xl border border-border px-3 py-2 text-sm font-bold text-foreground hover:bg-muted disabled:opacity-40"
                 >
                   <Monitor className="h-4 w-4" />
-                  {store.show_on_monitor ? 'モニターから外す' : 'モニターに表示'}
+                  {store.show_on_monitor ? 'モニター非表示' : 'モニター表示'}
                 </button>
                 <button
                   type="button"
