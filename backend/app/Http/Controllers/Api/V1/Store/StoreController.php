@@ -12,6 +12,8 @@ class StoreController extends Controller
 {
     public function index()
     {
+        Store::ensureCrowdLevelColumn();
+
         // 全員が同じ一覧を見るため、短時間キャッシュしてDB負荷を抑える
         // （秒数は config/cache.php の api_list_ttl。0でキャッシュ無効）
         $payload = Cache::remember('api:v1:restaurants:index', config('cache.api_list_ttl'), function () {
@@ -23,6 +25,7 @@ class StoreController extends Controller
                 $columns[] = 'wait_display_mode';
                 $columns[] = 'wait_display_text';
             }
+            $columns[] = 'crowd_level';
 
             $stores = Store::query()
                 ->select($columns)
@@ -39,6 +42,8 @@ class StoreController extends Controller
 
     public function show(string $id)
     {
+        Store::ensureCrowdLevelColumn();
+
         $store = Store::query()
             ->when(Schema::hasColumn('stores', 'is_visible'), fn ($query) => $query->where('is_visible', true))
             ->with([

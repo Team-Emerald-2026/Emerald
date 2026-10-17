@@ -98,4 +98,41 @@ class Store extends Model
             return false;
         }
     }
+
+    /** 本番でマイグレーション未適用でも、店内混雑列だけ先に用意する */
+    public static function ensureCrowdLevelColumn(): void
+    {
+        if (self::hasCrowdLevelColumn()) {
+            return;
+        }
+
+        $driver = Schema::getConnection()->getDriverName();
+
+        try {
+            if ($driver === 'pgsql') {
+                DB::statement('ALTER TABLE stores ADD COLUMN IF NOT EXISTS crowd_level VARCHAR(16) NULL');
+            } elseif (in_array($driver, ['mysql', 'mariadb'], true)) {
+                DB::statement('ALTER TABLE stores ADD COLUMN crowd_level VARCHAR(16) NULL');
+            } else {
+                Schema::table('stores', function (Blueprint $table) {
+                    $table->string('crowd_level', 16)->nullable();
+                });
+            }
+        } catch (\Throwable $exception) {
+            if (self::hasCrowdLevelColumn()) {
+                return;
+            }
+
+            throw $exception;
+        }
+    }
+
+    public static function hasCrowdLevelColumn(): bool
+    {
+        try {
+            return Schema::hasColumn((new static)->getTable(), 'crowd_level');
+        } catch (\Throwable) {
+            return false;
+        }
+    }
 }

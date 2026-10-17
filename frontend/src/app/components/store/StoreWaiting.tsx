@@ -44,6 +44,8 @@ export default function StoreWaiting() {
   const [crowdError, setCrowdError] = useState('');
   const [crowdFlash, setCrowdFlash] = useState<string | null>(null);
   const crowdSavingRef = useRef(false);
+  /** 店内混雑の保存のたびに増やす。保存より前に始まった取得で「未設定」に戻さない */
+  const crowdVersionRef = useRef(0);
 
   const setServerCount = (value: number) => {
     serverCountRef.current = value;
@@ -55,6 +57,7 @@ export default function StoreWaiting() {
     async (signal?: AbortSignal) => {
       if (!token) return;
       const version = sendVersionRef.current;
+      const crowdVersion = crowdVersionRef.current;
       try {
         const dashboard = await fetchBoothDashboard(token, signal);
         if (signal?.aborted) return;
@@ -66,7 +69,7 @@ export default function StoreWaiting() {
         if (inFlightRef.current === 0 && version === sendVersionRef.current) {
           setServerCount(Number(dashboard.current_queue_count) || 0);
         }
-        if (!crowdSavingRef.current) {
+        if (!crowdSavingRef.current && crowdVersion === crowdVersionRef.current) {
           setCrowdLevel(parseCrowdLevel(dashboard.crowd_level));
         }
         setLoadError('');
@@ -110,11 +113,15 @@ export default function StoreWaiting() {
   const setCrowd = async (level: CrowdLevel) => {
     if (!token || crowdSavingRef.current) return;
     crowdSavingRef.current = true;
+    crowdVersionRef.current += 1;
+    const crowdVersion = crowdVersionRef.current;
     setCrowdSaving(true);
     setCrowdError('');
     setCrowdFlash(null);
+    setCrowdLevel(level);
     try {
       const updated = await updateWaitTime(token, { crowd_level: level });
+      if (crowdVersion !== crowdVersionRef.current) return;
       setCrowdLevel(parseCrowdLevel(updated.crowd_level) ?? level);
       setCrowdFlash(`店内を「${crowdLevelLabel(level)}」にしました`);
     } catch (err) {
@@ -123,6 +130,7 @@ export default function StoreWaiting() {
         return;
       }
       setCrowdError('店内の混雑を変更できませんでした。もう一度お試しください。');
+      crowdSavingRef.current = false;
       void load();
     } finally {
       crowdSavingRef.current = false;
@@ -229,7 +237,7 @@ export default function StoreWaiting() {
 
   return (
     <StoreShell title="待ち人数管理">
-      <div className="mx-auto max-w-md space-y-4">
+      <div className="mx-auto max-w-md space-y-4 sm:max-w-2xl">
       <div className="rounded-3xl border border-border bg-card p-8 text-center">
         <span
           className="mx-auto grid h-12 w-12 place-items-center rounded-2xl"
@@ -325,7 +333,7 @@ export default function StoreWaiting() {
           </p>
         )}
 
-        <div className="mt-6 grid grid-cols-1 gap-3">
+        <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
           {crowdLevelOptions.map((option) => {
             const active = crowdLevel === option.value;
             const colors = crowdLevelStyle(option.value);
@@ -336,7 +344,7 @@ export default function StoreWaiting() {
                 onClick={() => void setCrowd(option.value)}
                 disabled={crowdSaving}
                 aria-pressed={active}
-                className="min-h-14 rounded-2xl border px-4 py-3 text-base font-bold disabled:opacity-40"
+                className="min-h-14 w-full rounded-2xl border px-3 py-3 text-sm font-bold sm:text-base disabled:opacity-40"
                 style={{
                   backgroundColor: active ? colors.bg : 'transparent',
                   borderColor: active ? colors.fg : 'var(--border)',

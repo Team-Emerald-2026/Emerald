@@ -153,21 +153,21 @@ function BoothDetail({ booth, detail }: { booth: Booth; detail?: DetailState }) 
         </div>
       )}
 
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-muted-foreground">
         <span>場所: {booth.area}</span>
         <span>待ち状況: {booth.wait.label}</span>
-        {crowdLevel && crowdColors && (
-          <span className="inline-flex items-center gap-1">
-            店内:
-            <span
-              className="rounded-md px-2 py-0.5 text-xs font-bold"
-              style={{ backgroundColor: crowdColors.bg, color: crowdColors.fg }}
-            >
-              {crowdLevelLabel(crowdLevel)}
-            </span>
-          </span>
-        )}
       </div>
+      {crowdLevel && crowdColors && (
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-bold text-muted-foreground">店内</span>
+          <span
+            className="rounded-lg px-2.5 py-1 text-sm font-bold"
+            style={{ backgroundColor: crowdColors.bg, color: crowdColors.fg }}
+          >
+            {crowdLevelLabel(crowdLevel)}
+          </span>
+        </div>
+      )}
     </div>
   );
 }
