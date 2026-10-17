@@ -441,6 +441,8 @@ export default function CampusMap() {
         </div>
       </div>
 
+      <p className="px-1 text-sm text-muted-foreground">※喫煙所は8階上の屋上になります。</p>
+
       {boothTypes.length > 0 && (
         <ul className="flex flex-wrap gap-x-3 gap-y-1.5 px-1" aria-label="アイコンの意味">
           {boothTypes.map((t) => {
