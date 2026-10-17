@@ -29,6 +29,7 @@ const emptyInput: AdminStoreInput = {
   password: '',
   is_open: true,
   is_visible: true,
+  show_on_monitor: false,
   current_wait_min: 5,
   current_queue_count: 0,
 };
@@ -80,6 +81,7 @@ export default function AdminStoreForm({
       password: '',
       is_open: store.is_open,
       is_visible: store.is_visible,
+      show_on_monitor: Boolean(store.show_on_monitor),
       current_wait_min: store.current_wait_min,
       current_queue_count: store.current_queue_count,
     });
@@ -294,6 +296,14 @@ export default function AdminStoreForm({
             onChange={(event) => update('is_visible', event.target.checked)}
           />
           来場者画面に表示
+        </label>
+        <label className="flex items-center gap-2">
+          <input
+            type="checkbox"
+            checked={input.show_on_monitor}
+            onChange={(event) => update('show_on_monitor', event.target.checked)}
+          />
+          校内モニターに表示
         </label>
       </div>
 

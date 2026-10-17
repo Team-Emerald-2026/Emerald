@@ -183,7 +183,7 @@ class MissingApisTest extends TestCase
 
     public function test_monitor_call_numbers_groups_by_store(): void
     {
-        $store = $this->createStore();
+        $store = $this->createStore('store-101', ['show_on_monitor' => true]);
         Order::query()->create([
             'store_id' => $store->id,
             'ticket_number' => 'C-120',
@@ -205,6 +205,38 @@ class MissingApisTest extends TestCase
             ->assertJsonPath('data.0.store_id', 'store-101')
             ->assertJsonPath('data.0.current_call_number', 'C-120')
             ->assertJsonPath('data.0.waiting_numbers.0', 'C-121');
+    }
+
+    public function test_monitor_excludes_stores_not_marked_for_display(): void
+    {
+        $hidden = $this->createStore('store-101', ['show_on_monitor' => false]);
+        $visible = $this->createStore('store-102', [
+            'name' => 'やきそば',
+            'ticket_prefix' => 'Y',
+            'show_on_monitor' => true,
+        ]);
+        Order::query()->create([
+            'store_id' => $hidden->id,
+            'ticket_number' => 'C-120',
+            'total_price' => 350,
+            'status' => 'issued',
+            'ordered_at' => now(),
+            'called_at' => now(),
+        ]);
+        Order::query()->create([
+            'store_id' => $visible->id,
+            'ticket_number' => 'Y-10',
+            'total_price' => 400,
+            'status' => 'issued',
+            'ordered_at' => now(),
+            'called_at' => now(),
+        ]);
+
+        $this->getJson('/api/v1/monitor/call-numbers')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.store_id', 'store-102')
+            ->assertJsonPath('data.0.current_call_number', 'Y-10');
     }
 
     public function test_published_events_are_listed_and_unpublished_are_hidden(): void

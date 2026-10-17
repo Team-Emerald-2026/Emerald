@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Edit3, EyeOff, Plus } from 'lucide-react';
+import { Edit3, EyeOff, Monitor, Plus } from 'lucide-react';
 import AdminShell from './AdminShell';
 import AdminStoreForm from './AdminStoreForm';
 import {
@@ -21,6 +21,24 @@ import { ADMIN_PUBLIC_ACCESS } from '../../lib/adminAccess';
 const yen = (value: number) => `¥${value.toLocaleString('ja-JP')}`;
 
 const typeLabel = (type: string) => facilityTypeInfo(type).label;
+
+function toStoreInput(store: AdminStore, overrides: Partial<AdminStoreInput> = {}): AdminStoreInput {
+  return {
+    name: store.name,
+    description: store.description ?? '',
+    type: store.type,
+    floor: store.floor,
+    map_x: store.map_x,
+    map_y: store.map_y,
+    ticket_prefix: store.ticket_prefix ?? '',
+    is_open: store.is_open,
+    is_visible: store.is_visible,
+    show_on_monitor: Boolean(store.show_on_monitor),
+    current_wait_min: store.current_wait_min,
+    current_queue_count: store.current_queue_count,
+    ...overrides,
+  };
+}
 
 export default function AdminStores() {
   const adminSession = useFestival((s) => s.adminSession);
@@ -113,6 +131,31 @@ export default function AdminStores() {
     }
   };
 
+  const toggleMonitor = async (store: AdminStore) => {
+    if ((!adminSession && !ADMIN_PUBLIC_ACCESS) || saving) return;
+
+    setSaving(true);
+    setError('');
+    setMessage('');
+    try {
+      await updateAdminStore(
+        adminSession?.token,
+        store.id,
+        toStoreInput(store, { show_on_monitor: !store.show_on_monitor }),
+      );
+      setMessage(
+        store.show_on_monitor
+          ? `${store.name} を校内モニターから外しました。`
+          : `${store.name} を校内モニターに表示します。`,
+      );
+      await loadStores();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'モニター表示の更新に失敗しました。');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const hideStore = async (store: AdminStore) => {
     if ((!adminSession && !ADMIN_PUBLIC_ACCESS) || saving) return;
     const confirmed = window.confirm(`${store.name} を営業停止・非表示にしますか？`);
@@ -161,7 +204,9 @@ export default function AdminStores() {
       <div className="mb-4 flex items-center justify-between gap-3">
         <div>
           <h2 className="font-display text-xl font-bold text-foreground">店舗一覧</h2>
-          <p className="text-sm text-muted-foreground">作成、編集、営業停止・非表示、削除を管理します。削除は編集画面から行えます。</p>
+          <p className="text-sm text-muted-foreground">
+            作成、編集、営業停止・非表示、削除を管理します。校内モニターに出す店舗もここで選べます。
+          </p>
         </div>
         <button
           type="button"
@@ -225,6 +270,14 @@ export default function AdminStores() {
                     >
                       {store.is_visible ? (store.is_open ? '表示中・営業中' : '表示中・準備中') : '非表示'}
                     </span>
+                    {store.show_on_monitor && (
+                      <span
+                        className="rounded-md px-2 py-0.5 text-xs font-bold"
+                        style={{ backgroundColor: 'var(--ok-soft)', color: 'var(--ok)' }}
+                      >
+                        モニター表示
+                      </span>
+                    )}
                   </div>
                   <p className="mt-1 text-sm text-muted-foreground">{store.description}</p>
                   <p className="mt-1 text-xs text-muted-foreground">
@@ -249,6 +302,15 @@ export default function AdminStores() {
                 >
                   <Edit3 className="h-4 w-4" />
                   編集
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void toggleMonitor(store)}
+                  disabled={saving}
+                  className="inline-flex items-center justify-center gap-1 rounded-xl border border-border px-3 py-2 text-sm font-bold text-foreground hover:bg-muted disabled:opacity-40"
+                >
+                  <Monitor className="h-4 w-4" />
+                  {store.show_on_monitor ? 'モニターから外す' : 'モニターに表示'}
                 </button>
                 <button
                   type="button"

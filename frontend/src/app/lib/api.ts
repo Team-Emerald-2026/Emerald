@@ -71,6 +71,7 @@ export interface AdminStore {
   ticket_prefix: string | null;
   is_open: boolean;
   is_visible: boolean;
+  show_on_monitor: boolean;
   current_wait_min: number;
   current_queue_count: number;
   login_id: string | null;
@@ -107,6 +108,7 @@ export interface AdminStoreInput {
   password?: string;
   is_open: boolean;
   is_visible: boolean;
+  show_on_monitor: boolean;
   current_wait_min: number;
   current_queue_count: number;
 }
@@ -654,6 +656,8 @@ export interface CallNumber {
 export interface MonitorCallNumber {
   store_id: string;
   store_name: string;
+  location_name?: string | null;
+  is_open?: boolean;
   current_call_number: string | null;
   called_numbers: string[];
   waiting_numbers: string[];

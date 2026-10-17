@@ -94,12 +94,13 @@ class AdminStoreController extends Controller
             'login_id' => ['required', 'string', 'max:255', 'unique:users,login_id'],
             'password' => ['required', 'string', 'min:8'],
             'is_open' => ['sometimes', 'boolean'],
+            'show_on_monitor' => ['sometimes', 'boolean'],
             'current_wait_min' => ['sometimes', 'integer', 'min:0'],
             'current_queue_count' => ['sometimes', 'integer', 'min:0'],
         ]);
 
         $result = DB::transaction(function () use ($validated) {
-            $store = Store::query()->create([
+            $attributes = [
                 'id' => $validated['id'],
                 'name' => $validated['name'],
                 'description' => $validated['description'],
@@ -108,7 +109,12 @@ class AdminStoreController extends Controller
                 'is_visible' => true,
                 'current_wait_min' => $validated['current_wait_min'] ?? 5,
                 'current_queue_count' => $validated['current_queue_count'] ?? 0,
-            ]);
+            ];
+            if (Schema::hasColumn('stores', 'show_on_monitor')) {
+                $attributes['show_on_monitor'] = $validated['show_on_monitor'] ?? false;
+            }
+
+            $store = Store::query()->create($attributes);
 
             $user = User::query()->create([
                 'store_id' => $store->id,
@@ -164,12 +170,13 @@ class AdminStoreController extends Controller
             'password' => ['nullable', 'string', 'min:8'],
             'is_open' => ['required', 'boolean'],
             'is_visible' => ['required', 'boolean'],
+            'show_on_monitor' => ['sometimes', 'boolean'],
             'current_wait_min' => ['required', 'integer', 'min:0'],
             'current_queue_count' => ['required', 'integer', 'min:0'],
         ]);
 
         $result = DB::transaction(function () use ($store, $storeUser, $validated) {
-            $store->fill([
+            $attributes = [
                 'name' => $validated['name'],
                 'description' => $validated['description'],
                 'ticket_prefix' => $validated['ticket_prefix']
@@ -179,7 +186,12 @@ class AdminStoreController extends Controller
                 'is_visible' => $validated['is_visible'],
                 'current_wait_min' => $validated['current_wait_min'],
                 'current_queue_count' => $validated['current_queue_count'],
-            ]);
+            ];
+            if (Schema::hasColumn('stores', 'show_on_monitor')) {
+                $attributes['show_on_monitor'] = $validated['show_on_monitor'] ?? $store->show_on_monitor;
+            }
+
+            $store->fill($attributes);
             $store->save();
 
             if ($storeUser && isset($validated['login_id'])) {
@@ -233,10 +245,14 @@ class AdminStoreController extends Controller
         $this->authorizeAdmin($request);
 
         $store = Store::query()->findOrFail($id);
-        $store->fill([
+        $hidden = [
             'is_open' => false,
             'is_visible' => false,
-        ]);
+        ];
+        if (Schema::hasColumn('stores', 'show_on_monitor')) {
+            $hidden['show_on_monitor'] = false;
+        }
+        $store->fill($hidden);
         $store->save();
 
         $facility = MapFacilities::query()->where('store_id', $store->id)->first();
@@ -307,6 +323,7 @@ class AdminStoreController extends Controller
             'ticket_prefix' => $store->ticket_prefix,
             'is_open' => (bool) $store->is_open,
             'is_visible' => (bool) $store->is_visible,
+            'show_on_monitor' => (bool) ($store->show_on_monitor ?? false),
             'current_wait_min' => (int) $store->current_wait_min,
             'current_queue_count' => (int) $store->current_queue_count,
             'login_id' => $user?->login_id,

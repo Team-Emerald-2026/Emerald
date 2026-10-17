@@ -21,6 +21,7 @@ class Store extends Model
         'disabled_ticket_numbers',
         'is_open',
         'is_visible',
+        'show_on_monitor',
         'current_wait_min',
         'current_queue_count',
         'wait_display_mode',
@@ -30,6 +31,7 @@ class Store extends Model
     protected $casts = [
         'is_open' => 'boolean',
         'is_visible' => 'boolean',
+        'show_on_monitor' => 'boolean',
         'current_wait_min' => 'integer',
         'current_queue_count' => 'integer',
         'ticket_limit' => 'integer',

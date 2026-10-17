@@ -1,56 +1,19 @@
 import { useEffect, useMemo, useState } from 'react';
-import {
-  fetchMapFacilities,
-  fetchMonitorCallNumbers,
-  type BackendMapFacility,
-  type MonitorCallNumber,
-} from '../lib/api';
+import { fetchMonitorCallNumbers, type MonitorCallNumber } from '../lib/api';
+
 /** 呼び出し番号の取得間隔（ミリ秒） */
 const CALL_NUMBERS_INTERVAL_MS = 5000;
-/** ブース枠と店舗の紐付け（マップ施設）の再取得間隔（ミリ秒） */
-const FACILITIES_INTERVAL_MS = 60000;
+/** 左右2店舗の切り替え間隔（ミリ秒） */
+const ROTATE_INTERVAL_MS = 12000;
 
-/**
- * モニターに表示する対象ブース枠（303・304 の 8 枠）。
- * 店舗との紐付けは floor/x/y の一致で判定するため、
- * 管理画面のマップ編集でこれらのピンを動かした場合は、ここの座標も同じ値に直すこと。
- * （座標は MapFacilitiesSeeder と同じ。304-8 は仮の位置）
- */
-const TARGET_BOOTHS = [
-  { key: '303-1', name: '303-1', floor: 3, map_x: 50, map_y: 62 },
-  { key: '303-2', name: '303-2', floor: 3, map_x: 66, map_y: 62 },
-  { key: '303-3', name: '303-3', floor: 3, map_x: 50, map_y: 88 },
-  { key: '303-4', name: '303-4', floor: 3, map_x: 66, map_y: 88 },
-  { key: '304-5', name: '304-5', floor: 3, map_x: 80, map_y: 78 },
-  { key: '304-6', name: '304-6', floor: 3, map_x: 50, map_y: 36 },
-  { key: '304-7', name: '304-7', floor: 3, map_x: 68, map_y: 36 },
-  { key: '304-8', name: '304-8', floor: 3, map_x: 82, map_y: 36 },
-];
-
-interface BoothSlot {
-  key: string;
-  label: string;
-  storeId: string | null;
-  monitor: MonitorCallNumber | null;
-}
-
-/**
- * ブース枠（座標）に割り当てられた店舗を探す。
- * 管理画面で店舗を作成すると、選んだブース枠と同じ floor/x/y の
- * map_facilities レコード（store_id 付き）が作られる仕組みを利用する。
- */
-function findStoreIdForBooth(
-  booth: (typeof TARGET_BOOTHS)[number],
-  facilities: BackendMapFacility[],
-): string | null {
-  const facility = facilities.find(
-    (f) =>
-      f.store_id !== null &&
-      f.floor === booth.floor &&
-      f.x === booth.map_x &&
-      f.y === booth.map_y,
-  );
-  return facility?.store_id ?? null;
+function pairStores(
+  stores: MonitorCallNumber[],
+): Array<[MonitorCallNumber | null, MonitorCallNumber | null]> {
+  const pairs: Array<[MonitorCallNumber | null, MonitorCallNumber | null]> = [];
+  for (let i = 0; i < stores.length; i += 2) {
+    pairs.push([stores[i] ?? null, stores[i + 1] ?? null]);
+  }
+  return pairs;
 }
 
 function useClock() {
@@ -63,35 +26,16 @@ function useClock() {
 }
 
 /**
- * 校内モニター（プロジェクター）向け呼び出し番号一覧。
- * 認証不要の公開ページ。303・304 教室の 8 ブースのみを表示する。
+ * 校内モニター（プロジェクター）向け呼び出し番号。
+ * 管理画面で「校内モニターに表示」にした店舗を、2店舗ずつ左右に出して切り替える。
  */
 export default function Monitor() {
-  const [facilities, setFacilities] = useState<BackendMapFacility[]>([]);
   const [monitorData, setMonitorData] = useState<MonitorCallNumber[]>([]);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [hasError, setHasError] = useState(false);
+  const [pairIndex, setPairIndex] = useState(0);
   const now = useClock();
 
-  // ブース枠と店舗の紐付けを取得（低頻度で更新）
-  useEffect(() => {
-    const controller = new AbortController();
-    const load = () => {
-      fetchMapFacilities(controller.signal)
-        .then(setFacilities)
-        .catch(() => {
-          /* 紐付けは前回取得分を維持 */
-        });
-    };
-    load();
-    const timer = setInterval(load, FACILITIES_INTERVAL_MS);
-    return () => {
-      controller.abort();
-      clearInterval(timer);
-    };
-  }, []);
-
-  // 呼び出し番号をポーリング
   useEffect(() => {
     const controller = new AbortController();
     const load = () => {
@@ -101,7 +45,10 @@ export default function Monitor() {
           setLastUpdated(new Date());
           setHasError(false);
         })
-        .catch(() => setHasError(true));
+        .catch(() => {
+          if (controller.signal.aborted) return;
+          setHasError(true);
+        });
     };
     load();
     const timer = setInterval(load, CALL_NUMBERS_INTERVAL_MS);
@@ -111,28 +58,25 @@ export default function Monitor() {
     };
   }, []);
 
-  const slots: BoothSlot[] = useMemo(() => {
-    const monitorByStoreId = new Map(monitorData.map((entry) => [entry.store_id, entry]));
-    return TARGET_BOOTHS.map((booth) => {
-      const storeId = findStoreIdForBooth(booth, facilities);
-      return {
-        key: booth.key,
-        label: booth.name,
-        storeId,
-        monitor: storeId ? (monitorByStoreId.get(storeId) ?? null) : null,
-      };
-    });
-  }, [facilities, monitorData]);
+  const pairs = useMemo(() => pairStores(monitorData), [monitorData]);
+  const pairCount = pairs.length;
+
+  useEffect(() => {
+    if (pairCount <= 1) return;
+    const timer = setInterval(() => {
+      setPairIndex((current) => (current + 1) % pairCount);
+    }, ROTATE_INTERVAL_MS);
+    return () => clearInterval(timer);
+  }, [pairCount]);
+
+  const safeIndex = pairCount === 0 ? 0 : pairIndex % pairCount;
+  const [left, right] = pairs[safeIndex] ?? [null, null];
 
   return (
     <div className="flex min-h-dvh flex-col bg-[#0b1310] px-6 py-5 text-[#e8efec]">
-      {/* ヘッダー */}
       <header className="mb-5 flex items-end justify-between gap-4">
         <div>
-          <h1 className="font-display text-4xl font-bold">
-            呼び出し番号のご案内
-            <span className="ml-4 text-2xl font-bold text-[#2bc79a]">303・304 教室</span>
-          </h1>
+          <h1 className="font-display text-4xl font-bold">呼び出し番号のご案内</h1>
           <p className="mt-1 text-sm text-[#93a39b]">
             番号が表示されたら、各店舗のカウンターまでお越しください。
           </p>
@@ -151,54 +95,74 @@ export default function Monitor() {
         </div>
       </header>
 
-      {/* ブース一覧（303-1〜4・304-5〜8 の 8 枠） */}
-      <main className="grid flex-1 grid-cols-2 content-start gap-4 xl:grid-cols-4">
-        {slots.map((slot) => (
-          <BoothCard key={slot.key} slot={slot} />
-        ))}
+      <main className="grid flex-1 grid-cols-2 content-stretch gap-5">
+        {pairCount === 0 ? (
+          <p className="col-span-2 grid place-items-center text-xl text-[#93a39b]">
+            ただいま表示する店舗はありません
+          </p>
+        ) : (
+          <>
+            <StorePanel entry={left} />
+            <StorePanel entry={right} />
+          </>
+        )}
       </main>
+
+      {pairCount > 1 && (
+        <footer className="mt-4 flex items-center justify-center gap-2">
+          {pairs.map((_, index) => (
+            <span
+              key={index}
+              className={
+                index === safeIndex
+                  ? 'h-2.5 w-8 rounded-full bg-[#2bc79a]'
+                  : 'h-2.5 w-2.5 rounded-full bg-[#243831]'
+              }
+              aria-current={index === safeIndex ? 'true' : undefined}
+            />
+          ))}
+          <span className="ml-2 text-sm text-[#93a39b]">
+            {safeIndex + 1} / {pairCount}
+          </span>
+        </footer>
+      )}
     </div>
   );
 }
 
-function BoothCard({ slot }: { slot: BoothSlot }) {
-  const { label, storeId, monitor } = slot;
-
-  // ブース枠に店舗が割り当てられていない
-  if (!storeId) {
+function StorePanel({ entry }: { entry: MonitorCallNumber | null }) {
+  if (!entry) {
     return (
-      <section className="flex min-h-56 flex-col rounded-3xl border border-[#243831] bg-[#0f1a16] p-5 opacity-60">
-        <BoothHeader label={label} storeName={null} />
-        <p className="grid flex-1 place-items-center text-sm text-[#93a39b]">店舗未割当</p>
+      <section className="flex min-h-0 flex-col rounded-3xl border border-[#243831] bg-[#0f1a16] p-6 opacity-50">
+        <p className="grid flex-1 place-items-center text-lg text-[#93a39b]">—</p>
       </section>
     );
   }
 
-  // 店舗はあるが営業中でない（モニター API は営業中店舗のみ返す）
-  if (!monitor) {
+  if (entry.is_open === false) {
     return (
-      <section className="flex min-h-56 flex-col rounded-3xl border border-[#243831] bg-[#0f1a16] p-5 opacity-60">
-        <BoothHeader label={label} storeName={null} />
-        <p className="grid flex-1 place-items-center text-sm text-[#93a39b]">準備中</p>
+      <section className="flex min-h-0 flex-col rounded-3xl border border-[#243831] bg-[#0f1a16] p-6 opacity-70">
+        <StoreHeader entry={entry} />
+        <p className="grid flex-1 place-items-center text-2xl text-[#93a39b]">準備中</p>
       </section>
     );
   }
 
-  const calledNumbers = monitor.called_numbers;
-  const latest = monitor.current_call_number;
+  const calledNumbers = Array.isArray(entry.called_numbers) ? entry.called_numbers : [];
+  const latest = entry.current_call_number;
 
   return (
-    <section className="flex min-h-56 flex-col rounded-3xl border border-[#243831] bg-[#121d19] p-5">
-      <BoothHeader label={label} storeName={monitor.store_name} />
+    <section className="flex min-h-0 flex-col rounded-3xl border border-[#243831] bg-[#121d19] p-6">
+      <StoreHeader entry={entry} />
 
       {calledNumbers.length === 0 ? (
-        <p className="grid flex-1 place-items-center text-base text-[#93a39b]">
+        <p className="grid flex-1 place-items-center text-center text-2xl text-[#93a39b]">
           ただいまお呼び出し中の番号はありません
         </p>
       ) : (
         <div className="flex flex-1 flex-col justify-center">
-          <p className="text-center text-sm text-[#93a39b]">お呼び出し中</p>
-          <ul className="mt-2 flex flex-wrap items-center justify-center gap-2">
+          <p className="text-center text-lg text-[#93a39b]">お呼び出し中</p>
+          <ul className="mt-4 flex flex-wrap items-center justify-center gap-3">
             {calledNumbers.map((number) => {
               const isLatest = number === latest;
               return (
@@ -206,8 +170,8 @@ function BoothCard({ slot }: { slot: BoothSlot }) {
                   key={number}
                   className={
                     isLatest
-                      ? 'rounded-2xl bg-[#2bc79a] px-4 py-1.5 font-display text-5xl font-bold text-[#06241b]'
-                      : 'rounded-2xl bg-[#18241f] px-3 py-1.5 font-display text-3xl font-bold text-[#e8efec]'
+                      ? 'rounded-3xl bg-[#2bc79a] px-6 py-2 font-display text-7xl font-bold text-[#06241b]'
+                      : 'rounded-2xl bg-[#18241f] px-4 py-2 font-display text-5xl font-bold text-[#e8efec]'
                   }
                 >
                   {number}
@@ -218,20 +182,27 @@ function BoothCard({ slot }: { slot: BoothSlot }) {
         </div>
       )}
 
-      <p className="mt-3 border-t border-[#243831] pt-2 text-right text-sm text-[#93a39b]">
-        待ち <span className="font-display text-xl font-bold text-[#e8efec]">{monitor.waiting_count}</span> 組
+      <p className="mt-4 border-t border-[#243831] pt-3 text-right text-lg text-[#93a39b]">
+        待ち{' '}
+        <span className="font-display text-3xl font-bold text-[#e8efec]">{entry.waiting_count}</span>{' '}
+        組
       </p>
     </section>
   );
 }
 
-function BoothHeader({ label, storeName }: { label: string; storeName: string | null }) {
+function StoreHeader({ entry }: { entry: MonitorCallNumber }) {
+  const locationName =
+    entry.location_name && entry.location_name !== entry.store_name ? entry.location_name : null;
+
   return (
     <header className="flex items-baseline gap-3">
-      <span className="rounded-lg bg-[#18241f] px-2.5 py-1 font-display text-lg font-bold text-[#2bc79a]">
-        {label}
-      </span>
-      <h2 className="truncate font-display text-xl font-bold">{storeName ?? '—'}</h2>
+      {locationName && (
+        <span className="rounded-lg bg-[#18241f] px-2.5 py-1 font-display text-lg font-bold text-[#2bc79a]">
+          {locationName}
+        </span>
+      )}
+      <h2 className="truncate font-display text-3xl font-bold">{entry.store_name}</h2>
     </header>
   );
 }
