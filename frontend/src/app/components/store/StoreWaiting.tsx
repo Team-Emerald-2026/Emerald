@@ -352,7 +352,14 @@ export default function StoreWaiting() {
           {crowdLevel ? crowdLevelLabel(crowdLevel) : '未設定'}
         </p>
         <p className="mt-2 text-xs text-muted-foreground">
-          座席の埋まりを見て選んでください。来場者のブース詳細に表示されます。待ち人数（注文の列）とは別です。
+          座席の埋まりを見て選んでください。来場者の店舗名の横に表示されます。待ち人数（注文の列）とは別です。
+        </p>
+        <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+          {crowdLevelOptions.map((option) => (
+            <span key={option.value} className="block">
+              {option.label} {option.hint}
+            </span>
+          ))}
         </p>
 
         {crowdError && (

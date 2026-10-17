@@ -105,8 +105,6 @@ function BoothDetail({ booth, detail }: { booth: Booth; detail?: DetailState }) 
   const menuItems = detail.store.menu_items ?? [];
   // 体験ブースなどは、メニューがなくて普通なので、メニューがあるときだけ出す（フードは未登録の案内も出す）
   const showMenu = menuItems.length > 0 || booth.category === 'フード';
-  const crowdLevel = parseCrowdFromStore(detail.store) ?? booth.crowdLevel;
-  const crowdColors = crowdLevel ? crowdLevelStyle(crowdLevel) : null;
 
   return (
     <div className="mt-3 space-y-3 rounded-xl bg-muted p-3 text-sm">
@@ -159,17 +157,6 @@ function BoothDetail({ booth, detail }: { booth: Booth; detail?: DetailState }) 
         <span>場所: {booth.area}</span>
         <span>待ち状況: {booth.wait.label}</span>
       </div>
-      {crowdLevel && crowdColors && (
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-bold text-muted-foreground">店内</span>
-          <span
-            className="rounded-lg px-2.5 py-1 text-sm font-bold"
-            style={{ backgroundColor: crowdColors.bg, color: crowdColors.fg }}
-          >
-            {crowdLevelLabel(crowdLevel)}
-          </span>
-        </div>
-      )}
     </div>
   );
 }
@@ -226,6 +213,13 @@ export default function Attractions() {
           if (controller.signal.aborted) return;
           if (!store) throw new Error('empty response');
           setDetails((current) => ({ ...current, [detailId]: { status: 'ready', store } }));
+          setBooths((current) =>
+            current.map((booth) =>
+              booth.id === detailId
+                ? { ...booth, crowdLevel: parseCrowdFromStore(store), wait: getWaitDisplay(store) }
+                : booth,
+            ),
+          );
         })
         .catch((err: unknown) => {
           if (controller.signal.aborted) return;
@@ -343,6 +337,8 @@ export default function Attractions() {
         <ul className="space-y-3">
           {list.map((b) => {
             const w = waitLevelStyle(b.wait.level);
+            const crowdLevel = b.crowdLevel;
+            const crowdColors = crowdLevel ? crowdLevelStyle(crowdLevel) : null;
             return (
               <li
                 key={b.id}
@@ -354,7 +350,17 @@ export default function Attractions() {
                   className="flex w-full items-start justify-between gap-3 text-left"
                 >
                   <div className="min-w-0">
-                    <h3 className="truncate font-bold text-foreground">{b.name}</h3>
+                    <div className="flex min-w-0 items-center gap-2">
+                      <h3 className="truncate font-bold text-foreground">{b.name}</h3>
+                      {crowdLevel && crowdColors && (
+                        <span
+                          className="shrink-0 rounded-md px-2 py-0.5 text-xs font-bold"
+                          style={{ backgroundColor: crowdColors.bg, color: crowdColors.fg }}
+                        >
+                          {crowdLevelLabel(crowdLevel)}
+                        </span>
+                      )}
+                    </div>
                     <p className="mt-0.5 flex items-center gap-1 text-sm text-muted-foreground">
                       <MapPin className="h-3.5 w-3.5" />
                       {b.area}
