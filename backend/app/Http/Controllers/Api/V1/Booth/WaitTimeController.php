@@ -8,6 +8,7 @@ use App\Models\Store;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 class WaitTimeController extends Controller
 {
@@ -19,6 +20,7 @@ class WaitTimeController extends Controller
      * - current_queue_delta: 待ち人数を、いまの値から増減する（例: +1 / -1）。
      *   注文の登録・提供と同時に操作しても数え違いが起きないよう、
      *   サーバー側で最新の値に足し引きする。current_queue_count とは同時に使えない
+     * - crowd_level: 店内の混雑（empty / moderate / crowded）。待ち人数とは別
      */
     public function update(Request $request)
     {
@@ -28,13 +30,19 @@ class WaitTimeController extends Controller
             abort(403);
         }
 
-        $validated = $request->validate([
+        $rules = [
             'current_wait_min' => ['sometimes', 'integer', 'min:0', 'max:180'],
             'current_queue_count' => ['sometimes', 'integer', 'min:0', 'max:999', 'prohibits:current_queue_delta'],
             'current_queue_delta' => ['sometimes', 'integer', 'min:-999', 'max:999'],
             'wait_display_mode' => ['sometimes', 'string', 'in:minutes,text'],
             'wait_display_text' => ['nullable', 'string', 'max:255'],
-        ]);
+        ];
+
+        if (Schema::hasColumn('stores', 'crowd_level')) {
+            $rules['crowd_level'] = ['sometimes', 'nullable', 'string', 'in:empty,moderate,crowded'];
+        }
+
+        $validated = $request->validate($rules);
 
         $delta = $validated['current_queue_delta'] ?? null;
         unset($validated['current_queue_delta']);

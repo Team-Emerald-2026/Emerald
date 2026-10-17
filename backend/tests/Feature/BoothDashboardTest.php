@@ -40,7 +40,8 @@ class BoothDashboardTest extends TestCase
             ->assertJsonPath('data.description', '店舗情報の確認用')
             ->assertJsonPath('data.is_open', true)
             ->assertJsonPath('data.current_wait_min', 7)
-            ->assertJsonPath('data.current_queue_count', 3);
+            ->assertJsonPath('data.current_queue_count', 3)
+            ->assertJsonPath('data.crowd_level', null);
     }
 
     public function test_store_user_can_update_dashboard_profile(): void

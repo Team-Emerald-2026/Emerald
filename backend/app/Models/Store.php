@@ -29,6 +29,7 @@ class Store extends Model
         'current_queue_count',
         'wait_display_mode',
         'wait_display_text',
+        'crowd_level',
     ];
 
     protected $casts = [

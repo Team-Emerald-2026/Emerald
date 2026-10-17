@@ -256,12 +256,17 @@ class AdminStoreController extends Controller
 
         $store = Store::query()->findOrFail($id);
 
-        $validated = $request->validate([
+        $rules = [
             'current_wait_min' => ['required', 'integer', 'min:0', 'max:180'],
             'current_queue_count' => ['required', 'integer', 'min:0', 'max:999'],
             'wait_display_mode' => ['sometimes', 'string', 'in:minutes,text'],
             'wait_display_text' => ['nullable', 'string', 'max:255'],
-        ]);
+        ];
+        if (Schema::hasColumn('stores', 'crowd_level')) {
+            $rules['crowd_level'] = ['sometimes', 'nullable', 'string', 'in:empty,moderate,crowded'];
+        }
+
+        $validated = $request->validate($rules);
 
         $store->fill($validated);
         $store->save();

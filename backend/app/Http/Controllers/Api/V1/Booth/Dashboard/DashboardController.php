@@ -91,6 +91,9 @@ class DashboardController extends Controller
             $columns[] = 'wait_display_mode';
             $columns[] = 'wait_display_text';
         }
+        if (Schema::hasColumn('stores', 'crowd_level')) {
+            $columns[] = 'crowd_level';
+        }
         if (Schema::hasColumn('stores', 'ticket_limit')) {
             $columns[] = 'ticket_limit';
             $columns[] = 'disabled_ticket_numbers';

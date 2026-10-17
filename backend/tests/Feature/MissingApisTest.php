@@ -150,6 +150,7 @@ class MissingApisTest extends TestCase
         $this->getJson("/api/v1/restaurants/{$store->id}")
             ->assertOk()
             ->assertJsonPath('data.name', 'KTCカフェ')
+            ->assertJsonPath('data.crowd_level', null)
             ->assertJsonPath('data.menu_items.0.name', 'ブレンドコーヒー')
             ->assertJsonPath('data.ticket_numbers.0', 'C-120');
     }

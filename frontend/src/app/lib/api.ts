@@ -9,6 +9,8 @@ export interface BoothLoginResponse {
 }
 
 export type BoothKind = 'booth' | 'food' | 'exhibit' | 'information' | 'shop';
+/** 店内の混雑。待ち人数（注文の列）とは別 */
+export type CrowdLevel = 'empty' | 'moderate' | 'crowded';
 
 export interface BoothDashboard {
   id: string;
@@ -19,6 +21,7 @@ export interface BoothDashboard {
   current_queue_count: number;
   wait_display_mode?: 'minutes' | 'text';
   wait_display_text?: string | null;
+  crowd_level?: CrowdLevel | null;
   revenue?: number;
   type?: string;
   /** 整理券の枚数（1〜この番号までを使い回す。既定50） */
@@ -39,6 +42,7 @@ export interface BackendStore {
   wait_time?: number;
   wait_display_mode?: 'minutes' | 'text';
   wait_display_text?: string | null;
+  crowd_level?: CrowdLevel | null;
   map_facility_id?: string | null;
   menu_items?: BackendMenuItem[];
   ticket_numbers?: string[];
@@ -753,6 +757,7 @@ export function deleteBoothSale(token: string, id: string, signal?: AbortSignal)
  * 待ち時間・待ち人数の更新。送った項目だけが更新される。
  * - current_queue_delta: 待ち人数を +1 / -1 のように増減する（注文の登録・提供と同時でも数え違いが起きない）
  * - current_queue_count: 待ち人数をその値にそろえる（current_queue_delta とは同時に送れない）
+ * - crowd_level: 店内の混雑（すいている / 少し混雑 / 混雑）
  */
 export function updateWaitTime(
   token: string,
@@ -762,6 +767,7 @@ export function updateWaitTime(
     current_queue_delta?: number;
     wait_display_mode?: 'minutes' | 'text';
     wait_display_text?: string | null;
+    crowd_level?: CrowdLevel | null;
   },
   signal?: AbortSignal,
 ) {
@@ -777,6 +783,7 @@ export function updateWaitTime(
       current_queue_count: number;
       wait_display_mode: 'minutes' | 'text';
       wait_display_text: string | null;
+      crowd_level: CrowdLevel | null;
       updated_at: string | null;
     }>(payload);
 

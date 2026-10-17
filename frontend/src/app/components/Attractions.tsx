@@ -9,7 +9,11 @@ import {
   type BackendStore,
 } from '../lib/api';
 import { BUSY_QUEUE_COUNT, getWaitDisplay, waitLevelStyle, type WaitDisplay } from '../lib/waitDisplay';
+import { crowdLevelLabel, crowdLevelStyle, parseCrowdLevel } from '../lib/crowdDisplay';
 import { Skeleton, SkeletonText } from './Skeleton';
+
+/** ブース詳細を開いているあいだ、店内混雑などを取り直す間隔（ミリ秒） */
+const DETAIL_POLL_INTERVAL_MS = 5000;
 
 type Category = '体験' | 'フード' | '作品展示' | 'ステージ';
 
@@ -99,6 +103,8 @@ function BoothDetail({ booth, detail }: { booth: Booth; detail?: DetailState }) 
   const menuItems = detail.store.menu_items ?? [];
   // 体験ブースなどは、メニューがなくて普通なので、メニューがあるときだけ出す（フードは未登録の案内も出す）
   const showMenu = menuItems.length > 0 || booth.category === 'フード';
+  const crowdLevel = detail.store.is_open ? parseCrowdLevel(detail.store.crowd_level) : null;
+  const crowdColors = crowdLevel ? crowdLevelStyle(crowdLevel) : null;
 
   return (
     <div className="mt-3 space-y-3 rounded-xl bg-muted p-3 text-sm">
@@ -147,9 +153,20 @@ function BoothDetail({ booth, detail }: { booth: Booth; detail?: DetailState }) 
         </div>
       )}
 
-      <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
         <span>場所: {booth.area}</span>
         <span>待ち状況: {booth.wait.label}</span>
+        {crowdLevel && crowdColors && (
+          <span className="inline-flex items-center gap-1">
+            店内:
+            <span
+              className="rounded-md px-2 py-0.5 text-xs font-bold"
+              style={{ backgroundColor: crowdColors.bg, color: crowdColors.fg }}
+            >
+              {crowdLevelLabel(crowdLevel)}
+            </span>
+          </span>
+        )}
       </div>
     </div>
   );
@@ -186,27 +203,47 @@ export default function Attractions() {
   const list = booths.filter((b) => filter === 'すべて' || b.category === filter);
   const selectedBooth = booths.find((b) => b.id === detailId) ?? null;
 
-  // 開いたブースの詳細（説明・メニュー）。一度取ったものは、閉じても使い回す
+  // 開いたブースの詳細（説明・メニュー・店内混雑）。開いているあいだは取り直す
   const [details, setDetails] = useState<Record<string, DetailState>>({});
-  const requestedRef = useRef<Set<string>>(new Set());
   const detailPanelRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (!detailId || !selectedBooth) return;
-    if (requestedRef.current.has(detailId)) return;
-    requestedRef.current.add(detailId);
 
-    setDetails((current) => ({ ...current, [detailId]: { status: 'loading' } }));
-    fetchRestaurant(detailId)
-      .then((store) => {
-        if (!store) throw new Error('empty response');
-        setDetails((current) => ({ ...current, [detailId]: { status: 'ready', store } }));
-      })
-      .catch(() => {
-        // 失敗したら、次に開いたときにもう一度取りに行けるようにする
-        requestedRef.current.delete(detailId);
-        setDetails((current) => ({ ...current, [detailId]: { status: 'error' } }));
-      });
+    const controller = new AbortController();
+
+    setDetails((current) =>
+      current[detailId]?.status === 'ready'
+        ? current
+        : { ...current, [detailId]: { status: 'loading' } },
+    );
+
+    const load = () =>
+      fetchRestaurant(detailId, controller.signal)
+        .then((store) => {
+          if (controller.signal.aborted) return;
+          if (!store) throw new Error('empty response');
+          setDetails((current) => ({ ...current, [detailId]: { status: 'ready', store } }));
+        })
+        .catch((err: unknown) => {
+          if (controller.signal.aborted) return;
+          if (err instanceof DOMException && err.name === 'AbortError') return;
+          // 一度取れていれば、通信に失敗しても直前の内容を残す
+          setDetails((current) => {
+            if (current[detailId]?.status === 'ready') return current;
+            return { ...current, [detailId]: { status: 'error' } };
+          });
+        });
+
+    void load();
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === 'visible') void load();
+    }, DETAIL_POLL_INTERVAL_MS);
+
+    return () => {
+      controller.abort();
+      window.clearInterval(timer);
+    };
   }, [detailId, selectedBooth]);
 
   // 詳細を開いたら、その位置までスクロールして見える場所に出す
