@@ -63,7 +63,7 @@ export default function AdminMap() {
   const dragRef = useRef<{ id: string; startX: number; startY: number; moved: boolean } | null>(null);
 
   const canUse = Boolean(adminSession) || ADMIN_PUBLIC_ACCESS;
-  const token = adminSession?.token;
+  const token = undefined;
 
   const loadFacilities = (signal?: AbortSignal) => {
     if (!canUse) return Promise.resolve();

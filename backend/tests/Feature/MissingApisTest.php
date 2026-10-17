@@ -419,6 +419,7 @@ class MissingApisTest extends TestCase
             'password' => 'password123',
         ])
             ->assertOk()
+            ->assertJsonMissingPath('token')
             ->assertJsonPath('role', 'store');
 
         $this->postJson('/api/v1/admin/auth/login', [
@@ -426,6 +427,7 @@ class MissingApisTest extends TestCase
             'password' => 'password123',
         ])
             ->assertOk()
+            ->assertJsonMissingPath('token')
             ->assertJsonPath('role', 'admin');
 
         $this->postJson('/api/v1/booth/auth/login', [
@@ -437,6 +439,24 @@ class MissingApisTest extends TestCase
             'login_id' => 'cafe_admin',
             'password' => 'password123',
         ])->assertUnauthorized();
+    }
+
+    public function test_cookie_session_is_invalidated_on_logout(): void
+    {
+        $admin = $this->createAdmin();
+
+        $this->postJson('/api/v1/admin/auth/login', [
+            'login_id' => $admin->login_id,
+            'password' => 'password123',
+        ])->assertOk();
+
+        $this->getJson('/api/v1/admin/analytics')->assertOk();
+
+        $this->postJson('/api/v1/admin/auth/logout')
+            ->assertOk()
+            ->assertJsonPath('message', 'Logged out');
+
+        $this->getJson('/api/v1/admin/analytics')->assertUnauthorized();
     }
 
     public function test_admin_seeder_skips_without_credentials(): void

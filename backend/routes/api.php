@@ -19,6 +19,7 @@ use App\Http\Controllers\Api\V1\Booth\Dashboard\DashboardController;
 use App\Http\Controllers\Api\V1\Booth\Sales\SalesController;
 
 use Illuminate\Http\Response;
+use Illuminate\Session\Middleware\StartSession;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/test', function () {
@@ -39,17 +40,19 @@ Route::prefix('v1')->group(function () {
     Route::get('events', [EventController::class, 'index']);
     Route::get('events/{id}', [EventController::class, 'show']);
     Route::get('ticker', [TickerController::class, 'index']);
-    Route::post('auth/login', [AuthController::class, 'login'])->middleware('throttle:5,1');
+    Route::post('auth/login', [AuthController::class, 'login'])
+        ->middleware([StartSession::class, 'throttle:5,1']);
 
-    Route::middleware('auth:sanctum')->group(function () {
+    Route::middleware([StartSession::class, 'auth:sanctum'])->group(function () {
         Route::post('auth/logout', [AuthController::class, 'logout']);
     });
 });
 
 Route::prefix('v1/booth')->group(function () {
-    Route::post('auth/login', [AuthController::class, 'login'])->middleware('throttle:5,1');
+    Route::post('auth/login', [AuthController::class, 'login'])
+        ->middleware([StartSession::class, 'throttle:5,1']);
 
-    Route::middleware('auth:sanctum')->group(function () {
+    Route::middleware([StartSession::class, 'auth:sanctum'])->group(function () {
         Route::post('auth/logout', [AuthController::class, 'logout']);
         Route::get('dashboard', [DashboardController::class, 'index']);
         Route::get('accounting/menu-items', [AccountingController::class, 'menuItems']);
@@ -76,9 +79,10 @@ Route::prefix('v1/booth')->group(function () {
 });
 
 Route::prefix('v1/admin')->group(function () {
-    Route::post('auth/login', [AdminAuthController::class, 'login'])->middleware('throttle:5,1');
+    Route::post('auth/login', [AdminAuthController::class, 'login'])
+        ->middleware([StartSession::class, 'throttle:5,1']);
 
-    Route::middleware('auth:sanctum')->group(function () {
+    Route::middleware([StartSession::class, 'auth:sanctum'])->group(function () {
         Route::post('auth/logout', [AdminAuthController::class, 'logout']);
         Route::get('analytics', [AdminAnalyticsController::class, 'index']);
         Route::get('revenue', [AdminAnalyticsController::class, 'revenue']);

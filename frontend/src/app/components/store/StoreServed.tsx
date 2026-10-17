@@ -31,7 +31,7 @@ export default function StoreServed() {
     error: fetchError,
     refresh,
     upsertOrder,
-  } = useBoothOrders(session?.token, { onUnauthorized: logoutStore });
+  } = useBoothOrders(Boolean(session), { onUnauthorized: logoutStore });
   const [filter, setFilter] = useState<Filter>('all');
   const [query, setQuery] = useState('');
   const [reverted, setReverted] = useState<string | null>(null);
@@ -67,14 +67,14 @@ export default function StoreServed() {
   ];
 
   const revert = async (order: BoothOrder) => {
-    if (!session?.token || busyRef.current) return;
+    if (!session || busyRef.current) return;
     busyRef.current = order.id;
     setBusyId(order.id);
     setActionError('');
     setReverted(null);
 
     try {
-      const updated = await unserveBoothOrder(session.token, order.id);
+      const updated = await unserveBoothOrder(undefined, order.id);
       upsertOrder(updated);
       setReverted(order.ticket_number);
     } catch (err) {

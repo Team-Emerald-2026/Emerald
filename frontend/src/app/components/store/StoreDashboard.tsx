@@ -25,7 +25,7 @@ export default function StoreDashboard() {
     calledOrders,
     loading: ordersLoading,
     error: ordersError,
-  } = useBoothOrders(session?.token, { onUnauthorized: logoutStore });
+  } = useBoothOrders(Boolean(session), { onUnauthorized: logoutStore });
   const [dashboard, setDashboard] = useState<BoothDashboard | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -38,7 +38,7 @@ export default function StoreDashboard() {
     setError('');
 
     const load = () =>
-      fetchBoothDashboard(session.token, abortController.signal)
+      fetchBoothDashboard(undefined, abortController.signal)
         .then((data) => {
           if (abortController.signal.aborted) return;
           if (!data) {

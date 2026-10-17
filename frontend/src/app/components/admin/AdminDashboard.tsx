@@ -27,7 +27,7 @@ export default function AdminDashboard() {
 
     setLoading(true);
     setError('');
-    fetchAdminAnalytics(adminSession?.token, controller.signal)
+    fetchAdminAnalytics(undefined, controller.signal)
       .then((data) => setAnalytics(data))
       .catch((err: unknown) => {
         if (controller.signal.aborted) return;
@@ -57,7 +57,7 @@ export default function AdminDashboard() {
     setResetting(true);
     setResetError('');
     try {
-      await resetAdminSales(adminSession?.token);
+      await resetAdminSales(undefined);
       closeReset();
       setResetDone(true);
       setReloadKey((key) => key + 1);

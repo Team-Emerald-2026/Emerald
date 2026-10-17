@@ -32,7 +32,7 @@ export default function AdminLogin() {
     setError('');
     try {
       const result = await loginAdmin(id.trim(), pw);
-      loginAdminSession(result.login_id, result.token);
+      loginAdminSession(result.login_id);
       navigate('/admin');
     } catch (e) {
       if (e instanceof ApiError && e.status === 401) {

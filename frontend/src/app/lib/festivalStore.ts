@@ -4,7 +4,7 @@ import { useSyncExternalStore } from 'react';
  * 京都TECH学園祭 — 簡易データストア
  *
  * ブラウザの localStorage に残すのは、次の「この端末だけの状態」だけ。
- * - 店舗ログイン／管理者ログインのセッション
+ * - 店舗ログイン／管理者ログインの表示状態（認証情報はHttpOnly Cookieが保持）
  * - 呼び出し画面で「大きく表示」している番号
  *
  * 注文（受付番号）・待ち人数・売上などは、すべてバックエンド API が正で、ここには持たない。
@@ -15,11 +15,9 @@ interface FestivalState {
   bigNumber: string | null; // 「大きく表示」対象の受付番号（この端末の表示だけ）
   session: {
     storeId: string;
-    token: string;
   } | null; // ログイン中の店舗セッション
   adminSession: {
     loginId: string;
-    token: string;
   } | null; // ログイン中の管理者セッション
 }
 
@@ -119,9 +117,9 @@ export function setBigNumber(number: string | null) {
   write({ ...s, bigNumber: number });
 }
 
-export function loginStore(storeId: string, token: string) {
+export function loginStore(storeId: string) {
   const s = read();
-  write({ ...s, session: { storeId, token } });
+  write({ ...s, session: { storeId } });
 }
 
 export function logoutStore() {
@@ -129,9 +127,9 @@ export function logoutStore() {
   write({ ...s, session: null, bigNumber: null });
 }
 
-export function loginAdminSession(loginId: string, token: string) {
+export function loginAdminSession(loginId: string) {
   const s = read();
-  write({ ...s, adminSession: { loginId, token } });
+  write({ ...s, adminSession: { loginId } });
 }
 
 export function logoutAdminSession() {

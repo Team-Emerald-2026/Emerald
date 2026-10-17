@@ -61,11 +61,11 @@ function toNumericId(order: BoothOrder): number {
  * - 前の取得が終わっていない間は、次の自動取得を飛ばす（通信が詰まらないように）
  */
 export function useBoothOrders(
-  token: string | undefined,
+  authenticated: boolean,
   options: UseBoothOrdersOptions = {},
 ): UseBoothOrdersResult {
   const { intervalMs = DEFAULT_INTERVAL_MS, enabled = true, onUnauthorized } = options;
-  const active = Boolean(token) && enabled;
+  const active = authenticated && enabled;
 
   const [orders, setOrders] = useState<BoothOrder[]>([]);
   const [loading, setLoading] = useState(active);
@@ -86,7 +86,7 @@ export function useBoothOrders(
   /** force が true のときは、取得中でも中断して取り直す */
   const load = useCallback(
     async (force: boolean) => {
-      if (!token || !enabled) return;
+      if (!authenticated || !enabled) return;
       if (!force && inFlightRef.current !== null) return;
 
       controllerRef.current?.abort();
@@ -96,7 +96,7 @@ export function useBoothOrders(
       inFlightRef.current = requestId;
 
       try {
-        const data = await fetchBoothOrders(token, controller.signal);
+        const data = await fetchBoothOrders(undefined, controller.signal);
         if (requestId !== requestIdRef.current) return;
         setOrders(data);
         setError(null);
@@ -115,7 +115,7 @@ export function useBoothOrders(
         }
       }
     },
-    [token, enabled],
+    [authenticated, enabled],
   );
 
   useEffect(() => {

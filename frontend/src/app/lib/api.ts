@@ -3,7 +3,6 @@ const DEFAULT_API_BASE = '/api';
 const apiBase = (import.meta.env.VITE_API_BASE_URL ?? DEFAULT_API_BASE).replace(/\/$/, '');
 
 export interface BoothLoginResponse {
-  token: string;
   store_id: string | null;
   role?: 'store' | 'admin';
 }
@@ -55,7 +54,6 @@ export interface BackendMenuItem {
 }
 
 export interface AdminLoginResponse {
-  token: string;
   role: 'admin';
   login_id: string;
 }
@@ -138,8 +136,31 @@ type RequestMethod = 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
 interface RequestOptions {
   method?: RequestMethod;
   signal?: AbortSignal;
+  /** 旧API呼び出しとの互換用。Cookie認証では使用しない。 */
   token?: string;
   body?: unknown;
+}
+
+let csrfCookiePromise: Promise<void> | null = null;
+
+function ensureCsrfCookie(): Promise<void> {
+  if (!csrfCookiePromise) {
+    const csrfCookieUrl = apiBase.startsWith('http')
+      ? `${new URL(apiBase).origin}/sanctum/csrf-cookie`
+      : '/sanctum/csrf-cookie';
+    csrfCookiePromise = fetch(csrfCookieUrl, {
+      credentials: 'include',
+      headers: { Accept: 'application/json' },
+    }).then((response) => {
+      if (!response.ok) {
+        throw new ApiError('CSRFトークンを取得できませんでした。', response.status);
+      }
+    }).catch((error) => {
+      csrfCookiePromise = null;
+      throw error;
+    });
+  }
+  return csrfCookiePromise;
 }
 
 export class ApiError extends Error {
@@ -189,13 +210,22 @@ function normalizeItem<T extends { id: string }>(payload: unknown): T | null {
 }
 
 async function request(path: string, options: RequestOptions = {}): Promise<unknown> {
-  const { method = 'GET', signal, token, body } = options;
+  const { method = 'GET', signal, body } = options;
   const headers: Record<string, string> = {
     Accept: 'application/json',
   };
 
-  if (token) {
-    headers.Authorization = `Bearer ${token}`;
+  if (method !== 'GET') {
+    await ensureCsrfCookie();
+    const xsrfToken = typeof document !== 'undefined'
+      ? document.cookie
+          .split('; ')
+          .find((cookie) => cookie.startsWith('XSRF-TOKEN='))
+          ?.slice('XSRF-TOKEN='.length)
+      : undefined;
+    if (xsrfToken) {
+      headers['X-XSRF-TOKEN'] = decodeURIComponent(xsrfToken);
+    }
   }
 
   const hasBody = body !== undefined;
@@ -206,6 +236,7 @@ async function request(path: string, options: RequestOptions = {}): Promise<unkn
   const response = await fetch(`${apiBase}${path}`, {
     method,
     headers,
+    credentials: 'include',
     body: hasBody ? JSON.stringify(body) : undefined,
     signal,
   });
@@ -276,7 +307,7 @@ export function loginAdmin(loginId: string, password: string, signal?: AbortSign
   }) as Promise<AdminLoginResponse>;
 }
 
-export function logoutBooth(token: string, signal?: AbortSignal) {
+export function logoutBooth(token: string | undefined, signal?: AbortSignal) {
   return request('/v1/booth/auth/logout', {
     method: 'POST',
     signal,
@@ -284,7 +315,7 @@ export function logoutBooth(token: string, signal?: AbortSignal) {
   });
 }
 
-export function logoutAdmin(token: string, signal?: AbortSignal) {
+export function logoutAdmin(token: string | undefined, signal?: AbortSignal) {
   return request('/v1/admin/auth/logout', {
     method: 'POST',
     signal,
@@ -292,20 +323,20 @@ export function logoutAdmin(token: string, signal?: AbortSignal) {
   });
 }
 
-export function fetchBoothDashboard(token: string, signal?: AbortSignal) {
+export function fetchBoothDashboard(token: string | undefined, signal?: AbortSignal) {
   return request('/v1/booth/dashboard', { signal, token }).then((payload) =>
     normalizeItem<BoothDashboard>(payload),
   );
 }
 
-export function fetchBoothMenuItems(token: string, signal?: AbortSignal) {
+export function fetchBoothMenuItems(token: string | undefined, signal?: AbortSignal) {
   return request('/v1/booth/accounting/menu-items', { signal, token }).then((payload) =>
     normalizeCollection<BackendMenuItem>(payload),
   );
 }
 
 export function createBoothMenuItem(
-  token: string,
+  token: string | undefined,
   input: { name: string; price: number },
   signal?: AbortSignal,
 ) {
@@ -324,7 +355,7 @@ export function createBoothMenuItem(
 }
 
 export function updateBoothMenuItem(
-  token: string,
+  token: string | undefined,
   id: string,
   input: { name: string; price: number },
   signal?: AbortSignal,
@@ -345,7 +376,7 @@ export function updateBoothMenuItem(
 
 /** 商品の売り切れを切り替える（売り切れ中もメニューには表示され、注文だけ止まる） */
 export function setBoothMenuItemSoldOut(
-  token: string,
+  token: string | undefined,
   id: number | string,
   isSoldOut: boolean,
   signal?: AbortSignal,
@@ -364,7 +395,7 @@ export function setBoothMenuItemSoldOut(
   });
 }
 
-export function deleteBoothMenuItem(token: string, id: string, signal?: AbortSignal) {
+export function deleteBoothMenuItem(token: string | undefined, id: string, signal?: AbortSignal) {
   return request(`/v1/booth/accounting/menu-items/${encodeURIComponent(String(id))}`, {
     method: 'DELETE',
     token,
@@ -497,13 +528,13 @@ export function resetAdminSales(token?: string, signal?: AbortSignal) {
   return request('/v1/admin/analytics', { method: 'DELETE', signal, token });
 }
 
-export function fetchAdminStore(token: string, id: string, signal?: AbortSignal) {
+export function fetchAdminStore(token: string | undefined, id: string, signal?: AbortSignal) {
   return request(`/v1/admin/stores/${encodeURIComponent(id)}`, { signal, token }).then((payload) =>
     isRecord(payload) ? (payload.data as AdminStore) : null,
   );
 }
 
-export function fetchAdminRevenue(token: string, signal?: AbortSignal) {
+export function fetchAdminRevenue(token: string | undefined, signal?: AbortSignal) {
   return request('/v1/admin/revenue', { signal, token }).then((payload) =>
     isRecord(payload) ? (payload.data as AdminRevenue) : null,
   );
@@ -689,13 +720,13 @@ export interface SalesEntryInput {
   recorded_at?: string;
 }
 
-export function fetchBoothSales(token: string, signal?: AbortSignal) {
+export function fetchBoothSales(token: string | undefined, signal?: AbortSignal) {
   return request('/v1/booth/sales', { signal, token }).then((payload) =>
     normalizeCollection<SalesEntry>(payload),
   );
 }
 
-export function createBoothSale(token: string, input: SalesEntryInput, signal?: AbortSignal) {
+export function createBoothSale(token: string | undefined, input: SalesEntryInput, signal?: AbortSignal) {
   return request('/v1/booth/sales', {
     method: 'POST',
     token,
@@ -705,7 +736,7 @@ export function createBoothSale(token: string, input: SalesEntryInput, signal?: 
 }
 
 export function updateBoothSale(
-  token: string,
+  token: string | undefined,
   id: string,
   input: SalesEntryInput,
   signal?: AbortSignal,
@@ -718,7 +749,7 @@ export function updateBoothSale(
   }).then((payload) => normalizeItem<SalesEntry>(payload));
 }
 
-export function deleteBoothSale(token: string, id: string, signal?: AbortSignal) {
+export function deleteBoothSale(token: string | undefined, id: string, signal?: AbortSignal) {
   return request(`/v1/booth/sales/${encodeURIComponent(id)}`, {
     method: 'DELETE',
     token,
@@ -732,7 +763,7 @@ export function deleteBoothSale(token: string, id: string, signal?: AbortSignal)
  * - current_queue_count: 待ち人数をその値にそろえる（current_queue_delta とは同時に送れない）
  */
 export function updateWaitTime(
-  token: string,
+  token: string | undefined,
   input: {
     current_wait_min?: number;
     current_queue_count?: number;
@@ -820,7 +851,7 @@ function toBoothOrder(payload: unknown, errorMessage: string): BoothOrder {
 }
 
 export function fetchBoothOrders(
-  token: string,
+  token: string | undefined,
   signal?: AbortSignal,
   status?: BoothOrderStatus,
 ) {
@@ -833,7 +864,7 @@ export function fetchBoothOrders(
   );
 }
 
-export function createBoothOrder(token: string, input: BoothOrderInput, signal?: AbortSignal) {
+export function createBoothOrder(token: string | undefined, input: BoothOrderInput, signal?: AbortSignal) {
   return request('/v1/booth/accounting/orders', {
     method: 'POST',
     token,
@@ -842,7 +873,7 @@ export function createBoothOrder(token: string, input: BoothOrderInput, signal?:
   }).then((payload) => toBoothOrder(payload, '注文を登録できませんでした。'));
 }
 
-export function callBoothOrder(token: string, orderId: number | string, signal?: AbortSignal) {
+export function callBoothOrder(token: string | undefined, orderId: number | string, signal?: AbortSignal) {
   return request(`/v1/booth/accounting/orders/${encodeURIComponent(String(orderId))}/call`, {
     method: 'PATCH',
     token,
@@ -850,7 +881,7 @@ export function callBoothOrder(token: string, orderId: number | string, signal?:
   }).then((payload) => toBoothOrder(payload, '呼び出しに失敗しました。'));
 }
 
-export function serveBoothOrder(token: string, orderId: number | string, signal?: AbortSignal) {
+export function serveBoothOrder(token: string | undefined, orderId: number | string, signal?: AbortSignal) {
   return request(`/v1/booth/accounting/orders/${encodeURIComponent(String(orderId))}/serve`, {
     method: 'PATCH',
     token,
@@ -887,7 +918,7 @@ export function describeOrderError(error: unknown, fallback: string): string {
 }
 
 /** 提供済みを取り消して、提供待ちに戻す（待ち人数も戻る） */
-export function unserveBoothOrder(token: string, orderId: number | string, signal?: AbortSignal) {
+export function unserveBoothOrder(token: string | undefined, orderId: number | string, signal?: AbortSignal) {
   return request(`/v1/booth/accounting/orders/${encodeURIComponent(String(orderId))}/unserve`, {
     method: 'PATCH',
     token,
@@ -896,7 +927,7 @@ export function unserveBoothOrder(token: string, orderId: number | string, signa
 }
 
 /** 提供前の注文（提供待ち・呼び出し中）をキャンセルする。待ち人数は1人分減り、売上から外れる */
-export function cancelBoothOrder(token: string, orderId: number | string, signal?: AbortSignal) {
+export function cancelBoothOrder(token: string | undefined, orderId: number | string, signal?: AbortSignal) {
   return request(`/v1/booth/accounting/orders/${encodeURIComponent(String(orderId))}/cancel`, {
     method: 'PATCH',
     token,
@@ -919,7 +950,7 @@ export interface StoreProfile {
   disabled_ticket_numbers?: number[];
 }
 
-export function fetchStoreProfile(token: string, signal?: AbortSignal): Promise<StoreProfile> {
+export function fetchStoreProfile(token: string | undefined, signal?: AbortSignal): Promise<StoreProfile> {
   return fetchBoothDashboard(token, signal).then((payload) => {
     if (!payload) {
       throw new Error('店舗情報を取得できませんでした。');
@@ -929,7 +960,7 @@ export function fetchStoreProfile(token: string, signal?: AbortSignal): Promise<
 }
 
 export function updateStoreProfile(
-  token: string,
+  token: string | undefined,
   storeId: string,
   input: {
     name: string;
