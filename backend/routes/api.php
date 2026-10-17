@@ -5,8 +5,10 @@ use App\Http\Controllers\Api\V1\Admin\AdminAuthController;
 use App\Http\Controllers\Api\V1\Admin\AdminAnalyticsController;
 use App\Http\Controllers\Api\V1\Admin\AdminEventController;
 use App\Http\Controllers\Api\V1\Admin\AdminMapFacilityController;
+use App\Http\Controllers\Api\V1\Admin\AdminFestivalDayController;
 use App\Http\Controllers\Api\V1\Admin\AdminStoreController;
 use App\Http\Controllers\Api\V1\CallNumber\CallNumberController;
+use App\Http\Controllers\Api\V1\FestivalDayController;
 use App\Http\Controllers\Api\V1\Event\EventController;
 use App\Http\Controllers\Api\V1\Event\TickerController;
 use App\Http\Controllers\Api\V1\Map\FacilityController;
@@ -36,6 +38,7 @@ Route::prefix('v1')->group(function () {
     Route::get('restaurants/{id}', [StoreController::class, 'show']);
     Route::get('call-numbers', [CallNumberController::class, 'index']);
     Route::get('monitor/call-numbers', [MonitorCallNumberController::class, 'index']);
+    Route::get('festival-day', [FestivalDayController::class, 'show']);
     Route::get('events', [EventController::class, 'index']);
     Route::get('events/{id}', [EventController::class, 'show']);
     Route::get('ticker', [TickerController::class, 'index']);
@@ -91,6 +94,8 @@ Route::prefix('v1/admin')->group(function () {
         Route::patch('stores/{id}/wait-time', [AdminStoreController::class, 'updateWaitTime']);
         Route::delete('stores/{id}', [AdminStoreController::class, 'destroy']);
         Route::delete('stores/{id}/permanent', [AdminStoreController::class, 'forceDestroy']);
+        Route::get('festival-day', [AdminFestivalDayController::class, 'show']);
+        Route::patch('festival-day', [AdminFestivalDayController::class, 'update']);
         Route::get('map/facilities', [AdminMapFacilityController::class, 'index']);
         Route::post('map/facilities', [AdminMapFacilityController::class, 'store']);
         Route::patch('map/facilities/{id}', [AdminMapFacilityController::class, 'update'])->whereNumber('id');

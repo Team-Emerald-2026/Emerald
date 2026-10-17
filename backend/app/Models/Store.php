@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
@@ -29,6 +30,7 @@ class Store extends Model
         'disabled_ticket_numbers',
         'is_open',
         'is_visible',
+        'exhibition_day',
         'show_on_monitor',
         'current_wait_min',
         'current_queue_count',
@@ -65,6 +67,21 @@ class Store extends Model
     public function salesEntries(): HasMany
     {
         return $this->hasMany(SalesEntry::class, 'store_id');
+    }
+
+    /** 今日の出展日（day1/day2）に合う店舗だけに絞る。both も含む */
+    public function scopeForCurrentFestivalDay(Builder $query, ?string $day = null): Builder
+    {
+        if (! Schema::hasColumn($this->getTable(), 'exhibition_day')) {
+            return $query;
+        }
+
+        $current = $day ?? FestivalSetting::currentDay();
+
+        return $query->where(function (Builder $inner) use ($current) {
+            $inner->where('exhibition_day', $current)
+                ->orWhere('exhibition_day', FestivalSetting::DAY_BOTH);
+        });
     }
 
     /** 本番でマイグレーション未適用でも、整理券の既定を20にし、旧既定の50を直す */

@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Clock, MapPin } from 'lucide-react';
-import { fetchEvents, type EventNotice } from '../lib/api';
+import { fetchEvents, fetchFestivalDay, type EventNotice } from '../lib/api';
 import {
   EVENT_DAYS,
   buildTimetableRows,
@@ -10,6 +10,7 @@ import {
   eventLocationLabel,
   eventLocationMapPath,
   eventTimeRangeLabel,
+  festivalDayToEventKey,
   getEventDay,
   minutesToTime,
   noticeTimeRangeLabel,
@@ -79,6 +80,7 @@ export default function Events() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [dayKey, setDayKey] = useState<EventDayKey>(defaultDayKey);
+  const [todayKey, setTodayKey] = useState<EventDayKey | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -99,6 +101,19 @@ export default function Events() {
     return () => controller.abort();
   }, []);
 
+  useEffect(() => {
+    const controller = new AbortController();
+    fetchFestivalDay(controller.signal)
+      .then((current) => {
+        if (controller.signal.aborted) return;
+        setTodayKey(festivalDayToEventKey(current));
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setTodayKey(null);
+      });
+    return () => controller.abort();
+  }, []);
+
   const classified = useMemo(() => items.map(classifyItem), [items]);
   const rows = useMemo(() => buildTimetableRows(classified, dayKey), [classified, dayKey]);
   const notices = useMemo(() => noticesForDay(classified, dayKey), [classified, dayKey]);
@@ -113,7 +128,7 @@ export default function Events() {
         </p>
       </div>
 
-      <EventDayTabs value={dayKey} onChange={setDayKey} />
+      <EventDayTabs value={dayKey} todayKey={todayKey} onChange={setDayKey} />
 
       {error && (
         <p className="rounded-xl border border-border bg-card p-4 text-sm" style={{ color: 'var(--busy)' }}>

@@ -1,7 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import type { AdminMapFacility, AdminStore, AdminStoreInput } from '../../lib/api';
+import type { AdminMapFacility, AdminStore, AdminStoreInput, ExhibitionDay } from '../../lib/api';
 import { facilityTypeOptions, PLACE_ONLY_TYPES } from '../../lib/campusMap';
+
+const EXHIBITION_DAY_OPTIONS: { value: ExhibitionDay; label: string }[] = [
+  { value: 'both', label: '両日' },
+  { value: 'day1', label: '10月24日(土)のみ' },
+  { value: 'day2', label: '10月25日(日)のみ' },
+];
 
 interface Props {
   store: AdminStore | null;
@@ -26,6 +32,7 @@ const emptyInput: AdminStoreInput = {
   map_y: 15,
   login_id: '',
   password: '',
+  exhibition_day: 'both',
   is_open: true,
   is_visible: true,
   show_on_monitor: false,
@@ -77,6 +84,7 @@ export default function AdminStoreForm({
       map_y: store.map_y ?? 50,
       login_id: store.login_id ?? '',
       password: '',
+      exhibition_day: store.exhibition_day ?? 'both',
       is_open: store.is_open,
       is_visible: store.is_visible,
       show_on_monitor: Boolean(store.show_on_monitor),
@@ -116,10 +124,13 @@ export default function AdminStoreForm({
           floor: place.floor,
           x: place.x,
           y: place.y,
+          // 日替わりブースは同じ場所を共有できるので、使用中でも選べる
           label: `${place.floor}F ${place.name}${
-            usedByOther ? `（使用中: ${usedByOther.store_name ?? usedByOther.store_id}）` : ''
+            usedByOther
+              ? `（他店舗あり: ${usedByOther.store_name ?? usedByOther.store_id}／日替わり可）`
+              : ''
           }`,
-          disabled: Boolean(usedByOther),
+          disabled: false,
         };
       });
   }, [locations, store?.id]);
@@ -187,6 +198,23 @@ export default function AdminStoreForm({
               </option>
             ))}
           </select>
+        </label>
+        <label className="text-sm">
+          <span className="mb-1 block text-muted-foreground">出展日</span>
+          <select
+            value={input.exhibition_day}
+            onChange={(event) => update('exhibition_day', event.target.value as ExhibitionDay)}
+            className="w-full rounded-lg border border-input bg-background px-3 py-2.5 text-foreground outline-none"
+          >
+            {EXHIBITION_DAY_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+          <span className="mt-1 block text-xs text-muted-foreground">
+            同じ場所（例: 604）を日替わりで使う場合は、店舗を2つ作り出展日を分けます。
+          </span>
         </label>
         <label className="sm:col-span-2 text-sm">
           <span className="mb-1 block text-muted-foreground">説明</span>

@@ -145,7 +145,8 @@ export default function Home() {
       fetchRestaurants(controller.signal),
       fetchMapFacilities(controller.signal),
     ])
-      .then(([stores, facilities]) => {
+      .then(([restaurantResult, facilities]) => {
+        const stores = restaurantResult.stores;
         const facilityByStoreId = new Map(facilities.map((facility) => [facility.store_id, facility]));
         const nextBooths = stores
           .filter((store) => store.is_open)

@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\V1\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Http\Resources\Booth\WaitTimeResource;
+use App\Models\FestivalSetting;
 use App\Models\MapFacilities;
 use App\Models\MenuItem;
 use App\Models\Order;
@@ -92,6 +93,7 @@ class AdminStoreController extends Controller
             'map_y' => ['required', 'integer', 'min:0', 'max:100'],
             'login_id' => ['required', 'string', 'max:255', 'unique:users,login_id'],
             'password' => ['required', 'string', 'min:8'],
+            'exhibition_day' => ['sometimes', 'string', Rule::in(FestivalSetting::allowedExhibitionDays())],
             'is_open' => ['sometimes', 'boolean'],
             'show_on_monitor' => ['sometimes', 'boolean'],
             'current_wait_min' => ['sometimes', 'integer', 'min:0'],
@@ -110,6 +112,9 @@ class AdminStoreController extends Controller
                 'current_wait_min' => $validated['current_wait_min'] ?? 5,
                 'current_queue_count' => $validated['current_queue_count'] ?? 0,
             ];
+            if (Schema::hasColumn('stores', 'exhibition_day')) {
+                $attributes['exhibition_day'] = $validated['exhibition_day'] ?? FestivalSetting::DAY_BOTH;
+            }
             if (Schema::hasColumn('stores', 'show_on_monitor')) {
                 $attributes['show_on_monitor'] = $validated['show_on_monitor'] ?? false;
             }
@@ -165,6 +170,7 @@ class AdminStoreController extends Controller
                 Rule::unique('users', 'login_id')->ignore($storeUser?->id),
             ],
             'password' => ['nullable', 'string', 'min:8'],
+            'exhibition_day' => ['required', 'string', Rule::in(FestivalSetting::allowedExhibitionDays())],
             'is_open' => ['required', 'boolean'],
             'is_visible' => ['required', 'boolean'],
             'show_on_monitor' => ['required', 'boolean'],
@@ -181,6 +187,9 @@ class AdminStoreController extends Controller
                 'current_wait_min' => $validated['current_wait_min'],
                 'current_queue_count' => $validated['current_queue_count'],
             ];
+            if (Schema::hasColumn('stores', 'exhibition_day')) {
+                $attributes['exhibition_day'] = $validated['exhibition_day'];
+            }
             Store::ensureShowOnMonitorColumn();
             $attributes['show_on_monitor'] = $validated['show_on_monitor'];
 
@@ -377,6 +386,7 @@ class AdminStoreController extends Controller
             'map_x' => (int) ($facility?->x ?? 50),
             'map_y' => (int) ($facility?->y ?? 50),
             'ticket_prefix' => $store->ticket_prefix,
+            'exhibition_day' => $store->exhibition_day ?? FestivalSetting::DAY_BOTH,
             'is_open' => (bool) $store->is_open,
             'is_visible' => (bool) $store->is_visible,
             'show_on_monitor' => (bool) ($store->show_on_monitor ?? false),

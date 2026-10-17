@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\V1\Monitor;
 
 use App\Http\Controllers\Controller;
+use App\Models\FestivalSetting;
 use App\Models\MapFacilities;
 use App\Models\Order;
 use App\Models\Store;
@@ -13,9 +14,11 @@ class MonitorCallNumberController extends Controller
 {
     public function index()
     {
+        $currentDay = FestivalSetting::currentDay();
+
         // モニターは全員が同じ内容を見るため、短時間キャッシュが特に効く
         // （秒数は config/cache.php の api_list_ttl。0でキャッシュ無効）
-        $data = Cache::remember('api:v1:monitor:call-numbers', config('cache.api_list_ttl'), function () {
+        $data = Cache::remember('api:v1:monitor:call-numbers:'.$currentDay, config('cache.api_list_ttl'), function () {
             return $this->buildPayload();
         });
 
@@ -33,6 +36,7 @@ class MonitorCallNumberController extends Controller
                 fn ($query) => $query->where('is_open', true),
             )
             ->when(Schema::hasColumn('stores', 'is_visible'), fn ($query) => $query->where('is_visible', true))
+            ->forCurrentFestivalDay()
             ->with('mapFacility')
             ->orderBy('id')
             ->get();

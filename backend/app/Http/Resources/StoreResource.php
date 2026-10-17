@@ -15,6 +15,7 @@ class StoreResource extends JsonResource
             'description' => $this->description,
             'is_open' => (bool) $this->is_open,
             'is_visible' => (bool) ($this->is_visible ?? true),
+            'exhibition_day' => $this->exhibition_day ?? 'both',
             // 1人当たりの待ち時間（分）
             'current_wait_min' => (int) $this->current_wait_min,
             'current_queue_count' => (int) $this->current_queue_count,

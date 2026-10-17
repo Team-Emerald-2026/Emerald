@@ -13,8 +13,14 @@ import {
   DoorOpen,
   type LucideIcon,
 } from 'lucide-react';
-import { fetchMapFacilities, type BackendMapFacility } from '../lib/api';
+import { fetchFestivalDay, fetchMapFacilities, type BackendMapFacility } from '../lib/api';
 import { floors, mapImageByFloor, type MapFloor } from '../lib/campusMap';
+import {
+  eventKeyToFestivalDay,
+  festivalDayToEventKey,
+  type EventDayKey,
+} from '../lib/eventSchedule';
+import EventDayTabs from './EventDayTabs';
 
 // 管理画面で選べるのは 体験 / フード / 作品展示 / 案内 / 金券販売 / 運営サポート / 男子トイレ / 女子トイレ / 男女トイレ /
 // 自販機 / 非常口 の11個。救護室は、以前に登録された場所を表示するためだけに残している。
@@ -186,16 +192,39 @@ export default function CampusMap() {
       : '1F';
   const [floor, setFloor] = useState<MapFloor>(initialFloor);
   const [type, setType] = useState<'すべて' | BoothType>('すべて');
+  const [dayKey, setDayKey] = useState<EventDayKey | null>(null);
+  const [todayKey, setTodayKey] = useState<EventDayKey | null>(null);
   const [facilities, setFacilities] = useState<Facility[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [clickPos, setClickPos] = useState<{ x: number; y: number } | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
+    fetchFestivalDay(controller.signal)
+      .then((current) => {
+        if (controller.signal.aborted) return;
+        const key = festivalDayToEventKey(current);
+        setTodayKey(key);
+        setDayKey((prev) => prev ?? key);
+      })
+      .catch(() => {
+        if (controller.signal.aborted) return;
+        const fallback = festivalDayToEventKey('day1');
+        setTodayKey(fallback);
+        setDayKey((prev) => prev ?? fallback);
+      });
+    return () => controller.abort();
+  }, []);
 
-    fetchMapFacilities(controller.signal)
+  useEffect(() => {
+    if (!dayKey) return;
+
+    const controller = new AbortController();
+
+    fetchMapFacilities(controller.signal, eventKeyToFestivalDay(dayKey))
       .then((backendFacilities) => {
         setFacilities(backendFacilities.map(toFacility));
+        setError(null);
       })
       .catch((err: unknown) => {
         if (err instanceof DOMException && err.name === 'AbortError') return;
@@ -203,7 +232,7 @@ export default function CampusMap() {
       });
 
     return () => controller.abort();
-  }, []);
+  }, [dayKey]);
 
   const displayFacilities = useMemo(() => {
     const unique: Record<string, Facility> = Object.create(null);
@@ -315,6 +344,17 @@ export default function CampusMap() {
   return (
     <div className="space-y-3 p-4">
       <h1 className="font-display text-2xl font-bold text-foreground">{campusMap.name}</h1>
+
+      {dayKey && (
+        <EventDayTabs
+          value={dayKey}
+          todayKey={todayKey}
+          onChange={(next) => {
+            setDayKey(next);
+            setType('すべて');
+          }}
+        />
+      )}
 
       {error && (
         <div className="rounded-2xl border border-border bg-card p-6 text-center text-sm text-muted-foreground">
