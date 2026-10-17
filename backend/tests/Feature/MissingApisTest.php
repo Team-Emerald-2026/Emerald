@@ -207,6 +207,28 @@ class MissingApisTest extends TestCase
             ->assertJsonPath('data.0.waiting_numbers.0', 'C-121');
     }
 
+    public function test_admin_can_toggle_store_monitor_display(): void
+    {
+        $store = $this->createStore();
+        Sanctum::actingAs($this->createAdmin());
+
+        $this->patchJson("/api/v1/admin/stores/{$store->id}/monitor", [
+            'show_on_monitor' => true,
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.show_on_monitor', true);
+
+        $this->assertTrue($store->refresh()->show_on_monitor);
+
+        $this->patchJson("/api/v1/admin/stores/{$store->id}/monitor", [
+            'show_on_monitor' => false,
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.show_on_monitor', false);
+
+        $this->assertFalse($store->refresh()->show_on_monitor);
+    }
+
     public function test_monitor_excludes_stores_not_marked_for_display(): void
     {
         $hidden = $this->createStore('store-101', ['show_on_monitor' => false]);

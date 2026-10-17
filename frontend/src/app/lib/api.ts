@@ -376,7 +376,12 @@ export function deleteBoothMenuItem(token: string, id: string, signal?: AbortSig
 
 export function fetchAdminStores(token?: string, signal?: AbortSignal) {
   return request('/v1/admin/stores', { signal, token }).then((payload) => {
-    if (isRecord(payload) && Array.isArray(payload.data)) return payload.data as AdminStore[];
+    if (isRecord(payload) && Array.isArray(payload.data)) {
+      return (payload.data as AdminStore[]).map((store) => ({
+        ...store,
+        show_on_monitor: Boolean(store.show_on_monitor),
+      }));
+    }
     return [];
   });
 }
@@ -402,6 +407,20 @@ export function updateAdminStore(
     token,
     body: input,
   }).then((payload) => (isRecord(payload) ? payload.data as AdminStore : null));
+}
+
+export function updateAdminStoreMonitor(
+  token: string | undefined,
+  id: string,
+  showOnMonitor: boolean,
+  signal?: AbortSignal,
+) {
+  return request(`/v1/admin/stores/${encodeURIComponent(id)}/monitor`, {
+    method: 'PATCH',
+    signal,
+    token,
+    body: { show_on_monitor: showOnMonitor },
+  }).then((payload) => (isRecord(payload) ? (payload.data as AdminStore) : null));
 }
 
 export function hideAdminStore(token: string | undefined, id: string, signal?: AbortSignal) {

@@ -170,7 +170,7 @@ class AdminStoreController extends Controller
             'password' => ['nullable', 'string', 'min:8'],
             'is_open' => ['required', 'boolean'],
             'is_visible' => ['required', 'boolean'],
-            'show_on_monitor' => ['sometimes', 'boolean'],
+            'show_on_monitor' => ['required', 'boolean'],
             'current_wait_min' => ['required', 'integer', 'min:0'],
             'current_queue_count' => ['required', 'integer', 'min:0'],
         ]);
@@ -187,9 +187,7 @@ class AdminStoreController extends Controller
                 'current_wait_min' => $validated['current_wait_min'],
                 'current_queue_count' => $validated['current_queue_count'],
             ];
-            if (Schema::hasColumn('stores', 'show_on_monitor')) {
-                $attributes['show_on_monitor'] = $validated['show_on_monitor'] ?? $store->show_on_monitor;
-            }
+            $attributes['show_on_monitor'] = $validated['show_on_monitor'];
 
             $store->fill($attributes);
             $store->save();
@@ -217,6 +215,31 @@ class AdminStoreController extends Controller
         });
 
         return response()->json(['data' => $result], 200, [], JSON_UNESCAPED_UNICODE);
+    }
+
+    public function updateMonitor(Request $request, string $id)
+    {
+        $this->authorizeAdmin($request);
+
+        $store = Store::query()->findOrFail($id);
+        $validated = $request->validate([
+            'show_on_monitor' => ['required', 'boolean'],
+        ]);
+
+        $store->fill([
+            'show_on_monitor' => $validated['show_on_monitor'],
+        ]);
+        $store->save();
+
+        $user = User::query()
+            ->where('role', 'store')
+            ->where('store_id', $store->id)
+            ->first();
+        $facility = MapFacilities::query()->where('store_id', $store->id)->first();
+
+        return response()->json([
+            'data' => $this->serializeStore($store->refresh(), $user, null, $facility),
+        ], 200, [], JSON_UNESCAPED_UNICODE);
     }
 
     public function updateWaitTime(Request $request, string $id)

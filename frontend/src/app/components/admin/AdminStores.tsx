@@ -10,6 +10,7 @@ import {
   fetchAdminStores,
   hideAdminStore,
   updateAdminStore,
+  updateAdminStoreMonitor,
   type AdminMapFacility,
   type AdminStore,
   type AdminStoreInput,
@@ -134,21 +135,25 @@ export default function AdminStores() {
   const toggleMonitor = async (store: AdminStore) => {
     if ((!adminSession && !ADMIN_PUBLIC_ACCESS) || saving) return;
 
+    const next = !store.show_on_monitor;
     setSaving(true);
     setError('');
     setMessage('');
     try {
-      await updateAdminStore(
-        adminSession?.token,
-        store.id,
-        toStoreInput(store, { show_on_monitor: !store.show_on_monitor }),
+      const updated = await updateAdminStoreMonitor(adminSession?.token, store.id, next);
+      const shown = Boolean(updated?.show_on_monitor);
+      if (!updated || shown !== next) {
+        setError('モニター表示の更新に失敗しました。');
+        return;
+      }
+      setStores((current) =>
+        current.map((item) => (item.id === updated.id ? { ...item, ...updated, show_on_monitor: shown } : item)),
       );
       setMessage(
-        store.show_on_monitor
-          ? `${store.name} を校内モニターで非表示にしました。`
-          : `${store.name} を校内モニターに表示しました。`,
+        shown
+          ? `${store.name} を校内モニターに表示しました。`
+          : `${store.name} を校内モニターで非表示にしました。`,
       );
-      await loadStores();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'モニター表示の更新に失敗しました。');
     } finally {

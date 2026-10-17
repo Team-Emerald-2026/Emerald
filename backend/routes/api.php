@@ -87,6 +87,7 @@ Route::prefix('v1/admin')->group(function () {
         Route::post('stores', [AdminStoreController::class, 'store']);
         Route::get('stores/{id}', [AdminStoreController::class, 'show']);
         Route::patch('stores/{id}', [AdminStoreController::class, 'update']);
+        Route::patch('stores/{id}/monitor', [AdminStoreController::class, 'updateMonitor']);
         Route::patch('stores/{id}/wait-time', [AdminStoreController::class, 'updateWaitTime']);
         Route::delete('stores/{id}', [AdminStoreController::class, 'destroy']);
         Route::delete('stores/{id}/permanent', [AdminStoreController::class, 'forceDestroy']);
