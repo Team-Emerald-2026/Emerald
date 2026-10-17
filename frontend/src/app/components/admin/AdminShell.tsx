@@ -23,7 +23,7 @@ export default function AdminShell({
   const navigate = useNavigate();
 
   if (!adminSession && !ADMIN_PUBLIC_ACCESS) {
-    return <Navigate to="/store/login" replace />;
+    return <Navigate to="/admin/login" replace />;
   }
 
   const logout = () => {
@@ -35,7 +35,7 @@ export default function AdminShell({
       });
     }
     logoutAdminSession();
-    navigate(ADMIN_PUBLIC_ACCESS ? '/' : '/store/login');
+    navigate(ADMIN_PUBLIC_ACCESS ? '/' : '/admin/login');
   };
 
   return (

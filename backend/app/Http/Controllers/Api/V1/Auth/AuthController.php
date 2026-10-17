@@ -17,7 +17,10 @@ class AuthController extends Controller
             'password' => ['required'],
         ]);
 
-        $user = User::where('login_id', $request->login_id)->first();
+        $user = User::query()
+            ->where('login_id', $request->login_id)
+            ->where('role', 'store')
+            ->first();
 
         if (!$user || !Hash::check($request->password, $user->password)) {
             throw new AuthenticationException();
