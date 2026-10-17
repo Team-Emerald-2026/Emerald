@@ -149,7 +149,6 @@ function StorePanel({ entry }: { entry: MonitorCallNumber | null }) {
   }
 
   const calledNumbers = Array.isArray(entry.called_numbers) ? entry.called_numbers : [];
-  const latest = entry.current_call_number;
 
   return (
     <section className="flex min-h-0 flex-col rounded-3xl border border-[#243831] bg-[#121d19] p-6">
@@ -163,21 +162,14 @@ function StorePanel({ entry }: { entry: MonitorCallNumber | null }) {
         <div className="flex flex-1 flex-col justify-center">
           <p className="text-center text-lg text-[#93a39b]">お呼び出し中</p>
           <ul className="mt-4 flex flex-wrap items-center justify-center gap-3">
-            {calledNumbers.map((number) => {
-              const isLatest = number === latest;
-              return (
-                <li
-                  key={number}
-                  className={
-                    isLatest
-                      ? 'rounded-3xl bg-[#2bc79a] px-6 py-2 font-display text-7xl font-bold text-[#06241b]'
-                      : 'rounded-2xl bg-[#18241f] px-4 py-2 font-display text-5xl font-bold text-[#e8efec]'
-                  }
-                >
-                  {number}
-                </li>
-              );
-            })}
+            {calledNumbers.map((number) => (
+              <li
+                key={number}
+                className="rounded-3xl bg-[#2bc79a] px-6 py-2 font-display text-7xl font-bold text-[#06241b]"
+              >
+                {number}
+              </li>
+            ))}
           </ul>
         </div>
       )}
