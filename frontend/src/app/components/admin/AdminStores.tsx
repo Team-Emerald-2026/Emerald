@@ -31,7 +31,6 @@ function toStoreInput(store: AdminStore, overrides: Partial<AdminStoreInput> = {
     floor: store.floor,
     map_x: store.map_x,
     map_y: store.map_y,
-    ticket_prefix: store.ticket_prefix ?? '',
     is_open: store.is_open,
     is_visible: store.is_visible,
     show_on_monitor: Boolean(store.show_on_monitor),
@@ -287,7 +286,7 @@ export default function AdminStores() {
                   </div>
                   <p className="mt-1 text-sm text-muted-foreground">{store.description}</p>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    ID: {store.id} / ログインID: {store.login_id ?? '未設定'} / 受付番号の頭文字: {store.ticket_prefix ?? '未設定'}
+                    ID: {store.id} / ログインID: {store.login_id ?? '未設定'}
                   </p>
                   <p className="mt-1 text-xs text-muted-foreground">
                     種類: {typeLabel(store.type)} / 位置: {locationLabel(store)}

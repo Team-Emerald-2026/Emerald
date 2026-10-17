@@ -24,7 +24,6 @@ const emptyInput: AdminStoreInput = {
   floor: 1,
   map_x: 46,
   map_y: 15,
-  ticket_prefix: '',
   login_id: '',
   password: '',
   is_open: true,
@@ -76,7 +75,6 @@ export default function AdminStoreForm({
       floor: store.floor ?? 1,
       map_x: store.map_x ?? 50,
       map_y: store.map_y ?? 50,
-      ticket_prefix: store.ticket_prefix ?? '',
       login_id: store.login_id ?? '',
       password: '',
       is_open: store.is_open,
@@ -189,18 +187,6 @@ export default function AdminStoreForm({
               </option>
             ))}
           </select>
-        </label>
-        <label className="text-sm">
-          <span className="mb-1 block text-muted-foreground">受付番号の頭文字（英数字）</span>
-          <input
-            value={input.ticket_prefix}
-            onChange={(event) => update('ticket_prefix', event.target.value.toUpperCase())}
-            placeholder="例: Y"
-            className="w-full rounded-lg border border-input bg-background px-3 py-2.5 text-foreground outline-none"
-          />
-          <span className="mt-1 block text-xs text-muted-foreground">
-            受付番号が「{input.ticket_prefix || 'Y'}-101」のようになります。空欄なら自動で決まります。
-          </span>
         </label>
         <label className="sm:col-span-2 text-sm">
           <span className="mb-1 block text-muted-foreground">説明</span>

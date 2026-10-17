@@ -151,7 +151,7 @@ export default function AdminDashboard() {
         <h2 className="font-display text-lg font-bold text-foreground">売上データのリセット</h2>
         <p className="mt-1 text-sm text-muted-foreground">
           本番前に、テストで入れた会計・売上をすべて消して 0 に戻します。店舗・メニュー・ログイン情報は消えません。
-          各店舗の待ち人数も 0 に戻り、受取番号は C-101 から振り直されます。
+          各店舗の待ち人数も 0 に戻り、受取番号は 1 から振り直されます。
         </p>
 
         {resetDone && !resetOpen && (

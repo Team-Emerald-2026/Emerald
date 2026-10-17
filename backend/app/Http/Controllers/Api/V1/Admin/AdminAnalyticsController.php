@@ -132,7 +132,7 @@ class AdminAnalyticsController extends Controller
                 SalesEntry::query()->delete();
             }
 
-            // 受付番号を C-101 から振り直せるようにする
+            // 受付番号を 1 から振り直せるようにする
             if (Schema::hasTable('ticket_counters')) {
                 DB::table('ticket_counters')->delete();
             }

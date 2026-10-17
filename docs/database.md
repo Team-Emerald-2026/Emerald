@@ -22,7 +22,7 @@ stores
 - id
 - name
 - description
-- ticket_prefix
+- ticket_prefix（未使用。互換のため残置。新規発番では使わない）
 - is_open
 - current_wait_min
 - current_queue_count
@@ -123,9 +123,9 @@ ticket_counters
 - updated_at
 
 運用メモ：
-- 初回利用時は各店舗の prefix で `PREFIX-101` が採番されます（例: `C-101`）。
+- 初回利用時は `1` から採番されます（数字だけ）。
 - カウンタは各店舗単位で管理され、DB トランザクションと行ロックで安全に更新されます。
-- 既存 orders がある場合は、その prefix の最大値から続けます。
+- 1〜枚数を使い回し、提供前の注文や非表示番号は飛ばします。
 
 #### テーブル名：
 order_items

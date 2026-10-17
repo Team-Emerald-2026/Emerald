@@ -15,7 +15,6 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Schema;
-use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
 class AdminStoreController extends Controller
@@ -90,7 +89,6 @@ class AdminStoreController extends Controller
             'floor' => ['required', 'integer', 'min:1', 'max:8'],
             'map_x' => ['required', 'integer', 'min:0', 'max:100'],
             'map_y' => ['required', 'integer', 'min:0', 'max:100'],
-            'ticket_prefix' => ['nullable', 'string', 'max:16', 'unique:stores,ticket_prefix'],
             'login_id' => ['required', 'string', 'max:255', 'unique:users,login_id'],
             'password' => ['required', 'string', 'min:8'],
             'is_open' => ['sometimes', 'boolean'],
@@ -104,7 +102,8 @@ class AdminStoreController extends Controller
                 'id' => $validated['id'],
                 'name' => $validated['name'],
                 'description' => $validated['description'],
-                'ticket_prefix' => $this->makeTicketPrefix($validated['ticket_prefix'] ?? $validated['name']),
+                // 受付番号は数字だけにしたので、頭文字は使わない
+                'ticket_prefix' => null,
                 'is_open' => $validated['is_open'] ?? true,
                 'is_visible' => true,
                 'current_wait_min' => $validated['current_wait_min'] ?? 5,
@@ -155,12 +154,6 @@ class AdminStoreController extends Controller
             'floor' => ['required', 'integer', 'min:1', 'max:8'],
             'map_x' => ['required', 'integer', 'min:0', 'max:100'],
             'map_y' => ['required', 'integer', 'min:0', 'max:100'],
-            'ticket_prefix' => [
-                'nullable',
-                'string',
-                'max:16',
-                Rule::unique('stores', 'ticket_prefix')->ignore($store->id, 'id'),
-            ],
             'login_id' => [
                 'nullable',
                 'string',
@@ -179,9 +172,6 @@ class AdminStoreController extends Controller
             $attributes = [
                 'name' => $validated['name'],
                 'description' => $validated['description'],
-                'ticket_prefix' => $validated['ticket_prefix']
-                    ? Str::upper($validated['ticket_prefix'])
-                    : $store->ticket_prefix,
                 'is_open' => $validated['is_open'],
                 'is_visible' => $validated['is_visible'],
                 'current_wait_min' => $validated['current_wait_min'],
@@ -353,20 +343,5 @@ class AdminStoreController extends Controller
             'revenue' => (int) ($revenue?->revenue ?? 0),
             'order_count' => (int) ($revenue?->order_count ?? 0),
         ];
-    }
-
-    private function makeTicketPrefix(string $source): string
-    {
-        $base = preg_replace('/[^A-Z0-9]/', '', Str::upper($source)) ?: 'S';
-        $base = Str::limit($base, 3, '');
-        $candidate = $base;
-        $index = 1;
-
-        while (Store::query()->where('ticket_prefix', $candidate)->exists()) {
-            $candidate = Str::limit($base, 2, '') . $index;
-            $index++;
-        }
-
-        return $candidate;
     }
 }
