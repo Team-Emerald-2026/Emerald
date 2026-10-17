@@ -17,7 +17,12 @@ return new class extends Migration
             return;
         }
 
-        $this->changeTicketLimitDefault(20);
+        try {
+            $this->changeTicketLimitDefault(20);
+        } catch (\Throwable) {
+            // 列の既定を変えられなくても、既存の50は20に直す
+        }
+
         DB::table('stores')->where('ticket_limit', 50)->update(['ticket_limit' => 20]);
     }
 

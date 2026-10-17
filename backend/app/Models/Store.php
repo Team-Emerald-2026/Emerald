@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
@@ -64,6 +65,43 @@ class Store extends Model
     public function salesEntries(): HasMany
     {
         return $this->hasMany(SalesEntry::class, 'store_id');
+    }
+
+    /** 本番でマイグレーション未適用でも、整理券の既定を20にし、旧既定の50を直す */
+    public static function ensureTicketLimitDefault(): void
+    {
+        static $done = false;
+        if ($done) {
+            return;
+        }
+        $done = true;
+
+        if (! Schema::hasColumn((new static)->getTable(), 'ticket_limit')) {
+            return;
+        }
+
+        try {
+            if (Cache::get('ticket_limit_default_20_applied')) {
+                return;
+            }
+
+            $driver = Schema::getConnection()->getDriverName();
+            if (in_array($driver, ['mysql', 'mariadb'], true)) {
+                DB::statement('ALTER TABLE stores MODIFY ticket_limit INT UNSIGNED NOT NULL DEFAULT 20');
+            } elseif ($driver === 'pgsql') {
+                DB::statement('ALTER TABLE stores ALTER COLUMN ticket_limit SET DEFAULT 20');
+            }
+
+            DB::table('stores')->where('ticket_limit', 50)->update(['ticket_limit' => 20]);
+            Cache::forever('ticket_limit_default_20_applied', true);
+        } catch (\Throwable) {
+            try {
+                DB::table('stores')->where('ticket_limit', 50)->update(['ticket_limit' => 20]);
+                Cache::forever('ticket_limit_default_20_applied', true);
+            } catch (\Throwable) {
+                // 権限がない／列が無いときは、保存済みの値のままにする
+            }
+        }
     }
 
     /** 本番でマイグレーション未適用でも、モニター表示列だけ先に用意する */

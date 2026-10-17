@@ -87,6 +87,7 @@ class DashboardController extends Controller
         }
 
         Store::ensureCrowdLevelColumn();
+        Store::ensureTicketLimitDefault();
 
         $columns = ['id', 'name', 'description', 'is_open', 'current_wait_min', 'current_queue_count'];
         if (Schema::hasColumn('stores', 'wait_display_mode')) {

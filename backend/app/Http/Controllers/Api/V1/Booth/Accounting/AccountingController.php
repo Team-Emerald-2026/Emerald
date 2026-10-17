@@ -522,6 +522,7 @@ class AccountingController extends Controller
     private function generateNextTicketNumber(string $storeId): string
     {
         return DB::transaction(function () use ($storeId) {
+            Store::ensureTicketLimitDefault();
             $store = Store::query()->whereKey($storeId)->firstOrFail();
             $limit = max(1, (int) ($store->ticket_limit ?? 20));
 
