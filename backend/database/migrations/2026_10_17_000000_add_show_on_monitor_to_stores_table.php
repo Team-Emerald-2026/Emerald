@@ -8,19 +8,23 @@ return new class extends Migration
 {
     public function up(): void
     {
+        if (Schema::hasColumn('stores', 'show_on_monitor')) {
+            return;
+        }
+
         Schema::table('stores', function (Blueprint $table) {
-            if (! Schema::hasColumn('stores', 'show_on_monitor')) {
-                $table->boolean('show_on_monitor')->default(false)->after('is_visible');
-            }
+            $table->boolean('show_on_monitor')->default(false);
         });
     }
 
     public function down(): void
     {
+        if (! Schema::hasColumn('stores', 'show_on_monitor')) {
+            return;
+        }
+
         Schema::table('stores', function (Blueprint $table) {
-            if (Schema::hasColumn('stores', 'show_on_monitor')) {
-                $table->dropColumn('show_on_monitor');
-            }
+            $table->dropColumn('show_on_monitor');
         });
     }
 };

@@ -5,6 +5,8 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
 
 class Store extends Model
 {
@@ -56,5 +58,17 @@ class Store extends Model
     public function salesEntries(): HasMany
     {
         return $this->hasMany(SalesEntry::class, 'store_id');
+    }
+
+    /** 本番でマイグレーション未適用でも、モニター表示列だけ先に用意する */
+    public static function ensureShowOnMonitorColumn(): void
+    {
+        if (Schema::hasColumn((new static)->getTable(), 'show_on_monitor')) {
+            return;
+        }
+
+        Schema::table('stores', function (Blueprint $table) {
+            $table->boolean('show_on_monitor')->default(false);
+        });
     }
 }

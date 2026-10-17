@@ -177,6 +177,7 @@ class AdminStoreController extends Controller
                 'current_wait_min' => $validated['current_wait_min'],
                 'current_queue_count' => $validated['current_queue_count'],
             ];
+            Store::ensureShowOnMonitorColumn();
             $attributes['show_on_monitor'] = $validated['show_on_monitor'];
 
             $store->fill($attributes);
@@ -210,6 +211,7 @@ class AdminStoreController extends Controller
     public function updateMonitor(Request $request, string $id)
     {
         $this->authorizeAdmin($request);
+        Store::ensureShowOnMonitorColumn();
 
         $store = Store::query()->findOrFail($id);
         $validated = $request->validate([
