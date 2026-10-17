@@ -7,7 +7,6 @@ import logoLockup from '../../../assets/brand/kyoto-tech-logo.svg';
 
 export default function StoreLogin() {
   const session = useFestival((s) => s.session);
-  const adminSession = useFestival((s) => s.adminSession);
   const navigate = useNavigate();
   const [id, setId] = useState('');
   const [pw, setPw] = useState('');
@@ -16,7 +15,6 @@ export default function StoreLogin() {
   const [submitting, setSubmitting] = useState(false);
 
   if (session) return <Navigate to="/store" replace />;
-  if (adminSession) return <Navigate to="/admin" replace />;
 
   const submit = async () => {
     if (submitting) return;
@@ -63,17 +61,25 @@ export default function StoreLogin() {
           <p className="text-sm text-muted-foreground">京都TECH学園祭 店舗向け管理画面</p>
         </div>
 
-        <div className="space-y-3 rounded-2xl border border-border bg-card p-6 sm:p-8">
+        <form
+          className="space-y-3 rounded-2xl border border-border bg-card p-6 sm:p-8"
+          action="/store/login"
+          method="post"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void submit();
+          }}
+        >
           <label className="block text-sm">
             <span className="mb-1 block text-muted-foreground">ログインID</span>
             <div className="flex items-center gap-2 rounded-lg border border-input bg-background px-3">
               <Store className="h-4 w-4 text-muted-foreground" />
               <input
+                name="store_login_id"
                 value={id}
                 onChange={(e) => setId(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && submit()}
-                placeholder="例: cafe_admin"
-                autoComplete="username"
+                placeholder="例: cafe01"
+                autoComplete="section-store username"
                 className="w-full bg-transparent py-2.5 text-foreground outline-none"
               />
             </div>
@@ -83,12 +89,12 @@ export default function StoreLogin() {
             <div className="flex items-center gap-2 rounded-lg border border-input bg-background px-3">
               <KeyRound className="h-4 w-4 text-muted-foreground" />
               <input
+                name="store_password"
                 type={showPassword ? 'text' : 'password'}
                 value={pw}
                 onChange={(e) => setPw(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && submit()}
                 placeholder="パスワード"
-                autoComplete="current-password"
+                autoComplete="section-store current-password"
                 className="w-full bg-transparent py-2.5 text-foreground outline-none"
               />
               <button
@@ -109,8 +115,7 @@ export default function StoreLogin() {
           )}
 
           <button
-            type="button"
-            onClick={submit}
+            type="submit"
             disabled={submitting}
             className="min-h-12 w-full rounded-xl py-3 font-bold text-white"
             style={{ backgroundColor: 'var(--primary)' }}
@@ -119,12 +124,9 @@ export default function StoreLogin() {
           </button>
 
           <p className="text-center text-xs text-muted-foreground">
-            管理者の方は管理者ログインページをご利用ください。
-          </p>
-          <p className="text-center text-xs text-muted-foreground">
             ログインできない、またはID・パスワードを忘れた場合は、1F総合案内または2F運営サポート本部までお越しください。
           </p>
-        </div>
+        </form>
       </div>
     </div>
   );
