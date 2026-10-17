@@ -3,6 +3,7 @@ import { Navigate, useNavigate } from 'react-router-dom';
 import { Store, KeyRound, Eye, EyeOff } from 'lucide-react';
 import { useFestival, loginAdminSession, loginStore } from '../../lib/festivalStore';
 import { ApiError, loginBooth } from '../../lib/api';
+import logoLockup from '../../../assets/brand/kyoto-tech-logo.svg';
 
 export default function StoreLogin() {
   const session = useFestival((s) => s.session);
@@ -58,12 +59,11 @@ export default function StoreLogin() {
     <div className="flex min-h-dvh items-center justify-center bg-background p-6">
       <div className="flex w-full max-w-lg flex-col gap-6">
         <div className="text-center">
-          <span
-            className="mx-auto grid h-14 w-14 place-items-center rounded-2xl"
-            style={{ backgroundColor: 'var(--primary)' }}
-          >
-            <Store className="h-7 w-7 text-white" />
-          </span>
+          <img
+            src={logoLockup}
+            alt="TECH.C. KYOTO"
+            className="mx-auto h-28 w-auto rounded-3xl bg-white px-4 py-3"
+          />
           <h1 className="mt-3 font-display text-2xl font-bold text-foreground">店舗ログイン</h1>
           <p className="text-sm text-muted-foreground">京都TECH学園祭 店舗向け管理画面</p>
         </div>

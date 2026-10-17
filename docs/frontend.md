@@ -40,6 +40,8 @@ npm run build
 校内マップは `public/` 配下のフロア画像 **`/campus-map-1f.png` 〜 `/campus-map-8f.png`** を使用します。
 フロア画像は全階 **1042×745 px**（建物の図を中央に置き、余りは白）にそろえています。マップの枠（`Map.tsx` / `AdminMap.tsx` の `aspect-[1042/745]`）とピンの位置（％）はこの大きさが前提なので、画像を差し替えるときは同じ大きさ・同じ位置で書き出してください。
 
+公式ロゴ（Illustrator 原寸）は `src/assets/brand/kyoto-tech-logo.ai` です。Web 用に書き出した SVG は同じフォルダの `kyoto-tech-logo.svg`（ロゴ＋ロゴタイプ）と `kyoto-tech-logo-mark.svg`（3×3 のマーク）です。ファビコンは `public/favicon.svg` と `public/apple-touch-icon.png` です。
+
 Vite では `public/` 配下のファイルがルート `/` から配信されます。
 
 ---
@@ -50,7 +52,7 @@ Vite では `public/` 配下のファイルがルート `/` から配信され�
 
 ### ヘッダー
 
-- 中央にタイトル文言: **「京都TECH学園祭」**
+- 中央に公式ロゴマークとタイトル文言: **「京都TECH学園祭」**
 - **右上**: ライト / ダークテーマ切替ボタン
   - `document.documentElement` に `dark` クラスを付与・削除
   - 選択は `localStorage` キー `theme` に `light` / `dark` で保存
