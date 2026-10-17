@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 class Store extends Model
@@ -63,12 +64,37 @@ class Store extends Model
     /** 本番でマイグレーション未適用でも、モニター表示列だけ先に用意する */
     public static function ensureShowOnMonitorColumn(): void
     {
-        if (Schema::hasColumn((new static)->getTable(), 'show_on_monitor')) {
+        if (self::hasShowOnMonitorColumn()) {
             return;
         }
 
-        Schema::table('stores', function (Blueprint $table) {
-            $table->boolean('show_on_monitor')->default(false);
-        });
+        $driver = Schema::getConnection()->getDriverName();
+
+        try {
+            if ($driver === 'pgsql') {
+                DB::statement('ALTER TABLE stores ADD COLUMN IF NOT EXISTS show_on_monitor BOOLEAN NOT NULL DEFAULT FALSE');
+            } elseif (in_array($driver, ['mysql', 'mariadb'], true)) {
+                DB::statement('ALTER TABLE stores ADD COLUMN show_on_monitor TINYINT(1) NOT NULL DEFAULT 0');
+            } else {
+                Schema::table('stores', function (Blueprint $table) {
+                    $table->boolean('show_on_monitor')->default(false);
+                });
+            }
+        } catch (\Throwable $exception) {
+            if (self::hasShowOnMonitorColumn()) {
+                return;
+            }
+
+            throw $exception;
+        }
+    }
+
+    public static function hasShowOnMonitorColumn(): bool
+    {
+        try {
+            return Schema::hasColumn((new static)->getTable(), 'show_on_monitor');
+        } catch (\Throwable) {
+            return false;
+        }
     }
 }

@@ -211,17 +211,33 @@ class AdminStoreController extends Controller
     public function updateMonitor(Request $request, string $id)
     {
         $this->authorizeAdmin($request);
-        Store::ensureShowOnMonitorColumn();
 
-        $store = Store::query()->findOrFail($id);
         $validated = $request->validate([
             'show_on_monitor' => ['required', 'boolean'],
         ]);
 
-        $store->fill([
-            'show_on_monitor' => $validated['show_on_monitor'],
-        ]);
-        $store->save();
+        try {
+            Store::ensureShowOnMonitorColumn();
+            $store = Store::query()->findOrFail($id);
+            $store->fill([
+                'show_on_monitor' => $validated['show_on_monitor'],
+            ]);
+            $store->save();
+        } catch (\Throwable $exception) {
+            Store::ensureShowOnMonitorColumn();
+            $store = Store::query()->findOrFail($id);
+            $store->show_on_monitor = $validated['show_on_monitor'];
+            try {
+                $store->save();
+            } catch (\Throwable $retryException) {
+                return response()->json([
+                    'error' => [
+                        'code' => 'INTERNAL_ERROR',
+                        'message' => 'モニター表示の更新に失敗しました: '.$retryException->getMessage(),
+                    ],
+                ], 500, [], JSON_UNESCAPED_UNICODE);
+            }
+        }
 
         $user = User::query()
             ->where('role', 'store')
