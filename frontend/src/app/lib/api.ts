@@ -68,7 +68,8 @@ export interface AdminStore {
   floor: number;
   map_x: number;
   map_y: number;
-  ticket_prefix: string | null;
+  /** 使っていない（受付番号は数字だけ）。古いAPI互換のため残している */
+  ticket_prefix?: string | null;
   is_open: boolean;
   is_visible: boolean;
   show_on_monitor: boolean;
@@ -103,7 +104,6 @@ export interface AdminStoreInput {
   floor: number;
   map_x: number;
   map_y: number;
-  ticket_prefix?: string;
   login_id?: string;
   password?: string;
   is_open: boolean;
@@ -788,7 +788,7 @@ export type BoothOrderStatus = 'issued' | 'settled' | 'canceled';
 export interface BoothOrder {
   /** 注文のID。API のパスに使う値（表示用の番号は ticket_number） */
   id: string;
-  /** 表示用の番号（例: C-101） */
+  /** 表示用の番号（例: 101）。旧データは C-101 形式のこともある */
   ticket_number: string;
   total_price: number;
   status: BoothOrderStatus;

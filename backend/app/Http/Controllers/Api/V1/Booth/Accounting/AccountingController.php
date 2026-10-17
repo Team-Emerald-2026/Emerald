@@ -510,7 +510,7 @@ class AccountingController extends Controller
     }
 
     /**
-     * 整理券の番号を発番する。
+     * 整理券の番号を発番する（数字だけ。紙の整理券に店名があるため頭文字は付けない）。
      *
      * 整理券は「1〜枚数（店舗ごとに設定、既定50）」を順番に使い回す。
      * 次の番号は、前回発番した番号の次から探し、上限を超えたら1に戻る。
@@ -523,7 +523,6 @@ class AccountingController extends Controller
     {
         return DB::transaction(function () use ($storeId) {
             $store = Store::query()->whereKey($storeId)->firstOrFail();
-            $prefix = $store->ticket_prefix ?: strtoupper(substr($storeId, -1));
             $limit = max(1, (int) ($store->ticket_limit ?? 50));
 
             // 同じ店の発番が同時に走らないよう、カウンター行をロックして直列化する
@@ -536,14 +535,14 @@ class AccountingController extends Controller
                 ->map(fn ($number) => (int) $number);
 
             // 提供前（キャンセル以外）の注文が持っている番号
-            // （CAST ... AS UNSIGNED は MySQL 専用で Postgres では失敗するため、PHP 側で計算する）
+            // 旧形式「C-12」と新形式「12」のどちらでも数字部分を取る
             $inUse = Order::query()
                 ->forStore($storeId)
                 ->whereNull('served_at')
                 ->where('status', '!=', 'canceled')
-                ->where('ticket_number', 'like', $prefix . '-%')
                 ->pluck('ticket_number')
-                ->map(fn ($number) => (int) substr((string) $number, strlen($prefix) + 1));
+                ->map(fn ($number) => $this->ticketNumberValue((string) $number))
+                ->filter(fn ($number) => $number !== null);
 
             $unavailable = $disabled->merge($inUse)->flip();
 
@@ -584,8 +583,18 @@ class AccountingController extends Controller
                 ]);
             }
 
-            return $prefix . '-' . $next;
+            return (string) $next;
         });
+    }
+
+    /** 受付番号文字列から数字部分を取り出す。取れなければ null */
+    private function ticketNumberValue(string $ticketNumber): ?int
+    {
+        if (preg_match('/(\d+)$/', $ticketNumber, $matches) !== 1) {
+            return null;
+        }
+
+        return (int) $matches[1];
     }
 
     private function currentStoreId(): string
