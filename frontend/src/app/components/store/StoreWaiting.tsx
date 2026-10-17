@@ -265,8 +265,8 @@ export default function StoreWaiting() {
 
   return (
     <StoreShell title="待ち人数管理">
-      <div className="mx-auto max-w-md space-y-4 sm:max-w-2xl">
-      <div className="rounded-3xl border border-border bg-card p-8 text-center">
+      <div className="mx-auto grid max-w-6xl grid-cols-1 gap-4 lg:grid-cols-2 lg:items-stretch">
+      <div className="flex h-full flex-col rounded-3xl border border-border bg-card p-6 text-center sm:p-8">
         <span
           className="mx-auto grid h-12 w-12 place-items-center rounded-2xl"
           style={{ backgroundColor: 'var(--primary)' }}
@@ -297,7 +297,7 @@ export default function StoreWaiting() {
           </p>
         )}
 
-        <div className="mt-6 flex items-center justify-center gap-4">
+        <div className="mt-auto flex items-center justify-center gap-4 pt-6">
           <button
             type="button"
             onClick={() => changeBy(-1)}
@@ -340,7 +340,7 @@ export default function StoreWaiting() {
         )}
       </div>
 
-      <div className="rounded-3xl border border-border bg-card p-8 text-center">
+      <div className="flex h-full flex-col rounded-3xl border border-border bg-card p-6 text-center sm:p-8">
         <span
           className="mx-auto grid h-12 w-12 place-items-center rounded-2xl"
           style={{ backgroundColor: 'var(--accent)' }}
@@ -361,7 +361,7 @@ export default function StoreWaiting() {
           </p>
         )}
 
-        <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <div className="mt-auto grid grid-cols-1 gap-3 pt-6 sm:grid-cols-3">
           {crowdLevelOptions.map((option) => {
             const active = crowdLevel === option.value;
             const colors = crowdLevelStyle(option.value);
