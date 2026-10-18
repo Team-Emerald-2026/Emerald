@@ -49,6 +49,67 @@ const updatedLabel = (value: string) => {
 
 const hourLabel = (hour: number) => `${hour}時`;
 
+const AGENDA = [
+  { id: 'analytics-sales', label: '売上' },
+  { id: 'analytics-ranking', label: '店舗の売上' },
+  { id: 'analytics-status', label: '店舗の件数' },
+  { id: 'analytics-unsettled', label: '未精算' },
+  { id: 'analytics-hourly', label: '時間帯' },
+  { id: 'analytics-menu', label: '売れ筋' },
+  { id: 'analytics-access', label: 'API' },
+] as const;
+
+const SECTION_SCROLL = 'scroll-mt-40';
+
+function HourlyChart({ hourly }: { hourly: NonNullable<BoothSales['hourly']> }) {
+  const peak = hourly.reduce((max, row) => Math.max(max, row.count), 0);
+
+  return (
+    <div className="mt-3 overflow-x-auto pb-1">
+      <div className="flex items-end gap-1.5" role="list" aria-label="1時間ごとの会計件数">
+        {hourly.map((row) => {
+          const isPeak = peak > 0 && row.count === peak;
+          const ratio = peak === 0 ? 0 : row.count / peak;
+          return (
+            <div
+              key={row.hour}
+              role="listitem"
+              aria-label={`${hourLabel(row.hour)} ${countLabel(row.count)}`}
+              className="flex w-10 shrink-0 flex-col items-center gap-1"
+            >
+              <span
+                className={`text-[10px] tabular-nums leading-none ${
+                  isPeak ? 'font-bold text-foreground' : 'text-muted-foreground'
+                }`}
+              >
+                {row.count}
+              </span>
+              <span className="flex h-28 w-full items-end">
+                <span
+                  className="block w-full rounded-t-md"
+                  style={{
+                    height: row.count === 0 ? '2px' : `${Math.max(8, Math.round(ratio * 100))}%`,
+                    backgroundColor: 'var(--primary)',
+                    opacity: row.count === 0 ? 0.25 : isPeak ? 1 : 0.45,
+                  }}
+                />
+              </span>
+              <span
+                className={`text-[11px] tabular-nums leading-none ${
+                  isPeak ? 'font-bold text-foreground' : 'text-muted-foreground'
+                }`}
+              >
+                {row.hour}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+      <p className="mt-2 text-[11px] text-muted-foreground">下の数字は時（日本時間）です。</p>
+    </div>
+  );
+}
+
 const slowLabel = (milliseconds: number) => {
   const seconds = Math.max(1, Math.round((milliseconds || 1000) / 1000));
   return `応答が${seconds}秒以上`;
@@ -65,12 +126,11 @@ function SalesOperations({ sales }: { sales: BoothSales }) {
   const hourly = sales.hourly ?? [];
   const menu = sales.menu_ranking ?? [];
   const storeMenus = sales.store_menu_rankings ?? [];
-  const peakHour = hourly.reduce((max, row) => Math.max(max, row.count), 0);
   const topUnsettled = unsettled[0]?.amount ?? 0;
 
   return (
     <div className="mt-6 space-y-6 border-t border-border pt-5">
-      <section>
+      <section id="analytics-status" className={SECTION_SCROLL}>
         <h3 className="font-display text-base font-bold text-foreground">店舗ごとの件数</h3>
         <p className="mt-1 text-sm text-muted-foreground">
           精算済み、まだ精算していない会計、キャンセルの件数です。
@@ -114,7 +174,7 @@ function SalesOperations({ sales }: { sales: BoothSales }) {
         )}
       </section>
 
-      <section>
+      <section id="analytics-unsettled" className={SECTION_SCROLL}>
         <h3 className="font-display text-base font-bold text-foreground">未精算の金額</h3>
         <p className="mt-1 text-sm text-muted-foreground">
           まだ精算していない会計です。金額の多い店舗から並べています。
@@ -155,32 +215,13 @@ function SalesOperations({ sales }: { sales: BoothSales }) {
         )}
       </section>
 
-      <section>
+      <section id="analytics-hourly" className={SECTION_SCROLL}>
         <h3 className="font-display text-base font-bold text-foreground">1時間ごとの会計件数</h3>
         <p className="mt-1 text-sm text-muted-foreground">
           キャンセルを除いた会計を、会計した時刻（日本時間）で数えています。全体は、両日の同じ時刻を足しています。
         </p>
         {hourly.length ? (
-          <div className="mt-3 space-y-2">
-            {hourly.map((row) => {
-              const width =
-                row.count === 0 || peakHour === 0
-                  ? 0
-                  : Math.max(4, Math.round((row.count / peakHour) * 100));
-              return (
-                <div key={row.hour} className="grid grid-cols-[3rem_minmax(0,1fr)_auto] items-center gap-2 text-xs">
-                  <span className="text-muted-foreground">{hourLabel(row.hour)}</span>
-                  <span className="block h-2 overflow-hidden rounded-full bg-muted">
-                    <span
-                      className="block h-full rounded-full"
-                      style={{ width: `${width}%`, backgroundColor: 'var(--primary)' }}
-                    />
-                  </span>
-                  <span className="text-foreground">{countLabel(row.count)}</span>
-                </div>
-              );
-            })}
-          </div>
+          <HourlyChart hourly={hourly} />
         ) : (
           <p className="mt-3 rounded-xl bg-muted p-4 text-center text-sm text-muted-foreground">
             この範囲の会計はまだありません。
@@ -188,7 +229,7 @@ function SalesOperations({ sales }: { sales: BoothSales }) {
         )}
       </section>
 
-      <section>
+      <section id="analytics-menu" className={SECTION_SCROLL}>
         <h3 className="font-display text-base font-bold text-foreground">売れ筋メニュー</h3>
         <p className="mt-1 text-sm text-muted-foreground">
           キャンセルを除き、選んだ日の数量が多い順です。金額は明細の合計で、上位5件を全体と店舗ごとに出します。全体では、売れたブース名も付けます。
@@ -215,6 +256,56 @@ function SalesOperations({ sales }: { sales: BoothSales }) {
   );
 }
 
+function MenuRankRow({
+  item,
+  rank,
+  featured,
+  topQuantity,
+}: {
+  item: NonNullable<BoothSales['menu_ranking']>[number];
+  rank: number;
+  featured: boolean;
+  topQuantity: number;
+}) {
+  const width = topQuantity === 0 ? 0 : Math.max(8, Math.round((item.quantity / topQuantity) * 100));
+
+  return (
+    <li className={`rounded-xl border border-border ${featured ? 'px-3 py-3' : 'px-3 py-2'}`}>
+      <div className="flex items-start gap-3">
+        <span
+          className={`grid shrink-0 place-items-center rounded-full bg-muted font-bold text-foreground ${
+            featured ? 'h-8 w-8 text-sm' : 'h-7 w-7 text-xs'
+          }`}
+        >
+          {rank}
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-baseline justify-between gap-3">
+            <p className={`min-w-0 font-bold text-foreground ${featured ? '' : 'truncate'}`}>
+              {item.name}
+            </p>
+            <p className={`shrink-0 font-bold text-foreground ${featured ? 'font-display text-lg' : 'text-sm'}`}>
+              数量 {item.quantity.toLocaleString('ja-JP')}
+            </p>
+          </div>
+          {item.store_names?.length ? (
+            <p className="mt-0.5 text-xs font-semibold text-muted-foreground">{item.store_names.join('、')}</p>
+          ) : null}
+          <p className="mt-0.5 text-xs text-muted-foreground">{yen(item.amount)}</p>
+          {featured && (
+            <span className="mt-2 block h-1.5 overflow-hidden rounded-full bg-muted">
+              <span
+                className="block h-full rounded-full"
+                style={{ width: `${width}%`, backgroundColor: 'var(--primary)' }}
+              />
+            </span>
+          )}
+        </div>
+      </div>
+    </li>
+  );
+}
+
 function MenuRankList({
   items,
   empty,
@@ -222,36 +313,55 @@ function MenuRankList({
   items: NonNullable<BoothSales['menu_ranking']>;
   empty: string;
 }) {
+  const [expanded, setExpanded] = useState(false);
+
   if (!items.length) {
     return <p className="mt-2 rounded-xl bg-muted p-4 text-center text-sm text-muted-foreground">{empty}</p>;
   }
 
+  const featured = items.slice(0, 3);
+  const rest = items.slice(3);
+  const topQuantity = featured[0]?.quantity ?? 0;
+
   return (
-    <ol className="mt-2 space-y-2">
-      {items.map((item, index) => (
-        <li key={`${item.name}-${index}`} className="rounded-xl border border-border px-3 py-2">
-          <div className="flex items-start gap-3">
-            <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-muted text-xs font-bold text-foreground">
-              {index + 1}
-            </span>
-            <div className="min-w-0 flex-1">
-              <div className="flex items-baseline justify-between gap-3">
-                <p className="min-w-0 truncate font-bold text-foreground">
-                  {item.name}
-                  {item.store_names?.length ? (
-                    <span className="ml-1.5 text-xs font-semibold text-muted-foreground">
-                      {item.store_names.join('、')}
-                    </span>
-                  ) : null}
-                </p>
-                <p className="shrink-0 text-sm font-bold text-foreground">数量 {item.quantity.toLocaleString('ja-JP')}</p>
-              </div>
-              <p className="mt-0.5 text-xs text-muted-foreground">{yen(item.amount)}</p>
-            </div>
-          </div>
-        </li>
-      ))}
-    </ol>
+    <div className="mt-2">
+      <ol className="space-y-2">
+        {featured.map((item, index) => (
+          <MenuRankRow
+            key={`${item.name}-${index}`}
+            item={item}
+            rank={index + 1}
+            featured
+            topQuantity={topQuantity}
+          />
+        ))}
+      </ol>
+      {rest.length > 0 && (
+        <>
+          <button
+            type="button"
+            aria-expanded={expanded}
+            onClick={() => setExpanded((current) => !current)}
+            className="mt-2 w-full rounded-lg border border-border px-3 py-2 text-sm font-bold text-foreground hover:bg-muted"
+          >
+            {expanded ? '閉じる' : `ほか ${rest.length} 件を表示`}
+          </button>
+          {expanded && (
+            <ol className="mt-2 space-y-2">
+              {rest.map((item, index) => (
+                <MenuRankRow
+                  key={`${item.name}-${index + 3}`}
+                  item={item}
+                  rank={index + 4}
+                  featured={false}
+                  topQuantity={topQuantity}
+                />
+              ))}
+            </ol>
+          )}
+        </>
+      )}
+    </div>
   );
 }
 
@@ -276,6 +386,7 @@ export default function AdminAnalytics() {
   const [loading, setLoading] = useState(true);
   const [downloading, setDownloading] = useState(false);
   const [downloadError, setDownloadError] = useState('');
+  const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
 
   useEffect(() => {
     if (!adminSession && !ADMIN_PUBLIC_ACCESS) return;
@@ -337,6 +448,10 @@ export default function AdminAnalytics() {
     return () => controller.abort();
   }, [adminSession, accessDate]);
 
+  useEffect(() => {
+    setSelectedSlot(null);
+  }, [accessDate]);
+
   const downloadLog = async () => {
     if (!access?.date || access.total === 0) return;
     setDownloading(true);
@@ -360,9 +475,42 @@ export default function AdminAnalytics() {
   const visibleSales = sales?.day === salesDay ? sales : null;
   const topRevenue = visibleSales?.stores[0]?.revenue ?? 0;
 
+  const jumpTo = (id: string) => {
+    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
   return (
     <AdminShell title="アナリティクス">
-      <section className="rounded-2xl border border-border bg-card p-4">
+      <nav
+        aria-label="項目へ移動"
+        className="sticky top-[105px] z-[9] -mx-4 mb-4 border-b border-border bg-background/95 px-4 py-2 backdrop-blur"
+      >
+        <ul className="flex gap-1.5 overflow-x-auto">
+          {AGENDA.map((item) => {
+            const ready = item.id === 'analytics-sales' || item.id === 'analytics-access' || Boolean(visibleSales);
+            return (
+              <li key={item.id} className="shrink-0">
+                <a
+                  href={`#${item.id}`}
+                  aria-disabled={!ready}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    if (!ready) return;
+                    jumpTo(item.id);
+                  }}
+                  className={`inline-block rounded-full border border-border bg-card px-3 py-1.5 text-xs font-bold ${
+                    ready ? 'text-foreground hover:bg-muted' : 'pointer-events-none text-muted-foreground opacity-40'
+                  }`}
+                >
+                  {item.label}
+                </a>
+              </li>
+            );
+          })}
+        </ul>
+      </nav>
+
+      <section id="analytics-sales" className={`${SECTION_SCROLL} rounded-2xl border border-border bg-card p-4`}>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <h2 className="flex items-center gap-2 font-display text-lg font-bold text-foreground">
             <Receipt className="h-5 w-5" style={{ color: 'var(--primary)' }} />
@@ -456,6 +604,7 @@ export default function AdminAnalytics() {
               </div>
             </dl>
 
+            <div id="analytics-ranking" className={SECTION_SCROLL}>
             <ol className="mt-4 space-y-2">
               {visibleSales.stores.length ? (
                 visibleSales.stores.map((store, index) => {
@@ -496,13 +645,14 @@ export default function AdminAnalytics() {
                 </li>
               )}
             </ol>
+            </div>
 
-            <SalesOperations sales={visibleSales} />
+            <SalesOperations key={salesDay} sales={visibleSales} />
           </>
         )}
       </section>
 
-      <section className="mt-5 rounded-2xl border border-border bg-card p-4">
+      <section id="analytics-access" className={`${SECTION_SCROLL} mt-5 rounded-2xl border border-border bg-card p-4`}>
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
             <h2 className="flex items-center gap-2 font-display text-lg font-bold text-foreground">
@@ -591,22 +741,41 @@ export default function AdminAnalytics() {
               </div>
             </dl>
 
-            <div className="mt-4 space-y-3">
+            {(access.slots ?? []).length > 0 && (
+              <p className="mt-4 text-xs text-muted-foreground">
+                枠を押すと、その30分の内訳を出します。いちばん多い枠は開いたままです。
+              </p>
+            )}
+            <div className="mt-2 space-y-1">
               {(access.slots ?? []).length ? (
                 access.slots.map((slot) => {
                   const isPeak = access.peak_slot?.slot === slot.slot;
+                  const selected = selectedSlot === slot.slot;
+                  const showDetail = slot.total > 0 && (isPeak || selected);
                   const width =
                     slot.total === 0 || peakCount === 0
                       ? 0
                       : Math.max(4, Math.round((slot.total / peakCount) * 100));
                   const parts = slotParts(slot);
                   return (
-                    <div key={slot.slot} className="text-xs">
-                      <div className="grid grid-cols-[4.75rem_minmax(0,1fr)_auto] items-center gap-2">
-                        <span className={isPeak ? 'font-bold text-foreground' : 'text-muted-foreground'}>
+                    <div
+                      key={slot.slot}
+                      className={`rounded-lg px-1 py-1 text-xs ${selected ? 'bg-muted' : ''}`}
+                    >
+                      <button
+                        type="button"
+                        aria-expanded={showDetail}
+                        onClick={() =>
+                          setSelectedSlot((current) => (current === slot.slot ? null : slot.slot))
+                        }
+                        className="grid w-full grid-cols-[4.75rem_minmax(0,1fr)_auto] items-center gap-2 text-left"
+                      >
+                        <span className={isPeak || selected ? 'font-bold text-foreground' : 'text-muted-foreground'}>
                           {slot.slot}台
                         </span>
-                        <span className="flex h-2 overflow-hidden rounded-full bg-muted">
+                        <span
+                          className={`flex h-2 overflow-hidden rounded-full ${selected ? 'bg-background' : 'bg-muted'}`}
+                        >
                           <span className="flex h-full overflow-hidden rounded-full" style={{ width: `${width}%` }}>
                             {parts.map((item) =>
                               item.value === 0 ? null : (
@@ -617,17 +786,16 @@ export default function AdminAnalytics() {
                                     flex: `${item.value} 0 0`,
                                     backgroundColor: item.color,
                                   }}
-                                  title={`${item.label} ${countLabel(item.value)}`}
                                 />
                               ),
                             )}
                           </span>
                         </span>
-                        <span className={isPeak ? 'font-bold text-foreground' : 'text-foreground'}>
+                        <span className={isPeak || selected ? 'font-bold text-foreground' : 'text-foreground'}>
                           {slot.total.toLocaleString('ja-JP')}件
                         </span>
-                      </div>
-                      {slot.total > 0 && BREAKDOWN.some((item) => slot[item.key] > 0) && (
+                      </button>
+                      {showDetail && BREAKDOWN.some((item) => slot[item.key] > 0) && (
                         <ul className="mt-1 grid w-full min-w-0 grid-cols-2 gap-x-3 gap-y-1 text-[11px] text-muted-foreground sm:flex sm:flex-wrap">
                           {BREAKDOWN.map((item) => (
                             <li key={item.key} className="flex min-w-0 items-center gap-1 sm:w-auto sm:whitespace-nowrap">
@@ -641,7 +809,7 @@ export default function AdminAnalytics() {
                           ))}
                         </ul>
                       )}
-                      {slot.total > 0 && (
+                      {showDetail && (
                         <ul className="mt-1 grid w-full min-w-0 grid-cols-2 gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
                           <li className="flex min-w-0 items-center gap-1">
                             <span className="min-w-0 truncate">{slowLabel(access.slow_ms)}</span>
