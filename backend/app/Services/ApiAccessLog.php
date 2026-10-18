@@ -31,13 +31,12 @@ class ApiAccessLog
             }
 
             $line = sprintf(
-                "%s %s %s %d %d %s\n",
+                "%s %s %s %d %d\n",
                 $now->format('Y-m-d\TH:i:sP'),
                 $this->method($request),
                 $this->safePath($request),
                 $this->status($status),
                 max(0, $milliseconds),
-                $this->category($request),
             );
 
             file_put_contents(
@@ -162,11 +161,23 @@ class ApiAccessLog
     {
         $path = trim($request->path(), '/');
 
+        if ($request->query('poll') === '1') {
+            return 'poll';
+        }
+
+        return $this->categoryFor($request->getMethod(), '/'.$path);
+    }
+
+    private function categoryFor(string $method, string $path): string
+    {
+        $path = trim($path, '/');
+        $method = strtoupper($method);
+
         if (str_starts_with($path, 'api/v1/admin')) {
             return 'admin';
         }
 
-        if ($this->isPoll($request, $path)) {
+        if (in_array($method, ['GET', 'HEAD'], true) && in_array($path, self::POLL_PATHS, true)) {
             return 'poll';
         }
 
@@ -184,7 +195,7 @@ class ApiAccessLog
     {
         $line = rtrim($line, "\r\n");
         if (! preg_match(
-            '/^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2}):\d{2}\+09:00 [A-Z]+ \S+ (\d{3}) (\d+) (visitor|poll|store|admin)$/',
+            '/^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2}):\d{2}\+09:00 ([A-Z]+) (\S+) (\d{3}) (\d+)(?: (visitor|poll|store|admin))?$/',
             $line,
             $matches,
         )) {
@@ -192,28 +203,19 @@ class ApiAccessLog
         }
 
         $minute = (int) $matches[3];
+        $category = $matches[8] ?? '';
+        if (! in_array($category, self::CATEGORIES, true)) {
+            $category = $this->categoryFor($matches[4], $matches[5]);
+        }
 
         return [
             'date' => $matches[1],
             'hour' => $matches[2],
             'slot' => $matches[2].':'.($minute < 30 ? '00' : '30'),
-            'status' => (int) $matches[4],
-            'milliseconds' => (int) $matches[5],
-            'category' => $matches[6],
+            'status' => (int) $matches[6],
+            'milliseconds' => (int) $matches[7],
+            'category' => $category,
         ];
-    }
-
-    private function isPoll(Request $request, string $path): bool
-    {
-        if ($request->query('poll') === '1') {
-            return true;
-        }
-
-        if (! in_array($request->getMethod(), ['GET', 'HEAD'], true)) {
-            return false;
-        }
-
-        return in_array($path, self::POLL_PATHS, true);
     }
 
     private function method(Request $request): string

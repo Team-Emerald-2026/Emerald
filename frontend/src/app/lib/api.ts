@@ -694,8 +694,10 @@ export async function downloadAdminAccessLog(token: string | undefined, date: st
   const link = document.createElement('a');
   link.href = url;
   link.download = `access-${date}.txt`;
+  document.body.appendChild(link);
   link.click();
-  URL.revokeObjectURL(url);
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 /** 売上データ（会計・売上入力・受付番号）をすべて消して待ち人数を 0 に戻す。元に戻せない。 */

@@ -54,11 +54,18 @@ class AdminAccessLogTest extends TestCase
         $date = now('Asia/Tokyo')->toDateString();
         $body = file_get_contents($this->directory.DIRECTORY_SEPARATOR.'access-'.$date.'.log');
         $this->assertIsString($body);
-        $this->assertStringContainsString('GET /api/v1/restaurants 200', $body);
-        $this->assertStringContainsString('visitor', $body);
-        $this->assertStringContainsString('GET /api/v1/call-numbers', $body);
-        $this->assertStringContainsString('poll', $body);
-        $this->assertStringContainsString('GET /api/v1/restaurants/store-404', $body);
+        $this->assertMatchesRegularExpression(
+            '/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\+09:00 GET \/api\/v1\/restaurants 200 \d+$/m',
+            $body,
+        );
+        $this->assertMatchesRegularExpression(
+            '/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\+09:00 GET \/api\/v1\/call-numbers 200 \d+$/m',
+            $body,
+        );
+        $this->assertMatchesRegularExpression(
+            '/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\+09:00 GET \/api\/v1\/restaurants\/store-404 404 \d+$/m',
+            $body,
+        );
         $this->assertStringNotContainsString('day=', $body);
         $this->assertStringNotContainsString('poll=', $body);
         $this->assertStringNotContainsString('Bearer', $body);
@@ -70,11 +77,11 @@ class AdminAccessLogTest extends TestCase
         file_put_contents(
             $this->directory.DIRECTORY_SEPARATOR.'access-'.$date.'.log',
             implode("\n", [
-                '2026-10-19T11:10:00+09:00 GET /api/v1/restaurants 200 20 visitor',
-                '2026-10-19T12:05:00+09:00 GET /api/v1/monitor/call-numbers 200 30 poll',
-                '2026-10-19T12:06:00+09:00 GET /api/v1/monitor/call-numbers 200 40 poll',
-                '2026-10-19T12:40:00+09:00 POST /api/v1/booth/accounting/orders 201 80 store',
-                '2026-10-19T13:15:00+09:00 GET /api/v1/restaurants 500 1500 visitor',
+                '2026-10-19T11:10:00+09:00 GET /api/v1/restaurants 200 20',
+                '2026-10-19T12:05:00+09:00 GET /api/v1/monitor/call-numbers 200 30',
+                '2026-10-19T12:06:00+09:00 GET /api/v1/monitor/call-numbers 200 40',
+                '2026-10-19T12:40:00+09:00 POST /api/v1/booth/accounting/orders 201 80',
+                '2026-10-19T13:15:00+09:00 GET /api/v1/restaurants 500 1500',
                 'not a log line',
             ])."\n",
         );
@@ -114,7 +121,8 @@ class AdminAccessLogTest extends TestCase
         $response->assertOk();
         $response->assertHeader('content-type', 'text/plain; charset=UTF-8');
         $this->assertStringContainsString('access-2026-10-19.txt', (string) $response->headers->get('content-disposition'));
-        $this->assertStringContainsString('GET /api/v1/monitor/call-numbers 200 30 poll', $response->streamedContent());
+        $this->assertStringContainsString('GET /api/v1/monitor/call-numbers 200 30', $response->streamedContent());
+        $this->assertDoesNotMatchRegularExpression('/\b(visitor|poll|store|admin)\b/', $response->streamedContent());
     }
 
     public function test_access_log_requires_admin(): void
@@ -160,11 +168,24 @@ class AdminAccessLogTest extends TestCase
         $log = new ApiAccessLog;
 
         $this->assertNull($log->parseLine('garbage'));
-        $parsed = $log->parseLine('2026-10-19T12:01:02+09:00 GET /api/v1/ticker 200 15 poll');
+        $parsed = $log->parseLine('2026-10-19T12:01:02+09:00 GET /api/v1/ticker 200 15');
         $this->assertSame('12', $parsed['hour']);
         $this->assertSame('12:00', $parsed['slot']);
+        $this->assertSame('poll', $parsed['category']);
+        $this->assertSame('poll', $log->parseLine(
+            '2026-10-19T12:01:02+09:00 GET /api/v1/restaurants 200 15 poll',
+        )['category']);
+        $this->assertSame('visitor', $log->parseLine(
+            '2026-10-19T11:10:00+09:00 GET /api/v1/restaurants 200 20',
+        )['category']);
+        $this->assertSame('store', $log->parseLine(
+            '2026-10-19T12:40:00+09:00 POST /api/v1/booth/accounting/orders 201 80',
+        )['category']);
+        $this->assertSame('admin', $log->parseLine(
+            '2026-10-19T12:40:00+09:00 GET /api/v1/admin/access 200 10',
+        )['category']);
         $this->assertSame('12:30', $log->parseLine(
-            '2026-10-19T12:40:00+09:00 GET /api/v1/ticker 200 15 poll',
+            '2026-10-19T12:40:00+09:00 GET /api/v1/ticker 200 15',
         )['slot']);
     }
 

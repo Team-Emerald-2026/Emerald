@@ -3,6 +3,7 @@ import { LineChart } from 'lucide-react';
 import AdminShell from './AdminShell';
 import {
   ApiError,
+  downloadAdminAccessLog,
   fetchAdminAccess,
   type AdminAccessSlot,
   type AdminAccessSummary,
@@ -42,6 +43,8 @@ export default function AdminAnalytics() {
   const [accessDate, setAccessDate] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
+  const [downloading, setDownloading] = useState(false);
+  const [downloadError, setDownloadError] = useState('');
 
   useEffect(() => {
     if (!adminSession && !ADMIN_PUBLIC_ACCESS) return;
@@ -49,6 +52,7 @@ export default function AdminAnalytics() {
 
     setLoading(true);
     setError('');
+    setDownloadError('');
     fetchAdminAccess(adminSession?.token, accessDate || undefined, controller.signal)
       .then((data) => {
         setAccess(data);
@@ -69,6 +73,23 @@ export default function AdminAnalytics() {
     return () => controller.abort();
   }, [adminSession, accessDate]);
 
+  const downloadLog = async () => {
+    if (!access?.date || access.total === 0) return;
+    setDownloading(true);
+    setDownloadError('');
+    try {
+      await downloadAdminAccessLog(adminSession?.token, access.date);
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) {
+        logoutAdminSession();
+        return;
+      }
+      setDownloadError(err instanceof ApiError ? err.message : 'アクセスログを保存できませんでした。');
+    } finally {
+      setDownloading(false);
+    }
+  };
+
   const peakCount = access?.peak_slot?.count ?? 0;
   const peakSlot = access?.slots.find((slot) => slot.slot === access.peak_slot?.slot);
 
@@ -82,19 +103,30 @@ export default function AdminAnalytics() {
               API 件数
             </h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              30分ごとの API を呼んだ回数です。来場者の画面、5秒ごとの再取得、店舗の操作、管理画面に分けています。同じ枠に、応答が1秒以上の件数とサーバーエラー（5xx）の件数も出します。これらは内訳とは別に数えるので、1件が両方に入ることがあります。来場者の人数ではありません。時刻は日本時間です。
+              30分ごとの API を呼んだ回数です。来場者の画面、5秒ごとの再取得、店舗の操作、管理画面に分けています。同じ枠に、応答が1秒以上の件数とサーバーエラー（5xx）の件数も出します。これらは内訳とは別に数えるので、1件が両方に入ることがあります。来場者の人数ではありません。時刻は日本時間です。保存するファイルは1日1つで、1行が1リクエストです。入っているのは時刻、メソッド、パス、ステータス、応答ミリ秒だけです。
             </p>
           </div>
-          <label className="text-sm text-muted-foreground">
-            日付
-            <input
-              type="date"
-              value={accessDate}
-              onChange={(event) => setAccessDate(event.target.value)}
-              className="mt-1 block rounded-lg border border-input bg-background px-3 py-2 text-base text-foreground scheme-light dark:scheme-dark"
-            />
-          </label>
+          <div className="flex flex-wrap items-end gap-2">
+            <label className="text-sm text-muted-foreground">
+              日付
+              <input
+                type="date"
+                value={accessDate}
+                onChange={(event) => setAccessDate(event.target.value)}
+                className="mt-1 block rounded-lg border border-input bg-background px-3 py-2 text-base text-foreground scheme-light dark:scheme-dark"
+              />
+            </label>
+            <button
+              type="button"
+              onClick={() => void downloadLog()}
+              disabled={downloading || loading || Boolean(error) || !access?.date || access.total === 0}
+              className="rounded-lg border border-border px-3 py-2 text-sm font-bold text-foreground hover:bg-muted disabled:opacity-40"
+            >
+              {downloading ? '保存中...' : 'この日のログを保存'}
+            </button>
+          </div>
         </div>
+        {downloadError && <p className="mt-3 text-sm text-red-500">{downloadError}</p>}
 
         {loading && (
           <p className="mt-3 text-sm text-muted-foreground">アナリティクスを読み込み中です...</p>
