@@ -254,7 +254,7 @@ export default function AdminDashboard() {
                 <dd className="font-bold text-foreground">{access.visitor}件</dd>
               </div>
               <div className="rounded-xl border border-border px-3 py-2">
-                <dt className="text-muted-foreground">定期的な再取得</dt>
+                <dt className="text-muted-foreground">5秒ごとの再取得</dt>
                 <dd className="font-bold text-foreground">{access.poll}件</dd>
               </div>
               <div className="rounded-xl border border-border px-3 py-2">
