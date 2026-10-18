@@ -170,4 +170,51 @@ class ExhibitionDayTest extends TestCase
 
         $this->assertSame('day2', Store::query()->find('store-new')?->exhibition_day);
     }
+
+    public function test_admin_can_create_store_without_description(): void
+    {
+        Sanctum::actingAs($this->createAdmin());
+
+        $this->postJson('/api/v1/admin/stores', [
+            'id' => 'store-no-desc',
+            'name' => '説明なし店舗',
+            'type' => 'booth',
+            'floor' => 1,
+            'map_x' => 10,
+            'map_y' => 20,
+            'login_id' => 'nodesc',
+            'password' => 'abcd1234',
+        ])->assertCreated();
+
+        $this->assertSame('', Store::query()->find('store-no-desc')?->description ?? null);
+    }
+
+    public function test_admin_store_password_must_be_alphanumeric_min_8(): void
+    {
+        Sanctum::actingAs($this->createAdmin());
+
+        $this->postJson('/api/v1/admin/stores', [
+            'id' => 'store-bad-pass',
+            'name' => '弱いパス',
+            'type' => 'booth',
+            'floor' => 1,
+            'map_x' => 10,
+            'map_y' => 20,
+            'login_id' => 'badpass',
+            'password' => 'short',
+        ])->assertStatus(422)
+            ->assertJsonPath('error.code', 'INVALID_PARAMS');
+
+        $this->postJson('/api/v1/admin/stores', [
+            'id' => 'store-bad-pass-2',
+            'name' => '記号パス',
+            'type' => 'booth',
+            'floor' => 1,
+            'map_x' => 10,
+            'map_y' => 20,
+            'login_id' => 'badpass2',
+            'password' => 'pass-word',
+        ])->assertStatus(422)
+            ->assertJsonPath('error.code', 'INVALID_PARAMS');
+    }
 }

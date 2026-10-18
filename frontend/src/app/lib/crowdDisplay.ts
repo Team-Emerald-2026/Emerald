@@ -7,7 +7,7 @@ export type { CrowdLevel };
 export const CROWD_LEVELS = ['empty', 'moderate', 'crowded'] as const;
 
 export const crowdLevelOptions: Array<{ value: CrowdLevel; label: string; hint: string }> = [
-  { value: 'empty', label: 'すいている', hint: '0〜50%' },
+  { value: 'empty', label: '空いている', hint: '0〜50%' },
   { value: 'moderate', label: '少し混雑', hint: '50〜75%' },
   { value: 'crowded', label: '混雑', hint: '75〜100%' },
 ];

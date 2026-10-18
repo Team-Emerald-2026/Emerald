@@ -319,7 +319,9 @@ export default function AdminStores() {
       </div>
 
       {error && (
-        <p className="mb-4 rounded-xl border border-border bg-card p-3 text-sm text-red-500">{error}</p>
+        <p className="mb-4 whitespace-pre-line rounded-xl border border-border bg-card p-3 text-sm text-red-500">
+          {error}
+        </p>
       )}
       {message && (
         <p className="mb-4 rounded-xl border border-border bg-card p-3 text-sm" style={{ color: 'var(--ok)' }}>

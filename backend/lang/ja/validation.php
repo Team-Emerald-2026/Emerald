@@ -1,0 +1,61 @@
+<?php
+
+return [
+    'accepted' => ':attributeを承認してください。',
+    'array' => ':attributeは配列で指定してください。',
+    'boolean' => ':attributeは真偽値で指定してください。',
+    'confirmed' => ':attributeと確認用の値が一致しません。',
+    'date' => ':attributeは正しい日付で指定してください。',
+    'email' => ':attributeはメールアドレスの形式で指定してください。',
+    'exists' => '選択された:attributeは正しくありません。',
+    'filled' => ':attributeを入力してください。',
+    'in' => '選択された:attributeは正しくありません。',
+    'integer' => ':attributeは整数で指定してください。',
+    'max' => [
+        'array' => ':attributeは:max個以下にしてください。',
+        'file' => ':attributeは:max KB以下にしてください。',
+        'numeric' => ':attributeは:max以下にしてください。',
+        'string' => ':attributeは:max文字以下にしてください。',
+    ],
+    'min' => [
+        'array' => ':attributeは:min個以上にしてください。',
+        'file' => ':attributeは:min KB以上にしてください。',
+        'numeric' => ':attributeは:min以上にしてください。',
+        'string' => ':attributeは:min文字以上にしてください。',
+    ],
+    'nullable' => '',
+    'numeric' => ':attributeは数値で指定してください。',
+    'regex' => ':attributeの形式が正しくありません。',
+    'required' => ':attributeを入力してください。',
+    'required_if' => ':attributeを入力してください。',
+    'same' => ':attributeと:otherが一致しません。',
+    'string' => ':attributeは文字列で指定してください。',
+    'unique' => 'この:attributeはすでに使われています。',
+    'url' => ':attributeは正しいURL形式で指定してください。',
+
+    'attributes' => [
+        'id' => 'ID',
+        'name' => '店舗名',
+        'description' => '説明',
+        'type' => '種類',
+        'floor' => '階',
+        'map_x' => 'マップX',
+        'map_y' => 'マップY',
+        'login_id' => 'ログインID',
+        'password' => 'パスワード',
+        'exhibition_day' => '出展日',
+        'is_open' => '営業中',
+        'is_visible' => '来場者画面に表示',
+        'show_on_monitor' => '校内モニターに表示',
+        'current_wait_min' => '待ち時間',
+        'current_queue_count' => '待ち人数',
+        'day' => '開催日',
+    ],
+
+    'custom' => [
+        'password' => [
+            'regex' => 'パスワードは英数字8文字以上で入力してください。',
+            'min' => 'パスワードは英数字8文字以上で入力してください。',
+        ],
+    ],
+];
