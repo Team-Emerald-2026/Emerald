@@ -218,7 +218,7 @@ export default function AdminDashboard() {
               type="date"
               value={accessDate}
               onChange={(event) => setAccessDate(event.target.value)}
-              className="mt-1 block rounded-lg border border-border bg-white px-3 py-2 text-base text-foreground"
+              className="mt-1 block rounded-lg border border-input bg-background px-3 py-2 text-base text-foreground scheme-light dark:scheme-dark"
             />
           </label>
         </div>
