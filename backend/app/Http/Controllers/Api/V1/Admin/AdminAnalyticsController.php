@@ -8,8 +8,10 @@ use App\Models\OrderItem;
 use App\Models\SalesEntry;
 use App\Models\Store;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Validation\Rule;
 
 class AdminAnalyticsController extends Controller
 {
@@ -62,6 +64,89 @@ class AdminAnalyticsController extends Controller
                 'stores' => $stores,
             ],
         ], 200, [], JSON_UNESCAPED_UNICODE);
+    }
+
+    /**
+     * ブースの精算済み会計を、開催日ごとに店舗の金額順で返す。
+     * 客単価は精算済みの金額 ÷ 精算済み件数（円未満は四捨五入）。
+     */
+    public function booth(Request $request)
+    {
+        $this->authorizeAdmin($request);
+
+        $validated = $request->validate([
+            'day' => ['sometimes', 'string', Rule::in(['day1', 'day2', 'all'])],
+        ]);
+        $day = $validated['day'] ?? 'all';
+
+        $rows = $this->settledRows($day);
+        $names = Store::query()
+            ->whereIn('id', $rows->pluck('store_id'))
+            ->pluck('name', 'id');
+
+        $stores = $rows
+            ->map(function ($row) use ($names) {
+                $revenue = (int) $row->revenue;
+                $count = (int) $row->settled_orders;
+
+                return [
+                    'store_id' => (string) $row->store_id,
+                    'store_name' => (string) ($names->get($row->store_id) ?? $row->store_id),
+                    'revenue' => $revenue,
+                    'settled_orders' => $count,
+                    'average_ticket' => $this->averageTicket($revenue, $count),
+                ];
+            })
+            ->sort(function (array $left, array $right) {
+                if ($left['revenue'] !== $right['revenue']) {
+                    return $right['revenue'] <=> $left['revenue'];
+                }
+
+                return strcmp($left['store_name'], $right['store_name']);
+            })
+            ->values();
+
+        $totalRevenue = (int) $stores->sum('revenue');
+        $settledOrders = (int) $stores->sum('settled_orders');
+
+        return response()->json([
+            'data' => [
+                'day' => $day,
+                'total_revenue' => $totalRevenue,
+                'settled_orders' => $settledOrders,
+                'average_ticket' => $this->averageTicket($totalRevenue, $settledOrders),
+                'stores' => $stores,
+            ],
+        ], 200, [], JSON_UNESCAPED_UNICODE);
+    }
+
+    private function settledRows(string $day): Collection
+    {
+        $query = Order::query()->where('status', 'settled');
+        $hasDay = Schema::hasColumn('orders', 'festival_day');
+
+        if ($day !== 'all') {
+            if (! $hasDay) {
+                return collect();
+            }
+            $query->where('festival_day', $day);
+        }
+
+        return $query
+            ->select('store_id')
+            ->selectRaw('SUM(total_price) as revenue')
+            ->selectRaw('COUNT(*) as settled_orders')
+            ->groupBy('store_id')
+            ->get();
+    }
+
+    private function averageTicket(int $revenue, int $count): int
+    {
+        if ($count <= 0) {
+            return 0;
+        }
+
+        return (int) round($revenue / $count);
     }
 
     public function revenue(Request $request)

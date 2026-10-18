@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\V1\Booth\Accounting;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\Booth\Accounting\MenuItemResource;
 use App\Http\Resources\Booth\Accounting\OrderResource;
+use App\Models\FestivalSetting;
 use App\Models\MenuItem;
 use App\Models\Order;
 use App\Models\OrderItem;
@@ -13,6 +14,7 @@ use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\Rule;
 
 class AccountingController extends Controller
@@ -320,6 +322,9 @@ class AccountingController extends Controller
 
         $order->status = 'settled';
         $order->settled_at = now();
+        if (blank($order->festival_day) && Schema::hasColumn('orders', 'festival_day')) {
+            $order->festival_day = FestivalSetting::currentDay();
+        }
         $order->save();
 
         return OrderResource::make($order)

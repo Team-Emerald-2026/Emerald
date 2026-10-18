@@ -85,6 +85,7 @@ Route::prefix('v1/admin')->group(function () {
     Route::middleware('auth:sanctum')->group(function () {
         Route::post('auth/logout', [AdminAuthController::class, 'logout']);
         Route::get('analytics', [AdminAnalyticsController::class, 'index']);
+        Route::get('analytics/booth', [AdminAnalyticsController::class, 'booth']);
         Route::get('access', [AdminAccessLogController::class, 'index']);
         Route::get('access/log', [AdminAccessLogController::class, 'download']);
         Route::get('revenue', [AdminAnalyticsController::class, 'revenue']);

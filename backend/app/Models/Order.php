@@ -6,11 +6,13 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\Schema;
 
 class Order extends Model
 {
     protected $fillable = [
         'store_id',
+        'festival_day',
         'ticket_number',
         'total_price',
         'status',
@@ -27,6 +29,21 @@ class Order extends Model
         'served_at' => 'datetime',
         'settled_at' => 'datetime',
     ];
+
+    protected static function booted(): void
+    {
+        static::creating(function (Order $order): void {
+            if (filled($order->festival_day)) {
+                return;
+            }
+            if (! Schema::hasColumn($order->getTable(), 'festival_day')) {
+                return;
+            }
+
+            // 会計を取ったときの開催日。あとから 1日目 / 2日目 に分ける。
+            $order->festival_day = FestivalSetting::currentDay();
+        });
+    }
 
     public function items(): HasMany
     {

@@ -622,6 +622,30 @@ export function fetchAdminAnalytics(token?: string, signal?: AbortSignal) {
   );
 }
 
+export type BoothSalesDay = 'day1' | 'day2' | 'all';
+
+export interface BoothSalesStore {
+  store_id: string;
+  store_name: string;
+  revenue: number;
+  settled_orders: number;
+  average_ticket: number;
+}
+
+export interface BoothSales {
+  day: BoothSalesDay;
+  total_revenue: number;
+  settled_orders: number;
+  average_ticket: number;
+  stores: BoothSalesStore[];
+}
+
+export function fetchAdminBoothSales(token?: string, day: BoothSalesDay = 'all', signal?: AbortSignal) {
+  return request(`/v1/admin/analytics/booth?day=${encodeURIComponent(day)}`, { signal, token }).then((payload) =>
+    isRecord(payload) ? payload.data as BoothSales : null,
+  );
+}
+
 export interface AdminAccessHour {
   hour: string;
   total: number;

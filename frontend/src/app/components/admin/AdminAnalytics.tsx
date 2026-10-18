@@ -1,12 +1,15 @@
 import { useEffect, useState } from 'react';
-import { LineChart } from 'lucide-react';
+import { LineChart, Receipt } from 'lucide-react';
 import AdminShell from './AdminShell';
 import {
   ApiError,
   downloadAdminAccessLog,
   fetchAdminAccess,
+  fetchAdminBoothSales,
   type AdminAccessSlot,
   type AdminAccessSummary,
+  type BoothSales,
+  type BoothSalesDay,
 } from '../../lib/api';
 import { logoutAdminSession, useFestival } from '../../lib/festivalStore';
 import { ADMIN_PUBLIC_ACCESS } from '../../lib/adminAccess';
@@ -17,6 +20,14 @@ const BREAKDOWN = [
   { key: 'store', label: '店舗の操作', color: 'var(--warn)' },
   { key: 'admin', label: '管理画面', color: 'var(--busy)' },
 ] as const;
+
+const SALES_DAYS: Array<{ id: BoothSalesDay; label: string; hint: string }> = [
+  { id: 'day1', label: '1日目', hint: '10/24' },
+  { id: 'day2', label: '2日目', hint: '10/25' },
+  { id: 'all', label: '全体', hint: '両日' },
+];
+
+const yen = (value: number) => `¥${value.toLocaleString('ja-JP')}`;
 
 const countLabel = (value: number) => `${value.toLocaleString('ja-JP')} 件`;
 
@@ -39,12 +50,43 @@ const slotParts = (slot: AdminAccessSlot) => {
 
 export default function AdminAnalytics() {
   const adminSession = useFestival((s) => s.adminSession);
+  const [salesDay, setSalesDay] = useState<BoothSalesDay>('all');
+  const [sales, setSales] = useState<BoothSales | null>(null);
+  const [salesError, setSalesError] = useState('');
+  const [salesLoading, setSalesLoading] = useState(true);
   const [access, setAccess] = useState<AdminAccessSummary | null>(null);
   const [accessDate, setAccessDate] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const [downloading, setDownloading] = useState(false);
   const [downloadError, setDownloadError] = useState('');
+
+  useEffect(() => {
+    if (!adminSession && !ADMIN_PUBLIC_ACCESS) return;
+    const controller = new AbortController();
+
+    setSalesLoading(true);
+    setSalesError('');
+    fetchAdminBoothSales(adminSession?.token, salesDay, controller.signal)
+      .then((data) => {
+        if (controller.signal.aborted) return;
+        setSales(data);
+      })
+      .catch((err: unknown) => {
+        if (controller.signal.aborted) return;
+        if (err instanceof ApiError && err.status === 401) {
+          logoutAdminSession();
+          return;
+        }
+        setSales(null);
+        setSalesError('売上を取得できませんでした。');
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setSalesLoading(false);
+      });
+
+    return () => controller.abort();
+  }, [adminSession, salesDay]);
 
   useEffect(() => {
     if (!adminSession && !ADMIN_PUBLIC_ACCESS) return;
@@ -93,9 +135,121 @@ export default function AdminAnalytics() {
   const peakCount = access?.peak_slot?.count ?? 0;
   const peakSlot = access?.slots.find((slot) => slot.slot === access.peak_slot?.slot);
 
+  const visibleSales = sales?.day === salesDay ? sales : null;
+  const topRevenue = visibleSales?.stores[0]?.revenue ?? 0;
+
   return (
     <AdminShell title="アナリティクス">
       <section className="rounded-2xl border border-border bg-card p-4">
+        <h2 className="flex items-center gap-2 font-display text-lg font-bold text-foreground">
+          <Receipt className="h-5 w-5" style={{ color: 'var(--primary)' }} />
+          売上・会計
+        </h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          ブースで精算が終わった会計です。客単価は精算済みの金額 ÷ 精算済み件数です（円未満は四捨五入）。1日目・2日目は、会計をしたときの開催日で分けます。開催日が付いていない過去の精算は「全体」だけに入ります。
+        </p>
+
+        <div
+          className="mt-4 grid grid-cols-3 gap-1 rounded-xl border border-border bg-muted/40 p-1"
+          role="tablist"
+          aria-label="集計する開催日"
+        >
+          {SALES_DAYS.map((day) => {
+            const active = salesDay === day.id;
+            return (
+              <button
+                key={day.id}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                onClick={() => setSalesDay(day.id)}
+                className={`rounded-lg px-2 py-2 text-sm font-bold transition-colors ${
+                  active ? 'text-white shadow-sm' : 'text-muted-foreground hover:bg-muted'
+                }`}
+                style={active ? { backgroundColor: 'var(--primary)' } : undefined}
+              >
+                <span className="block leading-tight">{day.label}</span>
+                <span className={`block text-[10px] font-semibold ${active ? 'text-white/80' : ''}`}>
+                  {day.hint}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        {salesLoading && !visibleSales && (
+          <p className="mt-3 text-sm text-muted-foreground">売上を読み込み中です...</p>
+        )}
+        {salesError && <p className="mt-3 text-sm text-red-500">{salesError}</p>}
+
+        {visibleSales && !salesError && (
+          <>
+            <dl className="mt-4 grid grid-cols-3 gap-2">
+              <div className="rounded-xl bg-muted px-3 py-3">
+                <dt className="text-sm text-muted-foreground">売上</dt>
+                <dd className="mt-1 font-display text-xl font-bold text-foreground sm:text-2xl">
+                  {yen(visibleSales.total_revenue)}
+                </dd>
+              </div>
+              <div className="rounded-xl bg-muted px-3 py-3">
+                <dt className="text-sm text-muted-foreground">精算</dt>
+                <dd className="mt-1 font-display text-xl font-bold text-foreground sm:text-2xl">
+                  {countLabel(visibleSales.settled_orders)}
+                </dd>
+              </div>
+              <div className="rounded-xl bg-muted px-3 py-3">
+                <dt className="text-sm text-muted-foreground">客単価</dt>
+                <dd className="mt-1 font-display text-xl font-bold text-foreground sm:text-2xl">
+                  {visibleSales.settled_orders === 0 ? '—' : yen(visibleSales.average_ticket)}
+                </dd>
+              </div>
+            </dl>
+
+            <ol className="mt-4 space-y-2">
+              {visibleSales.stores.length ? (
+                visibleSales.stores.map((store, index) => {
+                  const width =
+                    topRevenue === 0 ? 0 : Math.max(4, Math.round((store.revenue / topRevenue) * 100));
+                  return (
+                    <li key={store.store_id} className="rounded-xl border border-border px-3 py-3">
+                      <div className="flex items-start gap-3">
+                        <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-muted text-xs font-bold text-foreground">
+                          {index + 1}
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-baseline justify-between gap-3">
+                            <p className="truncate font-bold text-foreground">{store.store_name}</p>
+                            <p className="shrink-0 font-display text-lg font-bold text-foreground">
+                              {yen(store.revenue)}
+                            </p>
+                          </div>
+                          <p className="mt-0.5 text-xs text-muted-foreground">
+                            精算 {countLabel(store.settled_orders)}
+                            <span className="px-1.5">·</span>
+                            客単価 {yen(store.average_ticket)}
+                          </p>
+                          <span className="mt-2 block h-1.5 overflow-hidden rounded-full bg-muted">
+                            <span
+                              className="block h-full rounded-full"
+                              style={{ width: `${width}%`, backgroundColor: 'var(--primary)' }}
+                            />
+                          </span>
+                        </div>
+                      </div>
+                    </li>
+                  );
+                })
+              ) : (
+                <li className="rounded-xl bg-muted p-4 text-center text-sm text-muted-foreground">
+                  この範囲の精算はまだありません。
+                </li>
+              )}
+            </ol>
+          </>
+        )}
+      </section>
+
+      <section className="mt-5 rounded-2xl border border-border bg-card p-4">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
             <h2 className="flex items-center gap-2 font-display text-lg font-bold text-foreground">
