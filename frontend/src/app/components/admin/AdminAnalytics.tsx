@@ -53,7 +53,7 @@ const AGENDA = [
   { id: 'analytics-sales', label: '売上' },
   { id: 'analytics-ranking', label: '店舗の売上' },
   { id: 'analytics-status', label: '店舗の件数' },
-  { id: 'analytics-unsettled', label: '未精算' },
+  { id: 'analytics-unserved', label: '未提供' },
   { id: 'analytics-hourly', label: '時間帯' },
   { id: 'analytics-menu', label: '売れ筋' },
   { id: 'analytics-access', label: 'API' },
@@ -122,18 +122,18 @@ const peakText = (access: AdminAccessSummary) => {
 
 function SalesOperations({ sales }: { sales: BoothSales }) {
   const counts = sales.status_counts ?? [];
-  const unsettled = sales.unsettled ?? [];
+  const unserved = sales.unserved ?? [];
   const hourly = sales.hourly ?? [];
   const menu = sales.menu_ranking ?? [];
   const storeMenus = sales.store_menu_rankings ?? [];
-  const topUnsettled = unsettled[0]?.amount ?? 0;
+  const topUnserved = unserved[0]?.amount ?? 0;
 
   return (
     <div className="mt-6 space-y-6 border-t border-border pt-5">
       <section id="analytics-status" className={SECTION_SCROLL}>
         <h3 className="font-display text-base font-bold text-foreground">店舗ごとの件数</h3>
         <p className="mt-1 text-sm text-muted-foreground">
-          精算済み、まだ精算していない会計、キャンセルの件数です。
+          提供済み、まだ提供していない会計、キャンセルの件数です。
         </p>
         {counts.length ? (
           <ul className="mt-3 space-y-2">
@@ -142,16 +142,16 @@ function SalesOperations({ sales }: { sales: BoothSales }) {
                 <p className="truncate font-bold text-foreground">{store.store_name}</p>
                 <dl className="mt-2 grid grid-cols-3 gap-2 text-center text-xs">
                   <div className="rounded-lg bg-muted px-2 py-2">
-                    <dt className="text-muted-foreground">精算済み</dt>
-                    <dd className="mt-1 font-display text-lg font-bold text-foreground">{store.settled}</dd>
+                    <dt className="text-muted-foreground">提供済み</dt>
+                    <dd className="mt-1 font-display text-lg font-bold text-foreground">{store.served}</dd>
                   </div>
                   <div className="rounded-lg bg-muted px-2 py-2">
-                    <dt className="text-muted-foreground">未精算</dt>
+                    <dt className="text-muted-foreground">未提供</dt>
                     <dd
                       className="mt-1 font-display text-lg font-bold text-foreground"
-                      style={store.unsettled > 0 ? { color: 'var(--warn)' } : undefined}
+                      style={store.unserved > 0 ? { color: 'var(--warn)' } : undefined}
                     >
-                      {store.unsettled}
+                      {store.unserved}
                     </dd>
                   </div>
                   <div className="rounded-lg bg-muted px-2 py-2">
@@ -174,16 +174,16 @@ function SalesOperations({ sales }: { sales: BoothSales }) {
         )}
       </section>
 
-      <section id="analytics-unsettled" className={SECTION_SCROLL}>
-        <h3 className="font-display text-base font-bold text-foreground">未精算の金額</h3>
+      <section id="analytics-unserved" className={SECTION_SCROLL}>
+        <h3 className="font-display text-base font-bold text-foreground">未提供の金額</h3>
         <p className="mt-1 text-sm text-muted-foreground">
-          まだ精算していない会計です。金額の多い店舗から並べています。
+          まだ提供していない会計です。金額の多い店舗から並べています。
         </p>
-        {unsettled.length ? (
+        {unserved.length ? (
           <ol className="mt-3 space-y-2">
-            {unsettled.map((store, index) => {
+            {unserved.map((store, index) => {
               const width =
-                topUnsettled === 0 ? 0 : Math.max(4, Math.round((store.amount / topUnsettled) * 100));
+                topUnserved === 0 ? 0 : Math.max(4, Math.round((store.amount / topUnserved) * 100));
               return (
                 <li key={store.store_id} className="rounded-xl border border-border px-3 py-3">
                   <div className="flex items-start gap-3">
@@ -210,7 +210,7 @@ function SalesOperations({ sales }: { sales: BoothSales }) {
           </ol>
         ) : (
           <p className="mt-3 rounded-xl bg-muted p-4 text-center text-sm text-muted-foreground">
-            未精算の会計はありません。
+            未提供の会計はありません。
           </p>
         )}
       </section>

@@ -120,7 +120,7 @@ class AdminAnalyticsController extends Controller
                 'average_ticket' => $this->averageTicket($totalRevenue, $settledOrders),
                 'stores' => $stores,
                 'status_counts' => $operations['status_counts'],
-                'unsettled' => $operations['unsettled'],
+                'unserved' => $operations['unserved'],
                 'hourly' => $operations['hourly'],
                 'menu_ranking' => $operations['menu_ranking'],
                 'store_menu_rankings' => $operations['store_menu_rankings'],
@@ -129,12 +129,12 @@ class AdminAnalyticsController extends Controller
     }
 
     /**
-     * 選んだ開催日の、精算状況・未精算金額・時間帯・売れ筋。
-     * 未精算は status=issued。時間帯と売れ筋はキャンセルを除く。
+     * 選んだ開催日の、提供状況・未提供金額・時間帯・売れ筋。
+     * 未提供はキャンセル以外で served_at が空。時間帯と売れ筋はキャンセルを除く。
      *
      * @return array{
      *     status_counts: Collection<int, array<string, mixed>>,
-     *     unsettled: Collection<int, array<string, mixed>>,
+     *     unserved: Collection<int, array<string, mixed>>,
      *     hourly: list<array{hour: int, count: int}>,
      *     menu_ranking: Collection<int, array<string, mixed>>,
      *     store_menu_rankings: Collection<int, array<string, mixed>>
@@ -149,21 +149,24 @@ class AdminAnalyticsController extends Controller
             ->get(['id', 'name'])
             ->map(function (Store $store) use ($byStore) {
                 $rows = $byStore->get($store->id, collect());
+                $open = $rows->where('status', '!=', 'canceled');
 
                 return [
                     'store_id' => (string) $store->id,
                     'store_name' => $store->name,
-                    'settled' => $rows->where('status', 'settled')->count(),
-                    'unsettled' => $rows->where('status', 'issued')->count(),
+                    'served' => $open->whereNotNull('served_at')->count(),
+                    'unserved' => $open->whereNull('served_at')->count(),
                     'canceled' => $rows->where('status', 'canceled')->count(),
                 ];
             })
             ->sort(fn (array $left, array $right) => $this->byStoreName($left, $right))
             ->values();
 
-        $unsettled = $statusCounts
+        $unserved = $statusCounts
             ->map(function (array $row) use ($byStore) {
-                $rows = $byStore->get($row['store_id'], collect())->where('status', 'issued');
+                $rows = $byStore->get($row['store_id'], collect())
+                    ->where('status', '!=', 'canceled')
+                    ->whereNull('served_at');
 
                 return [
                     'store_id' => $row['store_id'],
@@ -186,7 +189,7 @@ class AdminAnalyticsController extends Controller
 
         return [
             'status_counts' => $statusCounts,
-            'unsettled' => $unsettled,
+            'unserved' => $unserved,
             'hourly' => $this->hourlyCounts($orders),
             'menu_ranking' => $menu['menu_ranking'],
             'store_menu_rankings' => $menu['store_menu_rankings'],
@@ -198,7 +201,7 @@ class AdminAnalyticsController extends Controller
         $query = Order::query();
         $this->limitFestivalDay($query, $day);
 
-        return $query->get(['store_id', 'status', 'total_price', 'ordered_at', 'created_at']);
+        return $query->get(['store_id', 'status', 'total_price', 'ordered_at', 'created_at', 'served_at']);
     }
 
     /**

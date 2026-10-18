@@ -635,12 +635,12 @@ export interface BoothSalesStore {
 export interface BoothSalesStatus {
   store_id: string;
   store_name: string;
-  settled: number;
-  unsettled: number;
+  served: number;
+  unserved: number;
   canceled: number;
 }
 
-export interface BoothUnsettledStore {
+export interface BoothUnservedStore {
   store_id: string;
   store_name: string;
   count: number;
@@ -674,7 +674,7 @@ export interface BoothSales {
   average_ticket: number;
   stores: BoothSalesStore[];
   status_counts?: BoothSalesStatus[];
-  unsettled?: BoothUnsettledStore[];
+  unserved?: BoothUnservedStore[];
   hourly?: BoothSalesHour[];
   menu_ranking?: BoothMenuRank[];
   store_menu_rankings?: BoothStoreMenuRank[];
