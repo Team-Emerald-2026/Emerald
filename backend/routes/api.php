@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\V1\Auth\AuthController;
 use App\Http\Controllers\Api\V1\Admin\AdminAuthController;
+use App\Http\Controllers\Api\V1\Admin\AdminAccessLogController;
 use App\Http\Controllers\Api\V1\Admin\AdminAnalyticsController;
 use App\Http\Controllers\Api\V1\Admin\AdminEventController;
 use App\Http\Controllers\Api\V1\Admin\AdminMapFacilityController;
@@ -84,6 +85,8 @@ Route::prefix('v1/admin')->group(function () {
     Route::middleware('auth:sanctum')->group(function () {
         Route::post('auth/logout', [AdminAuthController::class, 'logout']);
         Route::get('analytics', [AdminAnalyticsController::class, 'index']);
+        Route::get('access', [AdminAccessLogController::class, 'index']);
+        Route::get('access/log', [AdminAccessLogController::class, 'download']);
         Route::get('revenue', [AdminAnalyticsController::class, 'revenue']);
         Route::delete('analytics', [AdminAnalyticsController::class, 'reset']);
         Route::get('stores', [AdminStoreController::class, 'index']);

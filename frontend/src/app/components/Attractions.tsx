@@ -216,8 +216,13 @@ export default function Attractions() {
         : { ...current, [detailId]: { status: 'loading' } },
     );
 
-    const load = () =>
-      fetchRestaurant(detailId, controller.signal, dayKey ? eventKeyToFestivalDay(dayKey) : undefined)
+    const load = (poll = false) =>
+      fetchRestaurant(
+        detailId,
+        controller.signal,
+        dayKey ? eventKeyToFestivalDay(dayKey) : undefined,
+        poll,
+      )
         .then((store) => {
           if (controller.signal.aborted) return;
           if (!store) throw new Error('empty response');
@@ -242,7 +247,7 @@ export default function Attractions() {
 
     void load();
     const timer = window.setInterval(() => {
-      if (document.visibilityState === 'visible') void load();
+      if (document.visibilityState === 'visible') void load(true);
     }, DETAIL_POLL_INTERVAL_MS);
 
     return () => {

@@ -314,8 +314,16 @@ export function fetchRestaurants(signal?: AbortSignal, day?: FestivalDay) {
   });
 }
 
-export function fetchRestaurant(id: string, signal?: AbortSignal, day?: FestivalDay) {
-  const query = day ? `?day=${encodeURIComponent(day)}` : '';
+export function fetchRestaurant(
+  id: string,
+  signal?: AbortSignal,
+  day?: FestivalDay,
+  poll = false,
+) {
+  const params = new URLSearchParams();
+  if (day) params.set('day', day);
+  if (poll) params.set('poll', '1');
+  const query = params.toString() ? `?${params.toString()}` : '';
   return request(`/v1/restaurants/${encodeURIComponent(id)}${query}`, { signal }).then((payload) =>
     normalizeItem<BackendStore>(payload),
   );
@@ -612,6 +620,82 @@ export function fetchAdminAnalytics(token?: string, signal?: AbortSignal) {
   return request('/v1/admin/analytics', { signal, token }).then((payload) =>
     isRecord(payload) ? payload.data as AdminAnalytics : null,
   );
+}
+
+export interface AdminAccessHour {
+  hour: string;
+  total: number;
+  visitor: number;
+  poll: number;
+  store: number;
+  admin: number;
+  server_error: number;
+  slow: number;
+}
+
+export interface AdminAccessSlot {
+  slot: string;
+  total: number;
+  visitor: number;
+  poll: number;
+  store: number;
+  admin: number;
+  server_error: number;
+  slow: number;
+}
+
+export interface AdminAccessSummary {
+  date: string;
+  total: number;
+  visitor: number;
+  poll: number;
+  store: number;
+  admin: number;
+  server_error: number;
+  slow: number;
+  slow_ms: number;
+  peak: { hour: string; count: number } | null;
+  hours: AdminAccessHour[];
+  peak_slot: { slot: string; count: number } | null;
+  slots: AdminAccessSlot[];
+}
+
+export function fetchAdminAccess(token?: string, date?: string, signal?: AbortSignal) {
+  const query = date ? `?date=${encodeURIComponent(date)}` : '';
+  return request(`/v1/admin/access${query}`, { signal, token }).then((payload) =>
+    isRecord(payload) ? (payload.data as AdminAccessSummary) : null,
+  );
+}
+
+export async function downloadAdminAccessLog(token: string | undefined, date: string) {
+  const headers: Record<string, string> = { Accept: 'text/plain' };
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  const response = await fetch(
+    `${apiBase}/v1/admin/access/log?date=${encodeURIComponent(date)}`,
+    { headers },
+  );
+
+  if (!response.ok) {
+    let message = 'アクセスログをダウンロードできませんでした。';
+    try {
+      const errorBody = (await response.json()) as unknown;
+      if (isRecord(errorBody) && isRecord(errorBody.error) && typeof errorBody.error.message === 'string') {
+        message = errorBody.error.message;
+      }
+    } catch {
+      // 本文が JSON でないときは既定の文言のまま
+    }
+    throw new ApiError(message, response.status);
+  }
+
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `access-${date}.txt`;
+  link.click();
+  URL.revokeObjectURL(url);
 }
 
 /** 売上データ（会計・売上入力・受付番号）をすべて消して待ち人数を 0 に戻す。元に戻せない。 */
