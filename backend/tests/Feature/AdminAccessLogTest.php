@@ -101,11 +101,14 @@ class AdminAccessLogTest extends TestCase
             ->assertJsonPath('data.slots.1.total', 0)
             ->assertJsonPath('data.slots.2.slot', '12:00')
             ->assertJsonPath('data.slots.2.total', 2)
+            ->assertJsonPath('data.slots.2.slow', 0)
+            ->assertJsonPath('data.slots.2.server_error', 0)
             ->assertJsonPath('data.slots.3.slot', '12:30')
             ->assertJsonPath('data.slots.3.total', 1)
             ->assertJsonPath('data.slots.4.slot', '13:00')
             ->assertJsonPath('data.slots.4.total', 1)
-            ->assertJsonPath('data.slots.4.server_error', 1);
+            ->assertJsonPath('data.slots.4.server_error', 1)
+            ->assertJsonPath('data.slots.4.slow', 1);
 
         $response = $this->get('/api/v1/admin/access/log?date='.$date);
         $response->assertOk();

@@ -19,6 +19,11 @@ const BREAKDOWN = [
 
 const countLabel = (value: number) => `${value.toLocaleString('ja-JP')} 件`;
 
+const slowLabel = (milliseconds: number) => {
+  const seconds = Math.max(1, Math.round((milliseconds || 1000) / 1000));
+  return `応答が${seconds}秒以上`;
+};
+
 const peakText = (access: AdminAccessSummary) => {
   if (!access.peak_slot) return 'なし';
   return `${access.peak_slot.slot}台に ${countLabel(access.peak_slot.count)}`;
@@ -77,7 +82,7 @@ export default function AdminAnalytics() {
               API 件数
             </h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              30分ごとの API を呼んだ回数です。来場者の画面、5秒ごとの再取得、店舗の操作、管理画面に分けています。来場者の人数ではありません。時刻は日本時間です。
+              30分ごとの API を呼んだ回数です。来場者の画面、5秒ごとの再取得、店舗の操作、管理画面に分けています。同じ枠に、応答が1秒以上の件数とサーバーエラー（5xx）の件数も出します。これらは内訳とは別に数えるので、1件が両方に入ることがあります。来場者の人数ではありません。時刻は日本時間です。
             </p>
           </div>
           <label className="text-sm text-muted-foreground">
@@ -124,6 +129,27 @@ export default function AdminAnalytics() {
                   <dd className="mt-1 font-bold text-foreground">{countLabel(access[item.key])}</dd>
                 </div>
               ))}
+            </dl>
+
+            <dl className="mt-2 grid grid-cols-2 gap-2 text-sm">
+              <div className="rounded-xl border border-border px-3 py-2">
+                <dt className="text-muted-foreground">{slowLabel(access.slow_ms)}</dt>
+                <dd
+                  className="mt-1 font-bold text-foreground"
+                  style={access.slow > 0 ? { color: 'var(--warn)' } : undefined}
+                >
+                  {countLabel(access.slow)}
+                </dd>
+              </div>
+              <div className="rounded-xl border border-border px-3 py-2">
+                <dt className="text-muted-foreground">サーバーエラー（5xx）</dt>
+                <dd
+                  className="mt-1 font-bold text-foreground"
+                  style={access.server_error > 0 ? { color: 'var(--busy)' } : undefined}
+                >
+                  {countLabel(access.server_error)}
+                </dd>
+              </div>
             </dl>
 
             <div className="mt-4 space-y-3">
@@ -174,6 +200,28 @@ export default function AdminAnalytics() {
                               <span className="shrink-0">{slot[item.key].toLocaleString('ja-JP')}</span>
                             </li>
                           ))}
+                        </ul>
+                      )}
+                      {slot.total > 0 && (
+                        <ul className="mt-1 grid w-full min-w-0 grid-cols-2 gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
+                          <li className="flex min-w-0 items-center gap-1">
+                            <span className="min-w-0 truncate">{slowLabel(access.slow_ms)}</span>
+                            <span
+                              className={`shrink-0 ${slot.slow > 0 ? 'font-bold' : ''}`}
+                              style={slot.slow > 0 ? { color: 'var(--warn)' } : undefined}
+                            >
+                              {(slot.slow ?? 0).toLocaleString('ja-JP')}
+                            </span>
+                          </li>
+                          <li className="flex min-w-0 items-center gap-1">
+                            <span className="min-w-0 truncate">サーバーエラー（5xx）</span>
+                            <span
+                              className={`shrink-0 ${slot.server_error > 0 ? 'font-bold' : ''}`}
+                              style={slot.server_error > 0 ? { color: 'var(--busy)' } : undefined}
+                            >
+                              {(slot.server_error ?? 0).toLocaleString('ja-JP')}
+                            </span>
+                          </li>
                         </ul>
                       )}
                     </div>
