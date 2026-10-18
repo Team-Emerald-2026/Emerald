@@ -180,6 +180,23 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
 
+/** バリデーション details / errors から文言を取り出す */
+function collectValidationMessages(details: unknown): string[] {
+  if (!isRecord(details)) return [];
+
+  const messages: string[] = [];
+  for (const value of Object.values(details)) {
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        if (typeof item === 'string' && item.trim()) messages.push(item.trim());
+      }
+    } else if (typeof value === 'string' && value.trim()) {
+      messages.push(value.trim());
+    }
+  }
+  return messages;
+}
+
 function flattenResource<T extends { id: string }>(item: Record<string, unknown>): T {
   const nested = isRecord(item.attributes) ? item.attributes : null;
   const merged = nested ? { ...item, ...nested } : item;
@@ -235,18 +252,32 @@ async function request(path: string, options: RequestOptions = {}): Promise<unkn
   });
 
   if (!response.ok) {
-    let message = `API request failed: ${response.status}`;
+    let message = `通信エラー（${response.status}）`;
     let code: string | undefined;
     try {
       const errorBody = (await response.json()) as unknown;
       if (isRecord(errorBody)) {
-        if (typeof errorBody.message === 'string' && errorBody.message.trim()) {
+        // API共通形式: { error: { code, message, details } }
+        if (isRecord(errorBody.error)) {
+          if (typeof errorBody.error.code === 'string') {
+            code = errorBody.error.code;
+          }
+          const detailMessages = collectValidationMessages(errorBody.error.details);
+          if (detailMessages.length > 0) {
+            message = detailMessages.join('\n');
+          } else if (typeof errorBody.error.message === 'string' && errorBody.error.message.trim()) {
+            message = errorBody.error.message;
+          }
+        } else if (isRecord(errorBody.errors)) {
+          // Laravel 標準の errors 形式
+          const detailMessages = collectValidationMessages(errorBody.errors);
+          if (detailMessages.length > 0) {
+            message = detailMessages.join('\n');
+          } else if (typeof errorBody.message === 'string' && errorBody.message.trim()) {
+            message = errorBody.message;
+          }
+        } else if (typeof errorBody.message === 'string' && errorBody.message.trim()) {
           message = errorBody.message;
-        } else if (isRecord(errorBody.error) && typeof errorBody.error.message === 'string') {
-          message = errorBody.error.message;
-        }
-        if (isRecord(errorBody.error) && typeof errorBody.error.code === 'string') {
-          code = errorBody.error.code;
         }
       }
     } catch {
@@ -823,7 +854,7 @@ export function deleteBoothSale(token: string, id: string, signal?: AbortSignal)
  * 待ち時間・待ち人数の更新。送った項目だけが更新される。
  * - current_queue_delta: 待ち人数を +1 / -1 のように増減する（注文の登録・提供と同時でも数え違いが起きない）
  * - current_queue_count: 待ち人数をその値にそろえる（current_queue_delta とは同時に送れない）
- * - crowd_level: 店内の混雑（すいている / 少し混雑 / 混雑）
+ * - crowd_level: 店内の混雑（空いている / 少し混雑 / 混雑）
  */
 export function updateWaitTime(
   token: string,

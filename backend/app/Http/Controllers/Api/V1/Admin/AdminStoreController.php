@@ -86,13 +86,14 @@ class AdminStoreController extends Controller
         $validated = $request->validate([
             'id' => ['required', 'string', 'max:64', 'unique:stores,id'],
             'name' => ['required', 'string', 'max:255'],
-            'description' => ['required', 'string', 'max:1000'],
+            'description' => ['nullable', 'string', 'max:1000'],
             'type' => ['required', 'string', 'max:64'],
             'floor' => ['required', 'integer', 'min:1', 'max:8'],
             'map_x' => ['required', 'integer', 'min:0', 'max:100'],
             'map_y' => ['required', 'integer', 'min:0', 'max:100'],
             'login_id' => ['required', 'string', 'max:255', 'unique:users,login_id'],
-            'password' => ['required', 'string', 'min:8'],
+            // 英数字のみ・8文字以上
+            'password' => ['required', 'string', 'min:8', 'regex:/^[A-Za-z0-9]+$/'],
             'exhibition_day' => ['sometimes', 'string', Rule::in(FestivalSetting::allowedExhibitionDays())],
             'is_open' => ['sometimes', 'boolean'],
             'show_on_monitor' => ['sometimes', 'boolean'],
@@ -104,7 +105,7 @@ class AdminStoreController extends Controller
             $attributes = [
                 'id' => $validated['id'],
                 'name' => $validated['name'],
-                'description' => $validated['description'],
+                'description' => $validated['description'] ?? '',
                 // 受付番号は数字だけにしたので、頭文字は使わない
                 'ticket_prefix' => null,
                 'is_open' => $validated['is_open'] ?? true,
@@ -158,7 +159,7 @@ class AdminStoreController extends Controller
 
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
-            'description' => ['required', 'string', 'max:1000'],
+            'description' => ['nullable', 'string', 'max:1000'],
             'type' => ['required', 'string', 'max:64'],
             'floor' => ['required', 'integer', 'min:1', 'max:8'],
             'map_x' => ['required', 'integer', 'min:0', 'max:100'],
@@ -169,7 +170,8 @@ class AdminStoreController extends Controller
                 'max:255',
                 Rule::unique('users', 'login_id')->ignore($storeUser?->id),
             ],
-            'password' => ['nullable', 'string', 'min:8'],
+            // 変更時のみ。入れるなら英数字8文字以上
+            'password' => ['nullable', 'string', 'min:8', 'regex:/^[A-Za-z0-9]+$/'],
             'exhibition_day' => ['required', 'string', Rule::in(FestivalSetting::allowedExhibitionDays())],
             'is_open' => ['required', 'boolean'],
             'is_visible' => ['required', 'boolean'],
@@ -181,7 +183,7 @@ class AdminStoreController extends Controller
         $result = DB::transaction(function () use ($store, $storeUser, $validated) {
             $attributes = [
                 'name' => $validated['name'],
-                'description' => $validated['description'],
+                'description' => $validated['description'] ?? '',
                 'is_open' => $validated['is_open'],
                 'is_visible' => $validated['is_visible'],
                 'current_wait_min' => $validated['current_wait_min'],
