@@ -163,9 +163,13 @@ class AdminBoothSalesTest extends TestCase
             ->assertJsonPath('data.hourly.4.hour', 13)
             ->assertJsonPath('data.hourly.4.count', 1)
             ->assertJsonPath('data.menu_ranking.0.name', '唐揚げ')
+            ->assertJsonPath('data.menu_ranking.0.store_names.0', '焼きそば')
+            ->assertJsonCount(1, 'data.menu_ranking.0.store_names')
             ->assertJsonPath('data.menu_ranking.0.quantity', 10)
             ->assertJsonPath('data.menu_ranking.0.amount', 3000)
             ->assertJsonPath('data.menu_ranking.1.name', 'コーヒー')
+            ->assertJsonPath('data.menu_ranking.1.store_names.0', 'カフェ')
+            ->assertJsonPath('data.menu_ranking.1.store_names.1', '焼きそば')
             ->assertJsonPath('data.menu_ranking.1.quantity', 5)
             ->assertJsonPath('data.menu_ranking.1.amount', 1400)
             ->assertJsonPath('data.menu_ranking.2.name', '焼きそば')
@@ -200,6 +204,7 @@ class AdminBoothSalesTest extends TestCase
             ->assertJsonPath('data.menu_ranking.1.quantity', 5)
             ->assertJsonPath('data.menu_ranking.1.amount', 1400)
             ->assertJsonPath('data.menu_ranking.2.name', '紅茶')
+            ->assertJsonPath('data.menu_ranking.2.store_names.0', 'カフェ')
             ->assertJsonPath('data.menu_ranking.2.quantity', 5)
             ->assertJsonPath('data.menu_ranking.2.amount', 900);
 

@@ -269,11 +269,20 @@ class AdminAnalyticsController extends Controller
 
         $overall = $rows
             ->groupBy(fn ($row) => trim((string) $row->name))
-            ->map(fn (Collection $group, mixed $name) => [
-                'name' => trim((string) $name),
-                'quantity' => (int) $group->sum('quantity'),
-                'amount' => (int) $group->sum('amount'),
-            ])
+            ->map(function (Collection $group, mixed $name) use ($names) {
+                $storeNames = $group
+                    ->map(fn ($row) => (string) ($names->get($row->store_id) ?? $row->store_id))
+                    ->unique()
+                    ->sort()
+                    ->values();
+
+                return [
+                    'name' => trim((string) $name),
+                    'store_names' => $storeNames,
+                    'quantity' => (int) $group->sum('quantity'),
+                    'amount' => (int) $group->sum('amount'),
+                ];
+            })
             ->sort(fn (array $left, array $right) => $this->byQuantityThenAmount($left, $right))
             ->take(5)
             ->values();

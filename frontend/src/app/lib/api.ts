@@ -654,6 +654,8 @@ export interface BoothSalesHour {
 
 export interface BoothMenuRank {
   name: string;
+  /** 全体の売れ筋だけ。同じ名前を複数ブースで足したときは、そのブース名 */
+  store_names?: string[];
   quantity: number;
   amount: number;
 }

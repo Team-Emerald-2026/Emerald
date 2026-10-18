@@ -191,7 +191,7 @@ function SalesOperations({ sales }: { sales: BoothSales }) {
       <section>
         <h3 className="font-display text-base font-bold text-foreground">売れ筋メニュー</h3>
         <p className="mt-1 text-sm text-muted-foreground">
-          キャンセルを除き、選んだ日の数量が多い順です。金額は明細の合計で、上位5件を全体と店舗ごとに出します。
+          キャンセルを除き、選んだ日の数量が多い順です。金額は明細の合計で、上位5件を全体と店舗ごとに出します。全体では、売れたブース名も付けます。
         </p>
         <h4 className="mt-3 text-sm font-bold text-foreground">全体</h4>
         <MenuRankList items={menu} empty="この範囲の販売はまだありません。" />
@@ -236,7 +236,14 @@ function MenuRankList({
             </span>
             <div className="min-w-0 flex-1">
               <div className="flex items-baseline justify-between gap-3">
-                <p className="truncate font-bold text-foreground">{item.name}</p>
+                <p className="min-w-0 truncate font-bold text-foreground">
+                  {item.name}
+                  {item.store_names?.length ? (
+                    <span className="ml-1.5 text-xs font-semibold text-muted-foreground">
+                      {item.store_names.join('、')}
+                    </span>
+                  ) : null}
+                </p>
                 <p className="shrink-0 text-sm font-bold text-foreground">数量 {item.quantity.toLocaleString('ja-JP')}</p>
               </div>
               <p className="mt-0.5 text-xs text-muted-foreground">{yen(item.amount)}</p>
