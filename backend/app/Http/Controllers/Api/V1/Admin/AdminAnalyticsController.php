@@ -7,6 +7,7 @@ use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\SalesEntry;
 use App\Models\Store;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -108,16 +109,235 @@ class AdminAnalyticsController extends Controller
 
         $totalRevenue = (int) $stores->sum('revenue');
         $settledOrders = (int) $stores->sum('settled_orders');
+        $operations = $this->boothOperations($day);
 
         return response()->json([
             'data' => [
                 'day' => $day,
+                'generated_at' => now('Asia/Tokyo')->format('Y-m-d\TH:i:sP'),
                 'total_revenue' => $totalRevenue,
                 'settled_orders' => $settledOrders,
                 'average_ticket' => $this->averageTicket($totalRevenue, $settledOrders),
                 'stores' => $stores,
+                'status_counts' => $operations['status_counts'],
+                'unsettled' => $operations['unsettled'],
+                'hourly' => $operations['hourly'],
+                'menu_ranking' => $operations['menu_ranking'],
+                'store_menu_rankings' => $operations['store_menu_rankings'],
             ],
         ], 200, [], JSON_UNESCAPED_UNICODE);
+    }
+
+    /**
+     * 選んだ開催日の、精算状況・未精算金額・時間帯・売れ筋。
+     * 未精算は status=issued。時間帯と売れ筋はキャンセルを除く。
+     *
+     * @return array{
+     *     status_counts: Collection<int, array<string, mixed>>,
+     *     unsettled: Collection<int, array<string, mixed>>,
+     *     hourly: list<array{hour: int, count: int}>,
+     *     menu_ranking: Collection<int, array<string, mixed>>,
+     *     store_menu_rankings: Collection<int, array<string, mixed>>
+     * }
+     */
+    private function boothOperations(string $day): array
+    {
+        $orders = $this->ordersForDay($day);
+        $byStore = $orders->groupBy('store_id');
+
+        $statusCounts = Store::query()
+            ->get(['id', 'name'])
+            ->map(function (Store $store) use ($byStore) {
+                $rows = $byStore->get($store->id, collect());
+
+                return [
+                    'store_id' => (string) $store->id,
+                    'store_name' => $store->name,
+                    'settled' => $rows->where('status', 'settled')->count(),
+                    'unsettled' => $rows->where('status', 'issued')->count(),
+                    'canceled' => $rows->where('status', 'canceled')->count(),
+                ];
+            })
+            ->sort(fn (array $left, array $right) => $this->byStoreName($left, $right))
+            ->values();
+
+        $unsettled = $statusCounts
+            ->map(function (array $row) use ($byStore) {
+                $rows = $byStore->get($row['store_id'], collect())->where('status', 'issued');
+
+                return [
+                    'store_id' => $row['store_id'],
+                    'store_name' => $row['store_name'],
+                    'count' => $rows->count(),
+                    'amount' => (int) $rows->sum('total_price'),
+                ];
+            })
+            ->filter(fn (array $row) => $row['count'] > 0)
+            ->sort(function (array $left, array $right) {
+                if ($left['amount'] !== $right['amount']) {
+                    return $right['amount'] <=> $left['amount'];
+                }
+
+                return $this->byStoreName($left, $right);
+            })
+            ->values();
+
+        $menu = $this->menuRankings($day);
+
+        return [
+            'status_counts' => $statusCounts,
+            'unsettled' => $unsettled,
+            'hourly' => $this->hourlyCounts($orders),
+            'menu_ranking' => $menu['menu_ranking'],
+            'store_menu_rankings' => $menu['store_menu_rankings'],
+        ];
+    }
+
+    private function ordersForDay(string $day): Collection
+    {
+        $query = Order::query();
+        $this->limitFestivalDay($query, $day);
+
+        return $query->get(['store_id', 'status', 'total_price', 'ordered_at', 'created_at']);
+    }
+
+    /**
+     * キャンセルを除いた会計を、会計した時刻（日本時間）の時で数える。
+     * 最初と最後の時のあいだは、0件の時も返す。
+     *
+     * @return list<array{hour: int, count: int}>
+     */
+    private function hourlyCounts(Collection $orders): array
+    {
+        $counts = [];
+
+        foreach ($orders as $order) {
+            if (! in_array($order->status, ['issued', 'settled'], true)) {
+                continue;
+            }
+
+            $at = $order->ordered_at ?? $order->created_at;
+            if ($at === null) {
+                continue;
+            }
+
+            $hour = (int) $at->copy()->timezone('Asia/Tokyo')->format('G');
+            $counts[$hour] = ($counts[$hour] ?? 0) + 1;
+        }
+
+        if ($counts === []) {
+            return [];
+        }
+
+        $rows = [];
+        for ($hour = min(array_keys($counts)); $hour <= max(array_keys($counts)); $hour++) {
+            $rows[] = [
+                'hour' => $hour,
+                'count' => $counts[$hour] ?? 0,
+            ];
+        }
+
+        return $rows;
+    }
+
+    /**
+     * キャンセルを除いた明細を、数量の多い順に上位5件。同数は金額、その次は名前。
+     *
+     * @return array{
+     *     menu_ranking: Collection<int, array<string, mixed>>,
+     *     store_menu_rankings: Collection<int, array<string, mixed>>
+     * }
+     */
+    private function menuRankings(string $day): array
+    {
+        $query = OrderItem::query()
+            ->join('orders', 'orders.id', '=', 'order_items.order_id')
+            ->join('menu_items', 'menu_items.id', '=', 'order_items.menu_item_id')
+            ->whereIn('orders.status', ['issued', 'settled']);
+        $this->limitFestivalDay($query, $day, 'orders.festival_day');
+
+        $rows = $query
+            ->select('orders.store_id', 'menu_items.name')
+            ->selectRaw('SUM(order_items.quantity) as quantity')
+            ->selectRaw('SUM(order_items.subtotal) as amount')
+            ->groupBy('orders.store_id', 'menu_items.name')
+            ->get();
+
+        $names = Store::query()
+            ->whereIn('id', $rows->pluck('store_id')->unique()->values())
+            ->pluck('name', 'id');
+
+        $overall = $rows
+            ->groupBy(fn ($row) => trim((string) $row->name))
+            ->map(fn (Collection $group, mixed $name) => [
+                'name' => trim((string) $name),
+                'quantity' => (int) $group->sum('quantity'),
+                'amount' => (int) $group->sum('amount'),
+            ])
+            ->sort(fn (array $left, array $right) => $this->byQuantityThenAmount($left, $right))
+            ->take(5)
+            ->values();
+
+        $byStore = $rows
+            ->groupBy('store_id')
+            ->map(function (Collection $group, mixed $storeId) use ($names) {
+                $storeId = (string) $storeId;
+
+                return [
+                    'store_id' => $storeId,
+                    'store_name' => (string) ($names->get($storeId) ?? $storeId),
+                    'items' => $group
+                        ->map(fn ($row) => [
+                            'name' => trim((string) $row->name),
+                            'quantity' => (int) $row->quantity,
+                            'amount' => (int) $row->amount,
+                        ])
+                        ->sort(fn (array $left, array $right) => $this->byQuantityThenAmount($left, $right))
+                        ->take(5)
+                        ->values(),
+                ];
+            })
+            ->sort(fn (array $left, array $right) => $this->byStoreName($left, $right))
+            ->values();
+
+        return [
+            'menu_ranking' => $overall,
+            'store_menu_rankings' => $byStore,
+        ];
+    }
+
+    private function limitFestivalDay(Builder $query, string $day, string $column = 'festival_day'): void
+    {
+        if ($day === 'all') {
+            return;
+        }
+
+        if (! Schema::hasColumn('orders', 'festival_day')) {
+            $query->whereRaw('0 = 1');
+
+            return;
+        }
+
+        $query->where($column, $day);
+    }
+
+    private function byStoreName(array $left, array $right): int
+    {
+        return strcmp($left['store_name'], $right['store_name'])
+            ?: strcmp($left['store_id'], $right['store_id']);
+    }
+
+    private function byQuantityThenAmount(array $left, array $right): int
+    {
+        if ($left['quantity'] !== $right['quantity']) {
+            return $right['quantity'] <=> $left['quantity'];
+        }
+
+        if ($left['amount'] !== $right['amount']) {
+            return $right['amount'] <=> $left['amount'];
+        }
+
+        return strcmp($left['name'], $right['name']);
     }
 
     private function settledRows(string $day): Collection

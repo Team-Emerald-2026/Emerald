@@ -3,7 +3,9 @@
 namespace Tests\Feature;
 
 use App\Models\FestivalSetting;
+use App\Models\MenuItem;
 use App\Models\Order;
+use App\Models\OrderItem;
 use App\Models\Store;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -88,6 +90,135 @@ class AdminBoothSalesTest extends TestCase
             ->assertJsonPath('error.code', 'INVALID_PARAMS');
     }
 
+    public function test_admin_sees_counts_unsettled_amounts_hourly_counts_and_menu_ranking(): void
+    {
+        $cafe = $this->createStore('store-cafe', 'カフェ');
+        $noodle = $this->createStore('store-noodle', '焼きそば');
+        $this->createStore('store-quiet', 'まだ会計なし');
+
+        $coffee = $this->menu($cafe, 'コーヒー', 300);
+        $cake = $this->menu($cafe, 'ケーキ', 400);
+        $juice = $this->menu($cafe, 'ジュース', 200);
+        $tea = $this->menu($cafe, '紅茶', 180);
+        $fried = $this->menu($noodle, '唐揚げ', 300);
+        $yakisoba = $this->menu($noodle, '焼きそば', 500);
+        $noodleCoffee = $this->menu($noodle, 'コーヒー', 250);
+        $salad = $this->menu($noodle, 'サラダ', 600);
+
+        $this->withItems($this->order($cafe, 'C-1', 900, 'settled', 'day1', '2026-10-24 00:30:00'), [
+            [$coffee, 3, 900],
+        ]);
+        $this->withItems($this->order($cafe, 'C-2', 800, 'issued', 'day1', '2026-10-24 01:10:00'), [
+            [$cake, 2, 800],
+        ]);
+        $this->withItems($this->order($cafe, 'C-3', 200, 'issued', 'day1', '2026-10-24 04:20:00'), [
+            [$juice, 1, 200],
+        ]);
+        $this->withItems($this->order($cafe, 'C-4', 2700, 'canceled', 'day1', '2026-10-24 01:00:00'), [
+            [$coffee, 9, 2700],
+        ]);
+        $this->withItems($this->order($cafe, 'C-5', 900, 'issued', 'day2', '2026-10-25 01:00:00'), [
+            [$tea, 5, 900],
+        ]);
+        $this->withItems($this->order($noodle, 'Y-1', 3000, 'settled', 'day1', '2026-10-24 00:10:00'), [
+            [$fried, 10, 3000],
+        ]);
+        $this->withItems($this->order($noodle, 'Y-2', 3100, 'issued', 'day1', '2026-10-24 02:00:00'), [
+            [$yakisoba, 4, 2000],
+            [$noodleCoffee, 2, 500],
+            [$salad, 1, 600],
+        ]);
+
+        Sanctum::actingAs($this->createAdmin());
+
+        $day1 = $this->getJson('/api/v1/admin/analytics/booth?day=day1')
+            ->assertOk()
+            ->assertJsonPath('data.status_counts.0.store_name', 'まだ会計なし')
+            ->assertJsonPath('data.status_counts.0.settled', 0)
+            ->assertJsonPath('data.status_counts.0.unsettled', 0)
+            ->assertJsonPath('data.status_counts.0.canceled', 0)
+            ->assertJsonPath('data.status_counts.1.store_name', 'カフェ')
+            ->assertJsonPath('data.status_counts.1.settled', 1)
+            ->assertJsonPath('data.status_counts.1.unsettled', 2)
+            ->assertJsonPath('data.status_counts.1.canceled', 1)
+            ->assertJsonPath('data.status_counts.2.store_name', '焼きそば')
+            ->assertJsonPath('data.status_counts.2.settled', 1)
+            ->assertJsonPath('data.status_counts.2.unsettled', 1)
+            ->assertJsonPath('data.status_counts.2.canceled', 0)
+            ->assertJsonPath('data.unsettled.0.store_name', '焼きそば')
+            ->assertJsonPath('data.unsettled.0.count', 1)
+            ->assertJsonPath('data.unsettled.0.amount', 3100)
+            ->assertJsonPath('data.unsettled.1.store_name', 'カフェ')
+            ->assertJsonPath('data.unsettled.1.count', 2)
+            ->assertJsonPath('data.unsettled.1.amount', 1000)
+            ->assertJsonCount(2, 'data.unsettled')
+            ->assertJsonPath('data.hourly.0.hour', 9)
+            ->assertJsonPath('data.hourly.0.count', 2)
+            ->assertJsonPath('data.hourly.1.hour', 10)
+            ->assertJsonPath('data.hourly.1.count', 1)
+            ->assertJsonPath('data.hourly.2.hour', 11)
+            ->assertJsonPath('data.hourly.2.count', 1)
+            ->assertJsonPath('data.hourly.3.hour', 12)
+            ->assertJsonPath('data.hourly.3.count', 0)
+            ->assertJsonPath('data.hourly.4.hour', 13)
+            ->assertJsonPath('data.hourly.4.count', 1)
+            ->assertJsonPath('data.menu_ranking.0.name', '唐揚げ')
+            ->assertJsonPath('data.menu_ranking.0.quantity', 10)
+            ->assertJsonPath('data.menu_ranking.0.amount', 3000)
+            ->assertJsonPath('data.menu_ranking.1.name', 'コーヒー')
+            ->assertJsonPath('data.menu_ranking.1.quantity', 5)
+            ->assertJsonPath('data.menu_ranking.1.amount', 1400)
+            ->assertJsonPath('data.menu_ranking.2.name', '焼きそば')
+            ->assertJsonPath('data.menu_ranking.3.name', 'ケーキ')
+            ->assertJsonPath('data.menu_ranking.4.name', 'サラダ')
+            ->assertJsonPath('data.menu_ranking.4.quantity', 1)
+            ->assertJsonPath('data.menu_ranking.4.amount', 600)
+            ->assertJsonCount(5, 'data.menu_ranking')
+            ->assertJsonPath('data.store_menu_rankings.0.store_name', 'カフェ')
+            ->assertJsonPath('data.store_menu_rankings.0.items.0.name', 'コーヒー')
+            ->assertJsonPath('data.store_menu_rankings.0.items.0.quantity', 3)
+            ->assertJsonPath('data.store_menu_rankings.0.items.2.name', 'ジュース')
+            ->assertJsonPath('data.store_menu_rankings.1.store_name', '焼きそば')
+            ->assertJsonPath('data.store_menu_rankings.1.items.0.name', '唐揚げ')
+            ->assertJsonCount(2, 'data.store_menu_rankings');
+
+        $this->assertMatchesRegularExpression(
+            '/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\+09:00$/',
+            (string) $day1->json('data.generated_at'),
+        );
+
+        $this->getJson('/api/v1/admin/analytics/booth?day=all')
+            ->assertOk()
+            ->assertJsonPath('data.unsettled.0.store_name', '焼きそば')
+            ->assertJsonPath('data.unsettled.0.amount', 3100)
+            ->assertJsonPath('data.unsettled.1.store_name', 'カフェ')
+            ->assertJsonPath('data.unsettled.1.count', 3)
+            ->assertJsonPath('data.unsettled.1.amount', 1900)
+            ->assertJsonPath('data.hourly.1.hour', 10)
+            ->assertJsonPath('data.hourly.1.count', 2)
+            ->assertJsonPath('data.menu_ranking.1.name', 'コーヒー')
+            ->assertJsonPath('data.menu_ranking.1.quantity', 5)
+            ->assertJsonPath('data.menu_ranking.1.amount', 1400)
+            ->assertJsonPath('data.menu_ranking.2.name', '紅茶')
+            ->assertJsonPath('data.menu_ranking.2.quantity', 5)
+            ->assertJsonPath('data.menu_ranking.2.amount', 900);
+
+        $this->getJson('/api/v1/admin/analytics/booth?day=day2')
+            ->assertOk()
+            ->assertJsonPath('data.status_counts.1.store_name', 'カフェ')
+            ->assertJsonPath('data.status_counts.1.settled', 0)
+            ->assertJsonPath('data.status_counts.1.unsettled', 1)
+            ->assertJsonPath('data.status_counts.1.canceled', 0)
+            ->assertJsonCount(1, 'data.unsettled')
+            ->assertJsonPath('data.unsettled.0.amount', 900)
+            ->assertJsonPath('data.hourly.0.hour', 10)
+            ->assertJsonPath('data.hourly.0.count', 1)
+            ->assertJsonPath('data.menu_ranking.0.name', '紅茶')
+            ->assertJsonPath('data.menu_ranking.0.quantity', 5)
+            ->assertJsonPath('data.menu_ranking.0.amount', 900)
+            ->assertJsonCount(1, 'data.store_menu_rankings');
+    }
+
     public function test_new_order_keeps_the_festival_day_it_was_taken_on(): void
     {
         $store = $this->createStore('store-cafe', 'カフェ');
@@ -120,7 +251,7 @@ class AdminBoothSalesTest extends TestCase
             'id' => $id,
             'name' => $name,
             'description' => 'テスト',
-            'ticket_prefix' => 'T',
+            'ticket_prefix' => substr($id, 0, 16),
             'is_open' => true,
             'is_visible' => true,
             'current_wait_min' => 0,
@@ -148,7 +279,7 @@ class AdminBoothSalesTest extends TestCase
         ]);
     }
 
-    private function order(Store $store, string $ticket, int $price, string $status, ?string $day): Order
+    private function order(Store $store, string $ticket, int $price, string $status, ?string $day, ?string $orderedAt = null): Order
     {
         $order = Order::query()->create([
             'store_id' => $store->id,
@@ -156,7 +287,7 @@ class AdminBoothSalesTest extends TestCase
             'total_price' => $price,
             'status' => $status,
             'festival_day' => $day,
-            'ordered_at' => now(),
+            'ordered_at' => $orderedAt ?? now(),
             'settled_at' => $status === 'settled' ? now() : null,
         ]);
 
@@ -167,5 +298,32 @@ class AdminBoothSalesTest extends TestCase
         }
 
         return $order;
+    }
+
+    private function menu(Store $store, string $name, int $price): MenuItem
+    {
+        return MenuItem::query()->create([
+            'store_id' => $store->id,
+            'name' => $name,
+            'description' => null,
+            'price' => $price,
+            'is_available' => true,
+        ]);
+    }
+
+    /**
+     * @param  list<array{0: MenuItem, 1: int, 2: int}>  $items
+     */
+    private function withItems(Order $order, array $items): void
+    {
+        foreach ($items as [$item, $quantity, $subtotal]) {
+            OrderItem::query()->create([
+                'order_id' => $order->id,
+                'menu_item_id' => $item->id,
+                'quantity' => $quantity,
+                'unit_price' => $item->price,
+                'subtotal' => $subtotal,
+            ]);
+        }
     }
 }

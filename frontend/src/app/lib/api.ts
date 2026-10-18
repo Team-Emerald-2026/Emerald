@@ -632,12 +632,50 @@ export interface BoothSalesStore {
   average_ticket: number;
 }
 
+export interface BoothSalesStatus {
+  store_id: string;
+  store_name: string;
+  settled: number;
+  unsettled: number;
+  canceled: number;
+}
+
+export interface BoothUnsettledStore {
+  store_id: string;
+  store_name: string;
+  count: number;
+  amount: number;
+}
+
+export interface BoothSalesHour {
+  hour: number;
+  count: number;
+}
+
+export interface BoothMenuRank {
+  name: string;
+  quantity: number;
+  amount: number;
+}
+
+export interface BoothStoreMenuRank {
+  store_id: string;
+  store_name: string;
+  items: BoothMenuRank[];
+}
+
 export interface BoothSales {
   day: BoothSalesDay;
+  generated_at?: string;
   total_revenue: number;
   settled_orders: number;
   average_ticket: number;
   stores: BoothSalesStore[];
+  status_counts?: BoothSalesStatus[];
+  unsettled?: BoothUnsettledStore[];
+  hourly?: BoothSalesHour[];
+  menu_ranking?: BoothMenuRank[];
+  store_menu_rankings?: BoothStoreMenuRank[];
 }
 
 export function fetchAdminBoothSales(token?: string, day: BoothSalesDay = 'all', signal?: AbortSignal) {

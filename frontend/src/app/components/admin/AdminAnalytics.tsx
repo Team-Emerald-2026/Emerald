@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { LineChart, Receipt } from 'lucide-react';
+import { LineChart, Receipt, RefreshCw } from 'lucide-react';
 import AdminShell from './AdminShell';
 import {
   ApiError,
@@ -31,6 +31,24 @@ const yen = (value: number) => `¥${value.toLocaleString('ja-JP')}`;
 
 const countLabel = (value: number) => `${value.toLocaleString('ja-JP')} 件`;
 
+const SALES_REFRESH_MS = 60_000;
+
+const updatedLabel = (value: string) => {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return new Intl.DateTimeFormat('ja-JP', {
+    timeZone: 'Asia/Tokyo',
+    month: 'numeric',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hourCycle: 'h23',
+  }).format(date);
+};
+
+const hourLabel = (hour: number) => `${hour}時`;
+
 const slowLabel = (milliseconds: number) => {
   const seconds = Math.max(1, Math.round((milliseconds || 1000) / 1000));
   return `応答が${seconds}秒以上`;
@@ -40,6 +58,195 @@ const peakText = (access: AdminAccessSummary) => {
   if (!access.peak_slot) return 'なし';
   return `${access.peak_slot.slot}台に ${countLabel(access.peak_slot.count)}`;
 };
+
+function SalesOperations({ sales }: { sales: BoothSales }) {
+  const counts = sales.status_counts ?? [];
+  const unsettled = sales.unsettled ?? [];
+  const hourly = sales.hourly ?? [];
+  const menu = sales.menu_ranking ?? [];
+  const storeMenus = sales.store_menu_rankings ?? [];
+  const peakHour = hourly.reduce((max, row) => Math.max(max, row.count), 0);
+  const topUnsettled = unsettled[0]?.amount ?? 0;
+
+  return (
+    <div className="mt-6 space-y-6 border-t border-border pt-5">
+      <section>
+        <h3 className="font-display text-base font-bold text-foreground">店舗ごとの件数</h3>
+        <p className="mt-1 text-sm text-muted-foreground">
+          精算済み、まだ精算していない会計、キャンセルの件数です。
+        </p>
+        {counts.length ? (
+          <ul className="mt-3 space-y-2">
+            {counts.map((store) => (
+              <li key={store.store_id} className="rounded-xl border border-border px-3 py-3">
+                <p className="truncate font-bold text-foreground">{store.store_name}</p>
+                <dl className="mt-2 grid grid-cols-3 gap-2 text-center text-xs">
+                  <div className="rounded-lg bg-muted px-2 py-2">
+                    <dt className="text-muted-foreground">精算済み</dt>
+                    <dd className="mt-1 font-display text-lg font-bold text-foreground">{store.settled}</dd>
+                  </div>
+                  <div className="rounded-lg bg-muted px-2 py-2">
+                    <dt className="text-muted-foreground">未精算</dt>
+                    <dd
+                      className="mt-1 font-display text-lg font-bold text-foreground"
+                      style={store.unsettled > 0 ? { color: 'var(--warn)' } : undefined}
+                    >
+                      {store.unsettled}
+                    </dd>
+                  </div>
+                  <div className="rounded-lg bg-muted px-2 py-2">
+                    <dt className="text-muted-foreground">キャンセル</dt>
+                    <dd
+                      className="mt-1 font-display text-lg font-bold text-foreground"
+                      style={store.canceled > 0 ? { color: 'var(--busy)' } : undefined}
+                    >
+                      {store.canceled}
+                    </dd>
+                  </div>
+                </dl>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="mt-3 rounded-xl bg-muted p-4 text-center text-sm text-muted-foreground">
+            店舗はまだありません。
+          </p>
+        )}
+      </section>
+
+      <section>
+        <h3 className="font-display text-base font-bold text-foreground">未精算の金額</h3>
+        <p className="mt-1 text-sm text-muted-foreground">
+          まだ精算していない会計です。金額の多い店舗から並べています。
+        </p>
+        {unsettled.length ? (
+          <ol className="mt-3 space-y-2">
+            {unsettled.map((store, index) => {
+              const width =
+                topUnsettled === 0 ? 0 : Math.max(4, Math.round((store.amount / topUnsettled) * 100));
+              return (
+                <li key={store.store_id} className="rounded-xl border border-border px-3 py-3">
+                  <div className="flex items-start gap-3">
+                    <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-muted text-xs font-bold text-foreground">
+                      {index + 1}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-baseline justify-between gap-3">
+                        <p className="truncate font-bold text-foreground">{store.store_name}</p>
+                        <p className="shrink-0 font-display text-lg font-bold text-foreground">{yen(store.amount)}</p>
+                      </div>
+                      <p className="mt-0.5 text-xs text-muted-foreground">{countLabel(store.count)}</p>
+                      <span className="mt-2 block h-1.5 overflow-hidden rounded-full bg-muted">
+                        <span
+                          className="block h-full rounded-full"
+                          style={{ width: `${width}%`, backgroundColor: 'var(--warn)' }}
+                        />
+                      </span>
+                    </div>
+                  </div>
+                </li>
+              );
+            })}
+          </ol>
+        ) : (
+          <p className="mt-3 rounded-xl bg-muted p-4 text-center text-sm text-muted-foreground">
+            未精算の会計はありません。
+          </p>
+        )}
+      </section>
+
+      <section>
+        <h3 className="font-display text-base font-bold text-foreground">1時間ごとの会計件数</h3>
+        <p className="mt-1 text-sm text-muted-foreground">
+          キャンセルを除いた会計を、会計した時刻（日本時間）で数えています。全体は、両日の同じ時刻を足しています。
+        </p>
+        {hourly.length ? (
+          <div className="mt-3 space-y-2">
+            {hourly.map((row) => {
+              const width =
+                row.count === 0 || peakHour === 0
+                  ? 0
+                  : Math.max(4, Math.round((row.count / peakHour) * 100));
+              return (
+                <div key={row.hour} className="grid grid-cols-[3rem_minmax(0,1fr)_auto] items-center gap-2 text-xs">
+                  <span className="text-muted-foreground">{hourLabel(row.hour)}</span>
+                  <span className="block h-2 overflow-hidden rounded-full bg-muted">
+                    <span
+                      className="block h-full rounded-full"
+                      style={{ width: `${width}%`, backgroundColor: 'var(--primary)' }}
+                    />
+                  </span>
+                  <span className="text-foreground">{countLabel(row.count)}</span>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <p className="mt-3 rounded-xl bg-muted p-4 text-center text-sm text-muted-foreground">
+            この範囲の会計はまだありません。
+          </p>
+        )}
+      </section>
+
+      <section>
+        <h3 className="font-display text-base font-bold text-foreground">売れ筋メニュー</h3>
+        <p className="mt-1 text-sm text-muted-foreground">
+          キャンセルを除き、選んだ日の数量が多い順です。金額は明細の合計で、上位5件を全体と店舗ごとに出します。
+        </p>
+        <h4 className="mt-3 text-sm font-bold text-foreground">全体</h4>
+        <MenuRankList items={menu} empty="この範囲の販売はまだありません。" />
+        <h4 className="mt-4 text-sm font-bold text-foreground">店舗ごと</h4>
+        {storeMenus.length ? (
+          <div className="mt-2 space-y-3">
+            {storeMenus.map((store) => (
+              <div key={store.store_id}>
+                <p className="text-sm font-bold text-foreground">{store.store_name}</p>
+                <MenuRankList items={store.items} empty="販売はまだありません。" />
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="mt-2 rounded-xl bg-muted p-4 text-center text-sm text-muted-foreground">
+            販売のある店舗はありません。
+          </p>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function MenuRankList({
+  items,
+  empty,
+}: {
+  items: NonNullable<BoothSales['menu_ranking']>;
+  empty: string;
+}) {
+  if (!items.length) {
+    return <p className="mt-2 rounded-xl bg-muted p-4 text-center text-sm text-muted-foreground">{empty}</p>;
+  }
+
+  return (
+    <ol className="mt-2 space-y-2">
+      {items.map((item, index) => (
+        <li key={`${item.name}-${index}`} className="rounded-xl border border-border px-3 py-2">
+          <div className="flex items-start gap-3">
+            <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-muted text-xs font-bold text-foreground">
+              {index + 1}
+            </span>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-baseline justify-between gap-3">
+                <p className="truncate font-bold text-foreground">{item.name}</p>
+                <p className="shrink-0 text-sm font-bold text-foreground">数量 {item.quantity.toLocaleString('ja-JP')}</p>
+              </div>
+              <p className="mt-0.5 text-xs text-muted-foreground">{yen(item.amount)}</p>
+            </div>
+          </div>
+        </li>
+      ))}
+    </ol>
+  );
+}
 
 const slotParts = (slot: AdminAccessSlot) => {
   const parts = BREAKDOWN.map((item) => ({ ...item, value: slot[item.key] }));
@@ -54,6 +261,8 @@ export default function AdminAnalytics() {
   const [sales, setSales] = useState<BoothSales | null>(null);
   const [salesError, setSalesError] = useState('');
   const [salesLoading, setSalesLoading] = useState(true);
+  const [salesReload, setSalesReload] = useState(0);
+  const [autoRefresh, setAutoRefresh] = useState(true);
   const [access, setAccess] = useState<AdminAccessSummary | null>(null);
   const [accessDate, setAccessDate] = useState('');
   const [error, setError] = useState('');
@@ -78,7 +287,7 @@ export default function AdminAnalytics() {
           logoutAdminSession();
           return;
         }
-        setSales(null);
+        setSales((current) => (current?.day === salesDay ? current : null));
         setSalesError('売上を取得できませんでした。');
       })
       .finally(() => {
@@ -86,7 +295,13 @@ export default function AdminAnalytics() {
       });
 
     return () => controller.abort();
-  }, [adminSession, salesDay]);
+  }, [adminSession, salesDay, salesReload]);
+
+  useEffect(() => {
+    if (!autoRefresh || (!adminSession && !ADMIN_PUBLIC_ACCESS)) return;
+    const id = window.setInterval(() => setSalesReload((current) => current + 1), SALES_REFRESH_MS);
+    return () => window.clearInterval(id);
+  }, [adminSession, autoRefresh, salesReload]);
 
   useEffect(() => {
     if (!adminSession && !ADMIN_PUBLIC_ACCESS) return;
@@ -141,13 +356,42 @@ export default function AdminAnalytics() {
   return (
     <AdminShell title="アナリティクス">
       <section className="rounded-2xl border border-border bg-card p-4">
-        <h2 className="flex items-center gap-2 font-display text-lg font-bold text-foreground">
-          <Receipt className="h-5 w-5" style={{ color: 'var(--primary)' }} />
-          売上・会計
-        </h2>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <h2 className="flex items-center gap-2 font-display text-lg font-bold text-foreground">
+            <Receipt className="h-5 w-5" style={{ color: 'var(--primary)' }} />
+            売上・会計
+          </h2>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              aria-pressed={autoRefresh}
+              onClick={() => setAutoRefresh((current) => !current)}
+              className={`rounded-lg border px-3 py-2 text-sm font-bold ${
+                autoRefresh ? 'text-white' : 'border-border text-foreground hover:bg-muted'
+              }`}
+              style={autoRefresh ? { backgroundColor: 'var(--primary)', borderColor: 'var(--primary)' } : undefined}
+            >
+              {autoRefresh ? '1分ごとに更新中' : '1分ごとの更新は停止'}
+            </button>
+            <button
+              type="button"
+              onClick={() => setSalesReload((current) => current + 1)}
+              disabled={salesLoading}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-sm font-bold text-foreground hover:bg-muted disabled:opacity-40"
+            >
+              <RefreshCw className={`h-4 w-4 ${salesLoading ? 'animate-spin' : ''}`} />
+              {salesLoading && visibleSales ? '取り直し中...' : '取り直す'}
+            </button>
+          </div>
+        </div>
         <p className="mt-1 text-sm text-muted-foreground">
-          ブースで精算が終わった会計です。客単価は精算済みの金額 ÷ 精算済み件数です（円未満は四捨五入）。1日目・2日目は、会計をしたときの開催日で分けます。開催日が付いていない過去の精算は「全体」だけに入ります。
+          ブースで精算が終わった会計です。客単価は精算済みの金額 ÷ 精算済み件数です（円未満は四捨五入）。1日目・2日目は、会計をしたときの開催日で分けます。開催日が付いていない過去の精算は「全体」だけに入ります。自動更新は1分に1回です。
         </p>
+        {visibleSales?.generated_at && (
+          <p className="mt-2 text-xs text-muted-foreground" aria-live="polite">
+            最終更新 {updatedLabel(visibleSales.generated_at)}
+          </p>
+        )}
 
         <div
           className="mt-4 grid grid-cols-3 gap-1 rounded-xl border border-border bg-muted/40 p-1"
@@ -182,7 +426,7 @@ export default function AdminAnalytics() {
         )}
         {salesError && <p className="mt-3 text-sm text-red-500">{salesError}</p>}
 
-        {visibleSales && !salesError && (
+        {visibleSales && (
           <>
             <dl className="mt-4 grid grid-cols-3 gap-2">
               <div className="rounded-xl bg-muted px-3 py-3">
@@ -245,6 +489,8 @@ export default function AdminAnalytics() {
                 </li>
               )}
             </ol>
+
+            <SalesOperations sales={visibleSales} />
           </>
         )}
       </section>
