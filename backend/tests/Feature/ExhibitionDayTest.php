@@ -150,6 +150,59 @@ class ExhibitionDayTest extends TestCase
         $this->assertSame('604', $at604['label'] ?? null);
     }
 
+    public function test_map_hides_empty_slot_when_only_other_day_store_is_assigned(): void
+    {
+        FestivalSetting::setCurrentDay('day1');
+
+        $day2 = $this->createStore('store-corridor', 'day2', ['name' => 'サークルの販売スペース']);
+
+        MapFacilities::query()->create([
+            'store_id' => null,
+            'name' => '6',
+            'type' => 'shop',
+            'floor' => 6,
+            'x' => 49,
+            'y' => 39,
+        ]);
+        MapFacilities::query()->create([
+            'store_id' => $day2->id,
+            'name' => $day2->name,
+            'type' => 'shop',
+            'floor' => 6,
+            'x' => 49,
+            'y' => 39,
+        ]);
+        // 店舗の無い枠は両日とも残る
+        MapFacilities::query()->create([
+            'store_id' => null,
+            'name' => '非常口',
+            'type' => 'emergency_exit',
+            'floor' => 6,
+            'x' => 74,
+            'y' => 32,
+        ]);
+
+        $day1Items = collect($this->getJson('/api/v1/map/facilities?day=day1')->assertOk()->json('data'));
+        $this->assertNull(
+            $day1Items->first(
+                fn ($item) => (int) $item['floor'] === 6 && (int) $item['x'] === 49 && (int) $item['y'] === 39,
+            ),
+            '1日目には2日目専用ブースの部屋枠だけが残ってはいけない',
+        );
+        $this->assertNotNull(
+            $day1Items->first(fn ($item) => ($item['name'] ?? null) === '非常口'),
+            '店舗の無い枠は1日目も表示する',
+        );
+
+        $day2Items = collect($this->getJson('/api/v1/map/facilities?day=day2')->assertOk()->json('data'));
+        $atCorridor = $day2Items->first(
+            fn ($item) => (int) $item['floor'] === 6 && (int) $item['x'] === 49 && (int) $item['y'] === 39,
+        );
+        $this->assertNotNull($atCorridor);
+        $this->assertSame('store-corridor', $atCorridor['store_id']);
+        $this->assertSame('6', $atCorridor['label'] ?? null);
+    }
+
     public function test_admin_can_create_store_with_exhibition_day(): void
     {
         Sanctum::actingAs($this->createAdmin());
