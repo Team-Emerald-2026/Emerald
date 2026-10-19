@@ -12,6 +12,16 @@ export type BoothKind = 'booth' | 'food' | 'exhibit' | 'information' | 'shop';
 /** 店内の混雑。待ち人数（注文の列）とは別 */
 export type CrowdLevel = 'empty' | 'moderate' | 'crowded';
 
+/** 商品ごとの売上（清算済みの会計だけを集計） */
+export interface BoothItemSales {
+  menu_item_id: number;
+  name: string;
+  /** 売れた数 */
+  quantity: number;
+  /** 売上金額 */
+  subtotal: number;
+}
+
 export interface BoothDashboard {
   id: string;
   name: string;
@@ -23,6 +33,14 @@ export interface BoothDashboard {
   wait_display_text?: string | null;
   crowd_level?: CrowdLevel | null;
   revenue?: number;
+  /** レジ（会計済み注文）の売上 */
+  order_revenue?: number;
+  /** 手入力した売上 */
+  sales_entry_revenue?: number;
+  /** 清算済みの会計数 */
+  settled_order_count?: number;
+  /** 商品ごとの売上数・金額（売れた数が多い順） */
+  item_sales?: BoothItemSales[];
   type?: string;
   /** 整理券の枚数（1〜この番号までを使い回す。既定20） */
   ticket_limit?: number;

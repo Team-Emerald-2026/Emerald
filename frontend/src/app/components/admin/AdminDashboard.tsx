@@ -34,6 +34,8 @@ export default function AdminDashboard() {
   const [accessLoading, setAccessLoading] = useState(true);
   const [downloading, setDownloading] = useState(false);
   const [downloadError, setDownloadError] = useState('');
+  /** 店舗別収益で選んでいる店舗。'all' は全店舗の合計 */
+  const [selectedStoreId, setSelectedStoreId] = useState('all');
 
   useEffect(() => {
     if (!adminSession && !ADMIN_PUBLIC_ACCESS) return;
@@ -178,30 +180,66 @@ export default function AdminDashboard() {
 
       <section className="mt-5 rounded-2xl border border-border bg-card p-4">
         <h2 className="font-display text-lg font-bold text-foreground">店舗別収益</h2>
-        <div className="mt-3 space-y-2">
-          {analytics?.stores.length ? (
-            analytics.stores.map((store) => (
-              <div
-                key={store.store_id}
-                className="flex items-center justify-between gap-3 rounded-xl bg-muted px-3 py-2"
-              >
-                <div className="min-w-0">
+        {analytics?.stores.length ? (
+          <>
+            <label className="mt-3 block text-sm text-muted-foreground" htmlFor="revenue-store-select">
+              表示する店舗を選択
+            </label>
+            <select
+              id="revenue-store-select"
+              value={selectedStoreId}
+              onChange={(event) => setSelectedStoreId(event.target.value)}
+              className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 text-base text-foreground sm:max-w-sm"
+            >
+              <option value="all">全店舗（合計）</option>
+              {analytics.stores.map((store) => (
+                <option key={store.store_id} value={store.store_id}>
+                  {store.store_name}
+                </option>
+              ))}
+            </select>
+
+            {(() => {
+              if (selectedStoreId === 'all') {
+                return (
+                  <div className="mt-3 rounded-xl bg-muted px-4 py-3">
+                    <p className="text-xs text-muted-foreground">
+                      全{analytics.stores.length}店舗・会計 {analytics.total_orders}件
+                    </p>
+                    <p className="font-display text-2xl font-bold text-foreground">
+                      {yen(analytics.total_revenue)}
+                    </p>
+                  </div>
+                );
+              }
+
+              const store = analytics.stores.find((s) => s.store_id === selectedStoreId);
+              if (!store) {
+                return (
+                  <p className="mt-3 rounded-xl bg-muted p-4 text-center text-sm text-muted-foreground">
+                    選択した店舗が見つかりません。
+                  </p>
+                );
+              }
+
+              return (
+                <div className="mt-3 rounded-xl bg-muted px-4 py-3">
                   <p className="truncate font-bold text-foreground">{store.store_name}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {store.is_visible ? (store.is_open ? '営業中' : '準備中') : '非表示'}・{store.order_count}件
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    {store.is_visible ? (store.is_open ? '営業中' : '準備中') : '非表示'}・会計 {store.order_count}件
+                  </p>
+                  <p className="mt-1 font-display text-2xl font-bold text-foreground">
+                    {yen(store.revenue)}
                   </p>
                 </div>
-                <p className="shrink-0 font-display text-lg font-bold text-foreground">
-                  {yen(store.revenue)}
-                </p>
-              </div>
-            ))
-          ) : (
-            <p className="rounded-xl bg-muted p-6 text-center text-sm text-muted-foreground">
-              収益データはまだありません。
-            </p>
-          )}
-        </div>
+              );
+            })()}
+          </>
+        ) : (
+          <p className="mt-3 rounded-xl bg-muted p-6 text-center text-sm text-muted-foreground">
+            収益データはまだありません。
+          </p>
+        )}
       </section>
 
       <section className="mt-5 rounded-2xl border border-border bg-card p-4">

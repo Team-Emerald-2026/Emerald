@@ -6,10 +6,12 @@ use App\Http\Controllers\Controller;
 use App\Http\Resources\Booth\DashboardResource;
 use App\Models\MapFacilities;
 use App\Models\Order;
+use App\Models\OrderItem;
 use App\Models\SalesEntry;
 use App\Models\Store;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 class DashboardController extends Controller
@@ -142,11 +144,16 @@ class DashboardController extends Controller
     private function withRevenue(Store $store): Store
     {
         $orderRevenue = 0;
+        $settledOrderCount = 0;
         if (Schema::hasTable('orders')) {
-            $orderRevenue = (int) Order::query()
+            $settledOrders = Order::query()
                 ->forStore($store->id)
                 ->where('status', 'settled')
-                ->sum('total_price');
+                ->selectRaw('COUNT(*) as order_count, COALESCE(SUM(total_price), 0) as revenue')
+                ->first();
+
+            $orderRevenue = (int) ($settledOrders->revenue ?? 0);
+            $settledOrderCount = (int) ($settledOrders->order_count ?? 0);
         }
 
         $salesRevenue = 0;
@@ -157,7 +164,45 @@ class DashboardController extends Controller
         }
 
         $store->setAttribute('revenue', $orderRevenue + $salesRevenue);
+        $store->setAttribute('order_revenue', $orderRevenue);
+        $store->setAttribute('sales_entry_revenue', $salesRevenue);
+        $store->setAttribute('settled_order_count', $settledOrderCount);
+        $store->setAttribute('item_sales', $this->itemSales($store->id));
 
         return $store;
+    }
+
+    /**
+     * 商品ごとの売上数・売上金額（清算済みの会計だけを集計する）。
+     * 売れた数が多い順に並べる。
+     */
+    private function itemSales(string $storeId): array
+    {
+        if (! Schema::hasTable('orders') || ! Schema::hasTable('order_items')) {
+            return [];
+        }
+
+        return OrderItem::query()
+            ->join('orders', 'orders.id', '=', 'order_items.order_id')
+            ->leftJoin('menu_items', 'menu_items.id', '=', 'order_items.menu_item_id')
+            ->where('orders.store_id', $storeId)
+            ->where('orders.status', 'settled')
+            ->groupBy('order_items.menu_item_id', 'menu_items.name')
+            ->select([
+                'order_items.menu_item_id',
+                'menu_items.name',
+                DB::raw('SUM(order_items.quantity) as quantity'),
+                DB::raw('SUM(order_items.subtotal) as subtotal'),
+            ])
+            ->orderByDesc(DB::raw('SUM(order_items.quantity)'))
+            ->get()
+            ->map(fn ($row) => [
+                'menu_item_id' => (int) $row->menu_item_id,
+                'name' => (string) ($row->name ?? '削除済みの商品'),
+                'quantity' => (int) $row->quantity,
+                'subtotal' => (int) $row->subtotal,
+            ])
+            ->values()
+            ->all();
     }
 }

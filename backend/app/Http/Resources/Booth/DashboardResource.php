@@ -25,6 +25,10 @@ class DashboardResource extends JsonResource
                 ->values()
                 ->all(),
             'revenue' => (int) ($this->revenue ?? 0),
+            'order_revenue' => (int) ($this->order_revenue ?? 0),
+            'sales_entry_revenue' => (int) ($this->sales_entry_revenue ?? 0),
+            'settled_order_count' => (int) ($this->settled_order_count ?? 0),
+            'item_sales' => $this->item_sales ?? [],
             'type' => $this->boothType(),
         ];
 
