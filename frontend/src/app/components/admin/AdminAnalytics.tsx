@@ -120,6 +120,43 @@ const peakText = (access: AdminAccessSummary) => {
   return `${access.peak_slot.slot}台に ${countLabel(access.peak_slot.count)}`;
 };
 
+function StatusCountGrid({
+  served,
+  unserved,
+  canceled,
+}: {
+  served: number;
+  unserved: number;
+  canceled: number;
+}) {
+  return (
+    <dl className="mt-2 grid grid-cols-3 gap-2 text-center text-xs">
+      <div className="rounded-lg bg-muted px-2 py-2">
+        <dt className="text-muted-foreground">提供済み</dt>
+        <dd className="mt-1 font-display text-lg font-bold text-foreground">{served}</dd>
+      </div>
+      <div className="rounded-lg bg-muted px-2 py-2">
+        <dt className="text-muted-foreground">未提供</dt>
+        <dd
+          className="mt-1 font-display text-lg font-bold text-foreground"
+          style={unserved > 0 ? { color: 'var(--warn)' } : undefined}
+        >
+          {unserved}
+        </dd>
+      </div>
+      <div className="rounded-lg bg-muted px-2 py-2">
+        <dt className="text-muted-foreground">キャンセル</dt>
+        <dd
+          className="mt-1 font-display text-lg font-bold text-foreground"
+          style={canceled > 0 ? { color: 'var(--busy)' } : undefined}
+        >
+          {canceled}
+        </dd>
+      </div>
+    </dl>
+  );
+}
+
 function SalesOperations({ sales }: { sales: BoothSales }) {
   const counts = sales.status_counts ?? [];
   const unserved = sales.unserved ?? [];
@@ -127,6 +164,17 @@ function SalesOperations({ sales }: { sales: BoothSales }) {
   const menu = sales.menu_ranking ?? [];
   const storeMenus = sales.store_menu_rankings ?? [];
   const topUnserved = unserved[0]?.amount ?? 0;
+  /** 店舗ごとの件数で選んでいる店舗。'all' は全店舗の合計 */
+  const [statusStoreId, setStatusStoreId] = useState('all');
+  const statusStore = counts.find((store) => store.store_id === statusStoreId);
+  const statusTotals = counts.reduce(
+    (sum, store) => ({
+      served: sum.served + store.served,
+      unserved: sum.unserved + store.unserved,
+      canceled: sum.canceled + store.canceled,
+    }),
+    { served: 0, unserved: 0, canceled: 0 },
+  );
 
   return (
     <div className="mt-6 space-y-6 border-t border-border pt-5">
@@ -136,37 +184,51 @@ function SalesOperations({ sales }: { sales: BoothSales }) {
           提供済み、まだ提供していない会計、キャンセルの件数です。
         </p>
         {counts.length ? (
-          <ul className="mt-3 space-y-2">
-            {counts.map((store) => (
-              <li key={store.store_id} className="rounded-xl border border-border px-3 py-3">
-                <p className="truncate font-bold text-foreground">{store.store_name}</p>
-                <dl className="mt-2 grid grid-cols-3 gap-2 text-center text-xs">
-                  <div className="rounded-lg bg-muted px-2 py-2">
-                    <dt className="text-muted-foreground">提供済み</dt>
-                    <dd className="mt-1 font-display text-lg font-bold text-foreground">{store.served}</dd>
-                  </div>
-                  <div className="rounded-lg bg-muted px-2 py-2">
-                    <dt className="text-muted-foreground">未提供</dt>
-                    <dd
-                      className="mt-1 font-display text-lg font-bold text-foreground"
-                      style={store.unserved > 0 ? { color: 'var(--warn)' } : undefined}
-                    >
-                      {store.unserved}
-                    </dd>
-                  </div>
-                  <div className="rounded-lg bg-muted px-2 py-2">
-                    <dt className="text-muted-foreground">キャンセル</dt>
-                    <dd
-                      className="mt-1 font-display text-lg font-bold text-foreground"
-                      style={store.canceled > 0 ? { color: 'var(--busy)' } : undefined}
-                    >
-                      {store.canceled}
-                    </dd>
-                  </div>
-                </dl>
-              </li>
-            ))}
-          </ul>
+          <>
+            <label className="mt-3 block text-sm text-muted-foreground" htmlFor="status-store-select">
+              表示する店舗を選択
+            </label>
+            <select
+              id="status-store-select"
+              value={statusStoreId}
+              onChange={(event) => setStatusStoreId(event.target.value)}
+              className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 text-base text-foreground sm:max-w-sm"
+            >
+              <option value="all">全店舗（合計）</option>
+              {counts.map((store) => (
+                <option key={store.store_id} value={store.store_id}>
+                  {store.store_name}
+                </option>
+              ))}
+            </select>
+
+            <div className="mt-3 rounded-xl border border-border px-3 py-3">
+              {statusStoreId === 'all' ? (
+                <>
+                  <p className="truncate font-bold text-foreground">全店舗（合計）</p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">全{counts.length}店舗の合計です。</p>
+                  <StatusCountGrid
+                    served={statusTotals.served}
+                    unserved={statusTotals.unserved}
+                    canceled={statusTotals.canceled}
+                  />
+                </>
+              ) : statusStore ? (
+                <>
+                  <p className="truncate font-bold text-foreground">{statusStore.store_name}</p>
+                  <StatusCountGrid
+                    served={statusStore.served}
+                    unserved={statusStore.unserved}
+                    canceled={statusStore.canceled}
+                  />
+                </>
+              ) : (
+                <p className="text-center text-sm text-muted-foreground">
+                  選択した店舗が見つかりません。
+                </p>
+              )}
+            </div>
+          </>
         ) : (
           <p className="mt-3 rounded-xl bg-muted p-4 text-center text-sm text-muted-foreground">
             店舗はまだありません。
