@@ -157,6 +157,18 @@ export default function AdminStores() {
     setError('');
   };
 
+  // 編集フォームを、対象店舗の直下に出したあと見える位置までスクロールする
+  useEffect(() => {
+    if (!showForm || !editing) return;
+    const frame = window.requestAnimationFrame(() => {
+      document.getElementById(`store-edit-${editing.id}`)?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'nearest',
+      });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [showForm, editing]);
+
   const submit = async (input: AdminStoreInput) => {
     if ((!adminSession && !ADMIN_PUBLIC_ACCESS) || saving) return;
     setSaving(true);
@@ -329,10 +341,10 @@ export default function AdminStores() {
         </p>
       )}
 
-      {showForm && (
+      {showForm && !editing && (
         <div className="mb-5">
           <AdminStoreForm
-            store={editing}
+            store={null}
             locations={locations}
             saving={saving}
             onCancel={() => {
@@ -340,8 +352,6 @@ export default function AdminStores() {
               setEditing(null);
             }}
             onSubmit={submit}
-            onHide={editing ? () => void hideStore(editing) : undefined}
-            onDelete={editing ? () => void deleteStore(editing) : undefined}
           />
         </div>
       )}
@@ -425,6 +435,23 @@ export default function AdminStores() {
                   営業停止・非表示
                 </button>
               </div>
+
+              {showForm && editing?.id === store.id && (
+                <div id={`store-edit-${store.id}`} className="mt-4 border-t border-border pt-4">
+                  <AdminStoreForm
+                    store={editing}
+                    locations={locations}
+                    saving={saving}
+                    onCancel={() => {
+                      setShowForm(false);
+                      setEditing(null);
+                    }}
+                    onSubmit={submit}
+                    onHide={() => void hideStore(editing)}
+                    onDelete={() => void deleteStore(editing)}
+                  />
+                </div>
+              )}
             </li>
           ))}
         </ul>

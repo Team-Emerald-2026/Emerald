@@ -39,7 +39,7 @@ class DashboardController extends Controller
             // 1人当たりの待ち時間（分）。来場者画面は待ち人数の表示になったため、送らなくてもよい
             'current_wait_min' => ['sometimes', 'integer', 'min:0', 'max:180'],
             'is_open' => ['required', 'boolean'],
-            'type' => ['sometimes', 'string', 'in:booth,food,exhibit,information,shop,stage'],
+            'type' => ['sometimes', 'string', 'in:booth,food,exhibit,information,shop,circle_sales,stage'],
         ];
 
         if (Schema::hasColumn('stores', 'wait_display_mode')) {

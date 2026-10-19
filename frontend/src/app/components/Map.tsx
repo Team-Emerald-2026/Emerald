@@ -4,6 +4,7 @@ import {
   FlaskConical,
   UtensilsCrossed,
   Ticket,
+  ShoppingBag,
   Info as InfoIcon,
   HeartPulse,
   Headset,
@@ -22,8 +23,8 @@ import {
 } from '../lib/eventSchedule';
 import EventDayTabs from './EventDayTabs';
 
-// 管理画面で選べるのは 体験 / フード / 作品展示 / 案内 / 金券販売 / 運営サポート / 男子トイレ / 女子トイレ / 男女トイレ /
-// 自販機 / 非常口 の11個。救護室は、以前に登録された場所を表示するためだけに残している。
+// 管理画面で選べるのは 体験 / フード / 作品展示 / 案内 / 金券販売 / サークル販売 / 運営サポート /
+// 男子トイレ / 女子トイレ / 男女トイレ / 自販機 / 非常口。救護室は旧データ表示用。
 type BoothType =
   | 'フード'
   | '体験'
@@ -31,6 +32,7 @@ type BoothType =
   | '案内'
   | '運営サポート'
   | '金券販売'
+  | 'サークル販売'
   | '男子トイレ'
   | '女子トイレ'
   | '男女トイレ'
@@ -46,6 +48,7 @@ const typeOrder: BoothType[] = [
   '案内',
   '運営サポート',
   '金券販売',
+  'サークル販売',
   '男子トイレ',
   '女子トイレ',
   '男女トイレ',
@@ -81,6 +84,7 @@ const typeIcon: Record<BoothType, LucideIcon> = {
   体験: FlaskConical,
   フード: UtensilsCrossed,
   金券販売: Ticket,
+  サークル販売: ShoppingBag,
   男子トイレ: Toilet,
   女子トイレ: Toilet,
   男女トイレ: Toilet,
@@ -96,6 +100,7 @@ const typeColor: Record<BoothType, string> = {
   体験: 'var(--primary)',
   フード: 'var(--accent)',
   金券販売: '#7c5cff',
+  サークル販売: '#e11d48',
   男子トイレ: '#2563eb',
   女子トイレ: '#db2777',
   男女トイレ: '#64748b',
@@ -123,6 +128,9 @@ function toBoothType(type: string): BoothType {
     case '金券販売':
     case '物販':
       return '金券販売';
+    case 'circle_sales':
+    case 'サークル販売':
+      return 'サークル販売';
     case 'toilet_men':
     case '男子トイレ':
       return '男子トイレ';

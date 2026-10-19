@@ -8,7 +8,7 @@ export interface BoothLoginResponse {
   role?: 'store' | 'admin';
 }
 
-export type BoothKind = 'booth' | 'food' | 'exhibit' | 'information' | 'shop';
+export type BoothKind = 'booth' | 'food' | 'exhibit' | 'information' | 'shop' | 'circle_sales';
 /** 店内の混雑。待ち人数（注文の列）とは別 */
 export type CrowdLevel = 'empty' | 'moderate' | 'crowded';
 
