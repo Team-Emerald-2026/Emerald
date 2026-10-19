@@ -48,9 +48,14 @@ class StoreResource extends JsonResource
                 ->values();
         }
 
+        // 呼び出し画面は type=food で絞る。地図施設の種別を返す（無いときは booth）
+        $facilityType = $this->relationLoaded('mapFacility')
+            ? ($this->mapFacility?->type ?? 'booth')
+            : 'booth';
+
         return [
             ...$data,
-            'type' => 'stores',
+            'type' => $facilityType,
             'attributes' => $data,
         ];
     }
