@@ -73,15 +73,16 @@ class AdminAccessLogTest extends TestCase
 
     public function test_admin_can_read_summary_and_download_text(): void
     {
-        $date = '2026-10-19';
+        // 実行日と同じ日付だと RecordApiAccess が追記して download 検証が壊れるので固定の過去日を使う
+        $date = '2026-09-15';
         file_put_contents(
             $this->directory.DIRECTORY_SEPARATOR.'access-'.$date.'.log',
             implode("\n", [
-                '2026-10-19T11:10:00+09:00 GET /api/v1/restaurants 200 20',
-                '2026-10-19T12:05:00+09:00 GET /api/v1/monitor/call-numbers 200 30',
-                '2026-10-19T12:06:00+09:00 GET /api/v1/monitor/call-numbers 200 40',
-                '2026-10-19T12:40:00+09:00 POST /api/v1/booth/accounting/orders 201 80',
-                '2026-10-19T13:15:00+09:00 GET /api/v1/restaurants 500 1500',
+                '2026-09-15T11:10:00+09:00 GET /api/v1/restaurants 200 20',
+                '2026-09-15T12:05:00+09:00 GET /api/v1/monitor/call-numbers 200 30',
+                '2026-09-15T12:06:00+09:00 GET /api/v1/monitor/call-numbers 200 40',
+                '2026-09-15T12:40:00+09:00 POST /api/v1/booth/accounting/orders 201 80',
+                '2026-09-15T13:15:00+09:00 GET /api/v1/restaurants 500 1500',
                 'not a log line',
             ])."\n",
         );
@@ -120,7 +121,7 @@ class AdminAccessLogTest extends TestCase
         $response = $this->get('/api/v1/admin/access/log?date='.$date);
         $response->assertOk();
         $response->assertHeader('content-type', 'text/plain; charset=UTF-8');
-        $this->assertStringContainsString('access-2026-10-19.txt', (string) $response->headers->get('content-disposition'));
+        $this->assertStringContainsString('access-2026-09-15.txt', (string) $response->headers->get('content-disposition'));
         $this->assertStringContainsString('GET /api/v1/monitor/call-numbers 200 30', $response->streamedContent());
         $this->assertDoesNotMatchRegularExpression('/\b(visitor|poll|store|admin)\b/', $response->streamedContent());
     }

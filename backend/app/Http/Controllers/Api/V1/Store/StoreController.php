@@ -46,7 +46,7 @@ class StoreController extends Controller
                 ->select($columns)
                 ->when(Schema::hasColumn('stores', 'is_visible'), fn ($query) => $query->where('is_visible', true))
                 ->forCurrentFestivalDay($filterDay)
-                ->with(['mapFacility:id,store_id'])
+                ->with(['mapFacility:id,store_id,type'])
                 ->orderBy('id')
                 ->get();
 

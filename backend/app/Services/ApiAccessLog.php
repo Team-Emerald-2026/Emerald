@@ -287,10 +287,12 @@ class ApiAccessLog
                 $totals[$field] += $bucket[$field];
             }
 
-            $rows[] = [$label => $key] + $bucket;
+            // PHP は数字だけの配列キーを int にするので、API では文字列に揃える
+            $labelValue = (string) $key;
+            $rows[] = [$label => $labelValue] + $bucket;
 
             if ($peak === null || $bucket['total'] > $peak['count']) {
-                $peak = [$label => $key, 'count' => $bucket['total']];
+                $peak = [$label => $labelValue, 'count' => $bucket['total']];
             }
         }
 

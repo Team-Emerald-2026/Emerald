@@ -19,6 +19,15 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        // API 専用なので未認証時に route('login') へ飛ばさない（無いと 500 になる）
+        $middleware->redirectGuestsTo(function (Request $request) {
+            if ($request->is('api/*') || $request->expectsJson()) {
+                return null;
+            }
+
+            return '/';
+        });
+
         $middleware->api(append: [
             \App\Http\Middleware\RecordApiAccess::class,
         ]);
