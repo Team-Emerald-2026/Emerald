@@ -489,7 +489,7 @@ export function fetchAdminStores(token?: string, signal?: AbortSignal) {
 export function fetchAdminFestivalDay(token?: string, signal?: AbortSignal) {
   return request('/v1/admin/festival-day', { signal, token }).then((payload) => {
     if (isRecord(payload) && isRecord(payload.data)) {
-      return payload.data as FestivalDayInfo;
+      return payload.data as unknown as FestivalDayInfo;
     }
     return { current_day: 'day1' as FestivalDay };
   });
@@ -507,7 +507,7 @@ export function updateAdminFestivalDay(
     body: { day },
   }).then((payload) => {
     if (isRecord(payload) && isRecord(payload.data)) {
-      return payload.data as FestivalDayInfo;
+      return payload.data as unknown as FestivalDayInfo;
     }
     return { current_day: day };
   });
