@@ -52,6 +52,9 @@ function toCategory(type?: string): Category {
     case 'ステージ':
     case 'イベントもの':
       return 'ステージ';
+    case 'circle_sales':
+    case 'サークル販売':
+      return '体験';
     default:
       return '体験';
   }
