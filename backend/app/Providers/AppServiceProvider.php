@@ -2,7 +2,11 @@
 
 namespace App\Providers;
 
+use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
+use Illuminate\Support\Str;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -19,6 +23,16 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        //
+        // 総当たり対策はアカウント単位で数える。学内Wi-Fiなどで全店舗が同じIPになっても、
+        // 朝の一斉ログインで他の店舗まで弾かれないようにする
+        RateLimiter::for('login', function (Request $request) {
+            $loginId = Str::lower(trim((string) $request->input('login_id')));
+            $ip = (string) $request->ip();
+
+            return [
+                Limit::perMinute(5)->by('login:'.$request->path().'|'.$loginId.'|'.$ip),
+                Limit::perMinute(60)->by('login-ip:'.$ip),
+            ];
+        });
     }
 }

@@ -19,6 +19,9 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        // Render の中継サーバー経由で届くため、X-Forwarded-For から実際の接続元IPを取る
+        $middleware->trustProxies(at: '*');
+
         // API 専用なので未認証時に route('login') へ飛ばさない（無いと 500 になる）
         $middleware->redirectGuestsTo(function (Request $request) {
             if ($request->is('api/*') || $request->expectsJson()) {
