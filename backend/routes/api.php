@@ -43,7 +43,7 @@ Route::prefix('v1')->group(function () {
     Route::get('events', [EventController::class, 'index']);
     Route::get('events/{id}', [EventController::class, 'show']);
     Route::get('ticker', [TickerController::class, 'index']);
-    Route::post('auth/login', [AuthController::class, 'login'])->middleware('throttle:5,1');
+    Route::post('auth/login', [AuthController::class, 'login'])->middleware('throttle:login');
 
     Route::middleware('auth:sanctum')->group(function () {
         Route::post('auth/logout', [AuthController::class, 'logout']);
@@ -51,7 +51,7 @@ Route::prefix('v1')->group(function () {
 });
 
 Route::prefix('v1/booth')->group(function () {
-    Route::post('auth/login', [AuthController::class, 'login'])->middleware('throttle:5,1');
+    Route::post('auth/login', [AuthController::class, 'login'])->middleware('throttle:login');
 
     Route::middleware('auth:sanctum')->group(function () {
         Route::post('auth/logout', [AuthController::class, 'logout']);
@@ -80,7 +80,7 @@ Route::prefix('v1/booth')->group(function () {
 });
 
 Route::prefix('v1/admin')->group(function () {
-    Route::post('auth/login', [AdminAuthController::class, 'login'])->middleware('throttle:5,1');
+    Route::post('auth/login', [AdminAuthController::class, 'login'])->middleware('throttle:login');
 
     Route::middleware('auth:sanctum')->group(function () {
         Route::post('auth/logout', [AdminAuthController::class, 'logout']);

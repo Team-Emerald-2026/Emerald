@@ -571,6 +571,67 @@ class MissingApisTest extends TestCase
         ])->assertStatus(429);
     }
 
+    public function test_login_rate_limit_does_not_block_other_accounts_on_same_ip(): void
+    {
+        Cache::flush();
+        $store = $this->createStore();
+        $this->createStoreUser($store);
+        $other = $this->createStore('store-102', ['name' => '焼きそば', 'ticket_prefix' => 'Y']);
+        $this->createStoreUser($other, 'yakisoba');
+
+        for ($i = 0; $i < 6; $i++) {
+            $this->postJson('/api/v1/booth/auth/login', [
+                'login_id' => 'cafe_admin',
+                'password' => 'wrong-password',
+            ]);
+        }
+
+        $this->postJson('/api/v1/booth/auth/login', [
+            'login_id' => 'yakisoba',
+            'password' => 'password123',
+        ])->assertOk();
+    }
+
+    public function test_login_rate_limit_uses_forwarded_client_ip(): void
+    {
+        Cache::flush();
+        $store = $this->createStore();
+        $this->createStoreUser($store);
+        $login = ['login_id' => 'cafe_admin', 'password' => 'wrong-password'];
+
+        for ($i = 0; $i < 5; $i++) {
+            $this->withHeader('X-Forwarded-For', '203.0.113.1')
+                ->postJson('/api/v1/booth/auth/login', $login)
+                ->assertUnauthorized();
+        }
+
+        $this->withHeader('X-Forwarded-For', '203.0.113.1')
+            ->postJson('/api/v1/booth/auth/login', $login)
+            ->assertStatus(429);
+
+        $this->withHeader('X-Forwarded-For', '203.0.113.2')
+            ->postJson('/api/v1/booth/auth/login', $login)
+            ->assertUnauthorized();
+    }
+
+    public function test_admin_login_is_rate_limited(): void
+    {
+        Cache::flush();
+        $this->createAdmin();
+
+        for ($i = 0; $i < 5; $i++) {
+            $this->postJson('/api/v1/admin/auth/login', [
+                'login_id' => 'admin',
+                'password' => 'wrong-password',
+            ])->assertUnauthorized();
+        }
+
+        $this->postJson('/api/v1/admin/auth/login', [
+            'login_id' => 'admin',
+            'password' => 'wrong-password',
+        ])->assertStatus(429);
+    }
+
     public function test_store_user_can_update_booth_type(): void
     {
         $store = $this->createStore();

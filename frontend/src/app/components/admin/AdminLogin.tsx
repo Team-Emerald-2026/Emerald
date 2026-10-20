@@ -35,6 +35,8 @@ export default function AdminLogin() {
     } catch (e) {
       if (e instanceof ApiError && e.status === 401) {
         setError('ログインIDまたはパスワードが正しくありません。');
+      } else if (e instanceof ApiError && e.status === 429) {
+        setError('ログインの試行回数が多すぎます。1分ほど待ってから再試行してください。');
       } else {
         setError('ログインに失敗しました。時間をおいて再試行してください。');
       }
