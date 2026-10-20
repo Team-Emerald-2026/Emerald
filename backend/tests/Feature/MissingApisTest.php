@@ -614,6 +614,31 @@ class MissingApisTest extends TestCase
             ->assertUnauthorized();
     }
 
+    public function test_login_rate_limit_uses_cloudflare_client_ip(): void
+    {
+        Cache::flush();
+        $store = $this->createStore();
+        $this->createStoreUser($store);
+        $login = ['login_id' => 'cafe_admin', 'password' => 'wrong-password'];
+
+        for ($i = 0; $i < 5; $i++) {
+            $this->withHeaders([
+                'CF-Connecting-IP' => '198.51.100.7',
+                'X-Forwarded-For' => '198.51.100.7, 172.71.0.'.$i,
+            ])->postJson('/api/v1/booth/auth/login', $login)->assertUnauthorized();
+        }
+
+        $this->withHeaders([
+            'CF-Connecting-IP' => '198.51.100.7',
+            'X-Forwarded-For' => '198.51.100.7, 172.71.0.99',
+        ])->postJson('/api/v1/booth/auth/login', $login)->assertStatus(429);
+
+        $this->withHeaders([
+            'CF-Connecting-IP' => '198.51.100.8',
+            'X-Forwarded-For' => '198.51.100.8, 172.71.0.99',
+        ])->postJson('/api/v1/booth/auth/login', $login)->assertUnauthorized();
+    }
+
     public function test_admin_login_is_rate_limited(): void
     {
         Cache::flush();
