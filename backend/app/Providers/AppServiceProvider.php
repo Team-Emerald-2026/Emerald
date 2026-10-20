@@ -27,7 +27,9 @@ class AppServiceProvider extends ServiceProvider
         // 朝の一斉ログインで他の店舗まで弾かれないようにする
         RateLimiter::for('login', function (Request $request) {
             $loginId = Str::lower(trim((string) $request->input('login_id')));
-            $ip = (string) $request->ip();
+            // Render の前段の Cloudflare が実際の接続元を入れるヘッダー。
+            // X-Forwarded-For だと Cloudflare のIP（毎回変わる）を拾ってしまう
+            $ip = (string) ($request->header('CF-Connecting-IP') ?: $request->ip());
 
             return [
                 Limit::perMinute(5)->by('login:'.$request->path().'|'.$loginId.'|'.$ip),
