@@ -2,9 +2,9 @@
 
 namespace App\Models;
 
+use App\Support\DbSchema;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\Schema;
 
 class FestivalSetting extends Model
 {
@@ -41,7 +41,7 @@ class FestivalSetting extends Model
 
     public static function currentDay(): string
     {
-        if (! Schema::hasTable('festival_settings')) {
+        if (! DbSchema::hasTable('festival_settings')) {
             return self::DAY_1;
         }
 
@@ -76,6 +76,7 @@ class FestivalSetting extends Model
             Cache::forget('api:v1:restaurants:index:'.$day);
             Cache::forget('api:v1:call-numbers:all:'.$day);
             Cache::forget('api:v1:monitor:call-numbers:'.$day);
+            Cache::forget('api:v1:map:facilities:'.$day);
         }
         Cache::forget('api:v1:restaurants:index');
         Cache::forget('api:v1:call-numbers:all');

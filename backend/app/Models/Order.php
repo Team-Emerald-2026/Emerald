@@ -2,11 +2,11 @@
 
 namespace App\Models;
 
+use App\Support\DbSchema;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Support\Facades\Schema;
 
 class Order extends Model
 {
@@ -36,7 +36,7 @@ class Order extends Model
             if (filled($order->festival_day)) {
                 return;
             }
-            if (! Schema::hasColumn($order->getTable(), 'festival_day')) {
+            if (! DbSchema::hasColumn($order->getTable(), 'festival_day')) {
                 return;
             }
 

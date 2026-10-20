@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\DbSchema;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -72,7 +73,7 @@ class Store extends Model
     /** 今日の出展日（day1/day2）に合う店舗だけに絞る。both も含む */
     public function scopeForCurrentFestivalDay(Builder $query, ?string $day = null): Builder
     {
-        if (! Schema::hasColumn($this->getTable(), 'exhibition_day')) {
+        if (! DbSchema::hasColumn($this->getTable(), 'exhibition_day')) {
             return $query;
         }
 
@@ -93,7 +94,7 @@ class Store extends Model
         }
         $done = true;
 
-        if (! Schema::hasColumn((new static)->getTable(), 'ticket_limit')) {
+        if (! DbSchema::hasColumn((new static)->getTable(), 'ticket_limit')) {
             return;
         }
 
@@ -140,7 +141,9 @@ class Store extends Model
                     $table->boolean('show_on_monitor')->default(false);
                 });
             }
+            DbSchema::flush();
         } catch (\Throwable $exception) {
+            DbSchema::flush();
             if (self::hasShowOnMonitorColumn()) {
                 return;
             }
@@ -152,13 +155,11 @@ class Store extends Model
     public static function hasShowOnMonitorColumn(): bool
     {
         try {
-            return Schema::hasColumn((new static)->getTable(), 'show_on_monitor');
+            return DbSchema::hasColumn((new static)->getTable(), 'show_on_monitor');
         } catch (\Throwable) {
             return false;
         }
     }
-
-    private static ?bool $hasCrowdLevelColumn = null;
 
     /** 本番でマイグレーション未適用でも、店内混雑列だけ先に用意する */
     public static function ensureCrowdLevelColumn(): void
@@ -183,38 +184,35 @@ class Store extends Model
             // 既にある／権限がないときは、wait_display_text の退避に回す
         }
 
-        self::$hasCrowdLevelColumn = null;
-        self::hasCrowdLevelColumn();
+        DbSchema::flush();
     }
 
     public static function hasCrowdLevelColumn(): bool
     {
-        if (self::$hasCrowdLevelColumn !== null) {
-            return self::$hasCrowdLevelColumn;
-        }
-
         try {
-            $table = (new static)->getTable();
-            $connection = Schema::getConnection();
-            $driver = $connection->getDriverName();
+            return (bool) DbSchema::remember('stores:crowd_level', function (): bool {
+                $table = (new static)->getTable();
+                $connection = Schema::getConnection();
+                $driver = $connection->getDriverName();
 
-            if ($driver === 'pgsql') {
-                $present = $connection->selectOne(
-                    'select 1 as present from information_schema.columns where table_schema = current_schema() and table_name = ? and column_name = ? limit 1',
-                    [$table, 'crowd_level']
-                );
-            } elseif (in_array($driver, ['mysql', 'mariadb'], true)) {
-                $present = $connection->selectOne(
-                    'select 1 as present from information_schema.columns where table_schema = ? and table_name = ? and column_name = ? limit 1',
-                    [$connection->getDatabaseName(), $table, 'crowd_level']
-                );
-            } else {
-                return self::$hasCrowdLevelColumn = Schema::hasColumn($table, 'crowd_level');
-            }
+                if ($driver === 'pgsql') {
+                    $present = $connection->selectOne(
+                        'select 1 as present from information_schema.columns where table_schema = current_schema() and table_name = ? and column_name = ? limit 1',
+                        [$table, 'crowd_level']
+                    );
+                } elseif (in_array($driver, ['mysql', 'mariadb'], true)) {
+                    $present = $connection->selectOne(
+                        'select 1 as present from information_schema.columns where table_schema = ? and table_name = ? and column_name = ? limit 1',
+                        [$connection->getDatabaseName(), $table, 'crowd_level']
+                    );
+                } else {
+                    return DbSchema::hasColumn($table, 'crowd_level');
+                }
 
-            return self::$hasCrowdLevelColumn = $present !== null;
+                return $present !== null;
+            });
         } catch (\Throwable) {
-            return self::$hasCrowdLevelColumn = false;
+            return false;
         }
     }
 

@@ -2,8 +2,11 @@
 
 namespace App\Providers;
 
+use App\Support\DbSchema;
 use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Database\Events\MigrationsEnded;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Str;
@@ -15,7 +18,7 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        $this->app->singleton(DbSchema::class);
     }
 
     /**
@@ -23,6 +26,8 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        Event::listen(MigrationsEnded::class, fn () => DbSchema::flush());
+
         // 総当たり対策はアカウント単位で数える。学内Wi-Fiなどで全店舗が同じIPになっても、
         // 朝の一斉ログインで他の店舗まで弾かれないようにする
         RateLimiter::for('login', function (Request $request) {
