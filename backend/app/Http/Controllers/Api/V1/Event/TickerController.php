@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\V1\Event;
 
 use App\Http\Controllers\Controller;
 use App\Models\EventNotice;
+use Illuminate\Support\Facades\Cache;
 
 class TickerController extends Controller
 {
@@ -15,6 +16,16 @@ class TickerController extends Controller
     public function index()
     {
         EventNotice::ensureTickerStartedAtColumn();
+
+        // ホームを開いた全員が同じ内容を見るため、短時間キャッシュしてDB負荷を抑える
+        // （秒数は config/cache.php の api_list_ttl。0でキャッシュ無効）
+        $items = Cache::remember(EventNotice::TICKER_CACHE_KEY, config('cache.api_list_ttl'), fn () => $this->activeItems());
+
+        return response()->json(['data' => $items], 200, [], JSON_UNESCAPED_UNICODE);
+    }
+
+    private function activeItems(): array
+    {
         $now = now();
 
         $active = EventNotice::query()
@@ -31,7 +42,7 @@ class TickerController extends Controller
         $notices = $active->where('type', 'notice')->sortByDesc('ticker_started_at');
         $events = $active->where('type', '!=', 'notice')->sortBy('starts_at');
 
-        $items = $notices->concat($events)
+        return $notices->concat($events)
             ->values()
             ->map(fn (EventNotice $notice) => [
                 'id' => (string) $notice->id,
@@ -41,8 +52,7 @@ class TickerController extends Controller
                 'starts_at' => $notice->type === 'notice' ? null : $notice->starts_at->toISOString(),
                 'ends_at' => $notice->type === 'notice' ? null : $notice->ends_at?->toISOString(),
                 'location' => $notice->type === 'notice' ? null : $notice->locationLabel(),
-            ]);
-
-        return response()->json(['data' => $items], 200, [], JSON_UNESCAPED_UNICODE);
+            ])
+            ->all();
     }
 }

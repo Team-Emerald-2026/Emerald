@@ -10,11 +10,11 @@ use App\Models\MenuItem;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\Store;
+use App\Support\DbSchema;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\Rule;
 
 class AccountingController extends Controller
@@ -322,7 +322,7 @@ class AccountingController extends Controller
 
         $order->status = 'settled';
         $order->settled_at = now();
-        if (blank($order->festival_day) && Schema::hasColumn('orders', 'festival_day')) {
+        if (blank($order->festival_day) && DbSchema::hasColumn('orders', 'festival_day')) {
             $order->festival_day = FestivalSetting::currentDay();
         }
         $order->save();

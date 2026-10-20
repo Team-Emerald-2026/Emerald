@@ -9,10 +9,10 @@ use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\SalesEntry;
 use App\Models\Store;
+use App\Support\DbSchema;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 
 class DashboardController extends Controller
 {
@@ -42,12 +42,12 @@ class DashboardController extends Controller
             'type' => ['sometimes', 'string', 'in:booth,food,exhibit,information,shop,circle_sales,stage'],
         ];
 
-        if (Schema::hasColumn('stores', 'wait_display_mode')) {
+        if (DbSchema::hasColumn('stores', 'wait_display_mode')) {
             $rules['wait_display_mode'] = ['sometimes', 'string', 'in:minutes,text'];
             $rules['wait_display_text'] = ['nullable', 'string', 'max:255'];
         }
 
-        if (Schema::hasColumn('stores', 'ticket_limit')) {
+        if (DbSchema::hasColumn('stores', 'ticket_limit')) {
             // 整理券の枚数（1〜この番号までを使い回す）
             $rules['ticket_limit'] = ['sometimes', 'integer', 'min:1', 'max:999'];
             // 非表示（紛失など）にした整理券の番号。発番時に飛ばす
@@ -92,14 +92,14 @@ class DashboardController extends Controller
         Store::ensureTicketLimitDefault();
 
         $columns = ['id', 'name', 'description', 'is_open', 'current_wait_min', 'current_queue_count'];
-        if (Schema::hasColumn('stores', 'wait_display_mode')) {
+        if (DbSchema::hasColumn('stores', 'wait_display_mode')) {
             $columns[] = 'wait_display_mode';
             $columns[] = 'wait_display_text';
         }
         if (Store::hasCrowdLevelColumn()) {
             $columns[] = 'crowd_level';
         }
-        if (Schema::hasColumn('stores', 'ticket_limit')) {
+        if (DbSchema::hasColumn('stores', 'ticket_limit')) {
             $columns[] = 'ticket_limit';
             $columns[] = 'disabled_ticket_numbers';
         }
@@ -145,7 +145,7 @@ class DashboardController extends Controller
     {
         $orderRevenue = 0;
         $settledOrderCount = 0;
-        if (Schema::hasTable('orders')) {
+        if (DbSchema::hasTable('orders')) {
             $settledOrders = Order::query()
                 ->forStore($store->id)
                 ->where('status', 'settled')
@@ -157,7 +157,7 @@ class DashboardController extends Controller
         }
 
         $salesRevenue = 0;
-        if (Schema::hasTable('sales_entries')) {
+        if (DbSchema::hasTable('sales_entries')) {
             $salesRevenue = (int) SalesEntry::query()
                 ->forStore($store->id)
                 ->sum('amount');
@@ -178,7 +178,7 @@ class DashboardController extends Controller
      */
     private function itemSales(string $storeId): array
     {
-        if (! Schema::hasTable('orders') || ! Schema::hasTable('order_items')) {
+        if (! DbSchema::hasTable('orders') || ! DbSchema::hasTable('order_items')) {
             return [];
         }
 

@@ -7,8 +7,8 @@ use App\Models\FestivalSetting;
 use App\Models\MapFacilities;
 use App\Models\Order;
 use App\Models\Store;
+use App\Support\DbSchema;
 use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\Schema;
 
 class MonitorCallNumberController extends Controller
 {
@@ -27,7 +27,7 @@ class MonitorCallNumberController extends Controller
 
     private function buildPayload(): array
     {
-        $hasMonitorFlag = Schema::hasColumn('stores', 'show_on_monitor');
+        $hasMonitorFlag = DbSchema::hasColumn('stores', 'show_on_monitor');
 
         $stores = Store::query()
             ->when(
@@ -35,7 +35,7 @@ class MonitorCallNumberController extends Controller
                 fn ($query) => $query->where('show_on_monitor', true),
                 fn ($query) => $query->where('is_open', true),
             )
-            ->when(Schema::hasColumn('stores', 'is_visible'), fn ($query) => $query->where('is_visible', true))
+            ->when(DbSchema::hasColumn('stores', 'is_visible'), fn ($query) => $query->where('is_visible', true))
             ->forCurrentFestivalDay()
             ->with('mapFacility')
             ->orderBy('id')

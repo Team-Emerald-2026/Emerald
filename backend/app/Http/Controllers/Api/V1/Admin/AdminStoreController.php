@@ -12,11 +12,11 @@ use App\Models\OrderItem;
 use App\Models\SalesEntry;
 use App\Models\Store;
 use App\Models\User;
+use App\Support\DbSchema;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\Rule;
 
 class AdminStoreController extends Controller
@@ -113,13 +113,13 @@ class AdminStoreController extends Controller
                 'current_wait_min' => $validated['current_wait_min'] ?? 5,
                 'current_queue_count' => $validated['current_queue_count'] ?? 0,
             ];
-            if (Schema::hasColumn('stores', 'exhibition_day')) {
+            if (DbSchema::hasColumn('stores', 'exhibition_day')) {
                 $attributes['exhibition_day'] = $validated['exhibition_day'] ?? FestivalSetting::DAY_BOTH;
             }
-            if (Schema::hasColumn('stores', 'show_on_monitor')) {
+            if (DbSchema::hasColumn('stores', 'show_on_monitor')) {
                 $attributes['show_on_monitor'] = $validated['show_on_monitor'] ?? false;
             }
-            if (Schema::hasColumn('stores', 'ticket_limit')) {
+            if (DbSchema::hasColumn('stores', 'ticket_limit')) {
                 $attributes['ticket_limit'] = 20;
             }
 
@@ -189,7 +189,7 @@ class AdminStoreController extends Controller
                 'current_wait_min' => $validated['current_wait_min'],
                 'current_queue_count' => $validated['current_queue_count'],
             ];
-            if (Schema::hasColumn('stores', 'exhibition_day')) {
+            if (DbSchema::hasColumn('stores', 'exhibition_day')) {
                 $attributes['exhibition_day'] = $validated['exhibition_day'];
             }
             Store::ensureShowOnMonitorColumn();
@@ -316,7 +316,7 @@ class AdminStoreController extends Controller
             'is_open' => false,
             'is_visible' => false,
         ];
-        if (Schema::hasColumn('stores', 'show_on_monitor')) {
+        if (DbSchema::hasColumn('stores', 'show_on_monitor')) {
             $hidden['show_on_monitor'] = false;
         }
         $store->fill($hidden);
@@ -344,10 +344,10 @@ class AdminStoreController extends Controller
             Order::query()->where('store_id', $store->id)->delete();
             MenuItem::query()->where('store_id', $store->id)->delete();
 
-            if (Schema::hasTable('sales_entries')) {
+            if (DbSchema::hasTable('sales_entries')) {
                 SalesEntry::query()->where('store_id', $store->id)->delete();
             }
-            if (Schema::hasTable('ticket_counters')) {
+            if (DbSchema::hasTable('ticket_counters')) {
                 DB::table('ticket_counters')->where('store_id', $store->id)->delete();
             }
 

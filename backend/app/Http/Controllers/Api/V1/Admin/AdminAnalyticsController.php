@@ -7,11 +7,11 @@ use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\SalesEntry;
 use App\Models\Store;
+use App\Support\DbSchema;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\Rule;
 
 class AdminAnalyticsController extends Controller
@@ -36,7 +36,7 @@ class AdminAnalyticsController extends Controller
             ->keyBy('store_id');
 
         $storeColumns = ['id', 'name', 'is_open'];
-        if (Schema::hasColumn('stores', 'is_visible')) {
+        if (DbSchema::hasColumn('stores', 'is_visible')) {
             $storeColumns[] = 'is_visible';
         }
 
@@ -324,7 +324,7 @@ class AdminAnalyticsController extends Controller
             return;
         }
 
-        if (! Schema::hasColumn('orders', 'festival_day')) {
+        if (! DbSchema::hasColumn('orders', 'festival_day')) {
             $query->whereRaw('0 = 1');
 
             return;
@@ -355,7 +355,7 @@ class AdminAnalyticsController extends Controller
     private function settledRows(string $day): Collection
     {
         $query = Order::query()->where('status', 'settled');
-        $hasDay = Schema::hasColumn('orders', 'festival_day');
+        $hasDay = DbSchema::hasColumn('orders', 'festival_day');
 
         if ($day !== 'all') {
             if (! $hasDay) {
@@ -392,7 +392,7 @@ class AdminAnalyticsController extends Controller
             ->pluck('revenue', 'store_id');
 
         $salesRevenueByStore = collect();
-        if (Schema::hasTable('sales_entries')) {
+        if (DbSchema::hasTable('sales_entries')) {
             $salesRevenueByStore = SalesEntry::query()
                 ->select('store_id')
                 ->selectRaw('SUM(amount) as revenue')
@@ -444,13 +444,13 @@ class AdminAnalyticsController extends Controller
             Order::query()->delete();
 
             $salesEntryCount = 0;
-            if (Schema::hasTable('sales_entries')) {
+            if (DbSchema::hasTable('sales_entries')) {
                 $salesEntryCount = SalesEntry::query()->count();
                 SalesEntry::query()->delete();
             }
 
             // 受付番号を 1 から振り直せるようにする
-            if (Schema::hasTable('ticket_counters')) {
+            if (DbSchema::hasTable('ticket_counters')) {
                 DB::table('ticket_counters')->delete();
             }
 

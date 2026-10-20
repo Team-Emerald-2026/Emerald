@@ -5,8 +5,8 @@ namespace App\Http\Controllers\Api\V1\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\FestivalSetting;
 use App\Models\Store;
+use App\Support\DbSchema;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\Rule;
 
 class AdminFestivalDayController extends Controller
@@ -49,7 +49,7 @@ class AdminFestivalDayController extends Controller
             'both' => 0,
         ];
 
-        if (Schema::hasColumn('stores', 'exhibition_day')) {
+        if (DbSchema::hasColumn('stores', 'exhibition_day')) {
             $rows = Store::query()
                 ->selectRaw('exhibition_day, count(*) as aggregate')
                 ->groupBy('exhibition_day')
