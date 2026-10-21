@@ -61,17 +61,23 @@ function toCategory(type?: string): Category {
   }
 }
 
-function toArea(store: BackendStore, facility?: BackendMapFacility): string {
-  if (!facility) return store.description ?? '場所未設定';
-
-  const floor = Number(facility.floor);
-  return Number.isFinite(floor) ? `${floor}F` : '場所未設定';
-}
-
 function toFloor(facility?: BackendMapFacility): number | null {
   if (!facility) return null;
   const floor = Number(facility.floor);
   return Number.isFinite(floor) ? floor : null;
+}
+
+function toArea(store: BackendStore, facility?: BackendMapFacility): string {
+  if (!facility) {
+    const description = store.description?.trim();
+    return description || '場所未設定';
+  }
+
+  const floor = toFloor(facility);
+  const floorLabel = floor === null ? null : `${floor}F`;
+  const room = facility.label?.trim();
+  if (floorLabel && room) return `${floorLabel}・${room}`;
+  return floorLabel ?? room ?? '場所未設定';
 }
 
 function toBooth(store: BackendStore, facility?: BackendMapFacility): Booth {
@@ -365,6 +371,7 @@ export default function Attractions() {
           onChange={(next) => {
             setDayKey(next);
             setFilter('すべて');
+            setFloorFilter('all');
           }}
         />
       )}

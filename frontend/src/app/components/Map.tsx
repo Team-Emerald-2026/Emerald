@@ -189,6 +189,37 @@ function toFacility(facility: BackendMapFacility): Facility {
   };
 }
 
+/**
+ * 同じ教室に複数の企画があるとき、ピンが完全に重なって片方しか押せなくなる。
+ * 見た目だけ少しずらす。保存されている位置は変えない。
+ */
+function pinOffsets(items: Facility[]): Map<string, { x: number; y: number }> {
+  const groups = new Map<string, Facility[]>();
+  for (const item of items) {
+    const key = `${item.floor}:${Math.round(item.x)}:${Math.round(item.y)}`;
+    const group = groups.get(key) ?? [];
+    group.push(item);
+    groups.set(key, group);
+  }
+
+  const positions = new Map<string, { x: number; y: number }>();
+  for (const group of groups.values()) {
+    if (group.length === 1) {
+      positions.set(group[0].id, { x: group[0].x, y: group[0].y });
+      continue;
+    }
+    const radius = 4;
+    group.forEach((item, index) => {
+      const angle = (Math.PI * 2 * index) / group.length - Math.PI / 2;
+      positions.set(item.id, {
+        x: Math.min(97, Math.max(3, item.x + Math.cos(angle) * radius)),
+        y: Math.min(97, Math.max(3, item.y + Math.sin(angle) * radius)),
+      });
+    });
+  }
+  return positions;
+}
+
 export default function CampusMap() {
   const [searchParams, setSearchParams] = useSearchParams();
   const targetStoreId = searchParams.get('store');
@@ -257,6 +288,8 @@ export default function CampusMap() {
     // 場所の一覧は DB が元。固定リストで補わない（管理画面で消した場所が復活しないように）
     return Object.values(unique);
   }, [facilities]);
+
+  const offsets = useMemo(() => pinOffsets(displayFacilities), [displayFacilities]);
 
   useEffect(() => {
     const target = displayFacilities.find(
@@ -453,7 +486,10 @@ export default function CampusMap() {
                 className={`absolute -translate-x-1/2 -translate-y-1/2 p-1 transition ${
                   isSelected ? 'z-20' : hasSelection ? 'z-0 opacity-55' : 'z-0'
                 }`}
-                style={{ left: `${f.x}%`, top: `${f.y}%` }}
+                style={{
+                  left: `${offsets.get(f.id)?.x ?? f.x}%`,
+                  top: `${offsets.get(f.id)?.y ?? f.y}%`,
+                }}
                 title={pinText(f)}
                 aria-label={roomNote(f) ? `${f.name}（${roomNote(f)}）` : f.name}
                 aria-pressed={isSelected}

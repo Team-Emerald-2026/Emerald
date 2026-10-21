@@ -90,10 +90,16 @@ interface RecommendedBooth {
 }
 
 function toArea(store: BackendStore, facility?: BackendMapFacility): string {
-  if (!facility) return store.description ?? '場所未設定';
+  if (!facility) {
+    const description = store.description?.trim();
+    return description || '場所未設定';
+  }
 
   const floor = Number(facility.floor);
-  return Number.isFinite(floor) ? `${floor}F` : '場所未設定';
+  const floorLabel = Number.isFinite(floor) ? `${floor}F` : null;
+  const room = facility.label?.trim();
+  if (floorLabel && room) return `${floorLabel}・${room}`;
+  return floorLabel ?? room ?? '場所未設定';
 }
 
 function RecommendationSkeleton() {

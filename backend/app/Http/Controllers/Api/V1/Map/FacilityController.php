@@ -113,9 +113,14 @@ class FacilityController extends Controller
                 ->values();
         }
 
+        // 同じ位置に複数のブースがあるときは、その日のブースを全部返す。
+        // 部屋番号だけの空き枠は、同じ位置にブースがあるときだけ隠す。
         return $facilities
-            ->unique(function ($facility) {
-                return $facility->floor.':'.(int) $facility->x.':'.(int) $facility->y;
+            ->groupBy(fn ($facility) => MapFacilities::positionKey($facility->floor, $facility->x, $facility->y))
+            ->flatMap(function ($group) {
+                $stores = $group->filter(fn ($facility) => $facility->store_id !== null)->values();
+
+                return $stores->isNotEmpty() ? $stores : $group->take(1);
             })
             ->values()
             ->each(function ($facility) use ($slotLabels) {

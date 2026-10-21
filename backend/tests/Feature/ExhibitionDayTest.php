@@ -203,6 +203,45 @@ class ExhibitionDayTest extends TestCase
         $this->assertSame('6', $atCorridor['label'] ?? null);
     }
 
+    public function test_map_shows_every_same_day_store_sharing_a_booth(): void
+    {
+        FestivalSetting::setCurrentDay('day1');
+
+        $bingo = $this->createStore('store-802-a', 'both', ['name' => 'ビンゴ']);
+        $live = $this->createStore('store-802-d', 'both', ['name' => 'musicサークルライブ']);
+        $day2Only = $this->createStore('store-802-c', 'day2', ['name' => '2日目だけ']);
+
+        MapFacilities::query()->create([
+            'store_id' => null,
+            'name' => '802',
+            'type' => 'booth',
+            'floor' => 8,
+            'x' => 60,
+            'y' => 72,
+        ]);
+        foreach ([$bingo, $live, $day2Only] as $store) {
+            MapFacilities::query()->create([
+                'store_id' => $store->id,
+                'name' => $store->name,
+                'type' => 'booth',
+                'floor' => 8,
+                'x' => 60,
+                'y' => 72,
+            ]);
+        }
+
+        $at802 = collect($this->getJson('/api/v1/map/facilities?day=day1')->assertOk()->json('data'))
+            ->filter(fn ($item) => (int) $item['floor'] === 8 && (int) $item['x'] === 60 && (int) $item['y'] === 72)
+            ->values();
+
+        $this->assertCount(2, $at802);
+        $this->assertEqualsCanonicalizing(
+            ['store-802-a', 'store-802-d'],
+            $at802->pluck('store_id')->all(),
+        );
+        $this->assertTrue($at802->every(fn ($item) => ($item['label'] ?? null) === '802'));
+    }
+
     public function test_admin_can_create_store_with_exhibition_day(): void
     {
         Sanctum::actingAs($this->createAdmin());
