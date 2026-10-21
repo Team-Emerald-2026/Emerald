@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\V1\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\AuditLog;
 use App\Models\FestivalSetting;
 use App\Models\Store;
 use App\Support\DbSchema;
@@ -33,7 +34,12 @@ class AdminFestivalDayController extends Controller
             'day' => ['required', 'string', Rule::in(FestivalSetting::allowedDays())],
         ]);
 
+        $previous = FestivalSetting::currentDay();
         FestivalSetting::setCurrentDay($validated['day']);
+        AuditLog::record($request, 'festival_day.update', null, [
+            'from' => $previous,
+            'to' => $validated['day'],
+        ]);
 
         return response()->json([
             'data' => $this->payload(),
