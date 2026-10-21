@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Edit3, EyeOff, Hash, Monitor, Plus } from 'lucide-react';
+import { Edit3, EyeOff, Hash, Monitor, Plus, Search } from 'lucide-react';
 import AdminShell from './AdminShell';
 import AdminStoreForm from './AdminStoreForm';
 import {
@@ -70,17 +70,28 @@ export default function AdminStores() {
   const [message, setMessage] = useState('');
   const [festivalDay, setFestivalDay] = useState<FestivalDayInfo>({ current_day: 'day1' });
   const [floorFilter, setFloorFilter] = useState<number | 'all'>('all');
+  const [sortBy, setSortBy] = useState<'name' | 'floor'>('name');
+  const [query, setQuery] = useState('');
 
   const floors = Array.from(new Set(stores.map((store) => store.floor))).sort((a, b) => a - b);
   // 店舗を消して、選んでいた階に店舗がなくなったら全フロアに戻す
   const activeFloor = floorFilter !== 'all' && floors.includes(floorFilter) ? floorFilter : 'all';
-  // 1F から上の階へ。同じ階は名前順（あいうえお・数字）
+  const queryText = query.trim().toLocaleLowerCase('ja');
+  // 名前順は全店舗をあいうえお（数字は 2 が 10 より前）。階順は 1F から上で、同じ階は名前順
   const visibleStores = stores
     .filter((store) => activeFloor === 'all' || store.floor === activeFloor)
-    .sort(
-      (a, b) =>
-        a.floor - b.floor || a.name.localeCompare(b.name, 'ja', { numeric: true }) || a.id.localeCompare(b.id),
-    );
+    .filter((store) => {
+      if (!queryText || editing?.id === store.id) return true;
+      const name = store.name.toLocaleLowerCase('ja');
+      const loginId = (store.login_id ?? '').toLocaleLowerCase('ja');
+      return name.includes(queryText) || loginId.includes(queryText);
+    })
+    .sort((a, b) => {
+      const byName = a.name.localeCompare(b.name, 'ja', { numeric: true });
+      const byFloor = a.floor - b.floor;
+      const byId = a.id.localeCompare(b.id);
+      return sortBy === 'name' ? byName || byFloor || byId : byFloor || byName || byId;
+    });
 
   const loadStores = (signal?: AbortSignal) => {
     if (!adminSession && !ADMIN_PUBLIC_ACCESS) return Promise.resolve();
@@ -373,6 +384,51 @@ export default function AdminStores() {
         </button>
       </div>
 
+      {stores.length > 0 && (
+        <label className="mb-4 block">
+          <span className="sr-only">店舗を検索</span>
+          <div className="flex items-center gap-2 rounded-xl border border-input bg-background px-3">
+            <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
+            <input
+              type="search"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="店舗名、ログインIDで検索"
+              className="w-full bg-transparent py-2.5 text-base text-foreground outline-none"
+            />
+          </div>
+        </label>
+      )}
+
+      {stores.length > 1 && (
+        <div className="mb-4 flex flex-wrap items-center gap-2" role="group" aria-label="並び順">
+          <span className="text-sm text-muted-foreground">並び順</span>
+          {(
+            [
+              ['name', '名前順'],
+              ['floor', '階順'],
+            ] as const
+          ).map(([key, label]) => {
+            const active = sortBy === key;
+            return (
+              <button
+                key={key}
+                type="button"
+                aria-pressed={active}
+                onClick={() => setSortBy(key)}
+                className="rounded-full px-4 py-1.5 text-sm font-medium transition-colors"
+                style={{
+                  backgroundColor: active ? 'var(--primary)' : 'var(--muted)',
+                  color: active ? 'var(--primary-foreground)' : 'var(--muted-foreground)',
+                }}
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
       {floors.length > 1 && (
         <div className="mb-4 flex flex-wrap gap-2" role="tablist" aria-label="フロア">
           {(['all', ...floors] as const).map((f) => {
@@ -430,6 +486,10 @@ export default function AdminStores() {
       ) : stores.length === 0 ? (
         <p className="rounded-xl border border-border bg-card p-6 text-center text-muted-foreground">
           店舗がありません。
+        </p>
+      ) : visibleStores.length === 0 ? (
+        <p className="rounded-xl border border-border bg-card p-6 text-center text-muted-foreground">
+          条件に一致する店舗はありません。
         </p>
       ) : (
         <ul className="space-y-3">
