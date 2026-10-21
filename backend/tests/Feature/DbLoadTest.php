@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\EventNotice;
+use App\Models\Store;
 use App\Support\DbSchema;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
@@ -68,6 +69,36 @@ class DbLoadTest extends TestCase
         $event->delete();
 
         $this->getJson('/api/v1/events')->assertOk()->assertJsonCount(0, 'data');
+    }
+
+    public function test_store_detail_is_served_from_cache_within_ttl(): void
+    {
+        config(['cache.api_list_ttl' => 60]);
+        $store = Store::query()->create([
+            'id' => 'store-detail-cache',
+            'name' => '焼きそば',
+            'description' => 'テスト',
+            'ticket_prefix' => 'Y',
+            'is_open' => true,
+            'current_wait_min' => 0,
+        ]);
+
+        $first = $this->getJson('/api/v1/restaurants/'.$store->id)
+            ->assertOk()
+            ->assertJsonPath('data.name', '焼きそば')
+            ->json();
+
+        DB::enableQueryLog();
+        $second = $this->getJson('/api/v1/restaurants/'.$store->id)->assertOk()->json();
+
+        $storeQueries = array_filter(
+            DB::getQueryLog(),
+            fn (array $query) => str_contains($query['query'], '"stores"'),
+        );
+        $this->assertSame([], array_values($storeQueries));
+        $this->assertSame($first, $second);
+
+        $this->getJson('/api/v1/restaurants/999999')->assertNotFound();
     }
 
     public function test_map_is_served_from_cache_within_ttl(): void
