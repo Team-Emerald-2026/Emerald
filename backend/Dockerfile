@@ -1,4 +1,5 @@
-FROM php:8.4-fpm
+# PHP2Shell（CVE-2026-109618 / CVE-2026-109619）の修正版。浮動タグ php:8.4-fpm だと古いパッチのまま残る
+FROM php:8.4.27-fpm
 
 RUN apt-get update && apt-get install -y \
     git unzip libzip-dev libpng-dev libonig-dev libxml2-dev \
