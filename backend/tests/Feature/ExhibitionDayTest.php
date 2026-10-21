@@ -270,4 +270,40 @@ class ExhibitionDayTest extends TestCase
         ])->assertStatus(422)
             ->assertJsonPath('error.code', 'INVALID_PARAMS');
     }
+
+    public function test_admin_store_update_keeps_password_when_left_blank(): void
+    {
+        Sanctum::actingAs($this->createAdmin());
+        $this->createStore('store-keep-pass', 'both');
+        $storeUser = User::query()->create([
+            'login_id' => 'keeppass',
+            'password' => Hash::make('original123'),
+            'store_id' => 'store-keep-pass',
+            'role' => 'store',
+        ]);
+
+        $payload = [
+            'name' => '名前を変えた',
+            'description' => '',
+            'type' => 'booth',
+            'floor' => 1,
+            'map_x' => 10,
+            'map_y' => 20,
+            'login_id' => 'keeppass',
+            'password' => '',
+            'exhibition_day' => 'both',
+            'is_open' => true,
+            'is_visible' => true,
+            'show_on_monitor' => false,
+            'current_wait_min' => 0,
+            'current_queue_count' => 0,
+        ];
+
+        $this->patchJson('/api/v1/admin/stores/store-keep-pass', $payload)->assertOk();
+        $this->assertTrue(Hash::check('original123', $storeUser->fresh()->password));
+
+        $this->patchJson('/api/v1/admin/stores/store-keep-pass', [...$payload, 'password' => 'changed456'])
+            ->assertOk();
+        $this->assertTrue(Hash::check('changed456', $storeUser->fresh()->password));
+    }
 }

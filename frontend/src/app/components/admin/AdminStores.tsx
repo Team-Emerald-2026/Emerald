@@ -67,6 +67,15 @@ export default function AdminStores() {
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [festivalDay, setFestivalDay] = useState<FestivalDayInfo>({ current_day: 'day1' });
+  const [floorFilter, setFloorFilter] = useState<number | 'all'>('all');
+
+  const floors = Array.from(new Set(stores.map((store) => store.floor))).sort((a, b) => a - b);
+  // 店舗を消して、選んでいた階に店舗がなくなったら全フロアに戻す
+  const activeFloor = floorFilter !== 'all' && floors.includes(floorFilter) ? floorFilter : 'all';
+  // 1F から上の階へ。同じ階は届いた順のまま
+  const visibleStores = stores
+    .filter((store) => activeFloor === 'all' || store.floor === activeFloor)
+    .sort((a, b) => a.floor - b.floor);
 
   const loadStores = (signal?: AbortSignal) => {
     if (!adminSession && !ADMIN_PUBLIC_ACCESS) return Promise.resolve();
@@ -330,6 +339,30 @@ export default function AdminStores() {
         </button>
       </div>
 
+      {floors.length > 1 && (
+        <div className="mb-4 flex flex-wrap gap-2" role="tablist" aria-label="フロア">
+          {(['all', ...floors] as const).map((f) => {
+            const active = activeFloor === f;
+            return (
+              <button
+                key={f}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                onClick={() => setFloorFilter(f)}
+                className="rounded-full px-4 py-1.5 text-sm font-medium transition-colors"
+                style={{
+                  backgroundColor: active ? 'var(--primary)' : 'var(--muted)',
+                  color: active ? 'var(--primary-foreground)' : 'var(--muted-foreground)',
+                }}
+              >
+                {f === 'all' ? '全フロア' : `${f}F`}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
       {error && (
         <p className="mb-4 whitespace-pre-line rounded-xl border border-border bg-card p-3 text-sm text-red-500">
           {error}
@@ -366,7 +399,7 @@ export default function AdminStores() {
         </p>
       ) : (
         <ul className="space-y-3">
-          {stores.map((store) => (
+          {visibleStores.map((store) => (
             <li key={store.id} className="rounded-2xl border border-border bg-card p-4">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div className="min-w-0">

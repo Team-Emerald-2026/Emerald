@@ -246,11 +246,13 @@ export default function AdminStoreForm({
             onChange={(event) => update('password', event.target.value)}
             // 保存済みのパスワードを自動入力させない（店舗のパスワードを上書きしてしまうため）
             autoComplete="new-password"
-            placeholder="英数字8文字以上"
+            placeholder={store ? '変更しない場合は空欄のまま' : '英数字8文字以上'}
             className="w-full rounded-lg border border-input bg-background px-3 py-2.5 text-foreground outline-none"
           />
           <span className="mt-1 block text-xs text-muted-foreground">
-            英字・数字のみ、8文字以上（記号は使えません）
+            {store
+              ? '入力した場合だけ変更されます。英字・数字のみ、8文字以上（記号は使えません）'
+              : '英字・数字のみ、8文字以上（記号は使えません）'}
           </span>
         </label>
         {/* 新規の店舗は待ち人数0から始まる。編集時は、ずれた待ち人数を直すために残す */}
