@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\V1\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\AuditLog;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\SalesEntry;
@@ -461,6 +462,8 @@ class AdminAnalyticsController extends Controller
                 'sales_entries' => $salesEntryCount,
             ];
         });
+
+        AuditLog::record($request, 'analytics.reset', null, $deleted);
 
         return response()->json(['data' => $deleted], 200, [], JSON_UNESCAPED_UNICODE);
     }

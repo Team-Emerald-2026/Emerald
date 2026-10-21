@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\V1\Auth;
 
 use App\Http\Controllers\Controller;
+use App\Models\AuditLog;
 use App\Models\User;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Http\Request;
@@ -23,10 +24,15 @@ class AuthController extends Controller
             ->first();
 
         if (!$user || !Hash::check($request->password, $user->password)) {
+            $attempted = $request->input('login_id');
+            AuditLog::record($request, 'store.login_failed', is_string($attempted) ? $attempted : null, [
+                'reason' => $user ? 'wrong_password' : 'unknown_login_id',
+            ]);
             throw new AuthenticationException();
         }
 
         $token = $user->createToken('api-token')->plainTextToken;
+        AuditLog::record($request, 'store.login', $user->login_id, ['store_id' => $user->store_id]);
 
         return response()->json([
             'token' => $token,

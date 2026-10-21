@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\V1\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Http\Resources\Booth\WaitTimeResource;
+use App\Models\AuditLog;
 use App\Models\FestivalSetting;
 use App\Models\MapFacilities;
 use App\Models\MenuItem;
@@ -17,6 +18,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
 class AdminStoreController extends Controller
@@ -101,7 +103,31 @@ class AdminStoreController extends Controller
             'current_queue_count' => ['sometimes', 'integer', 'min:0'],
         ]);
 
-        $result = DB::transaction(function () use ($validated) {
+        try {
+            $result = $this->createStore($validated);
+        } catch (\Throwable $exception) {
+            AuditLog::record($request, 'store.create_failed', $validated['id'], [
+                'name' => $validated['name'],
+                'login_id' => $validated['login_id'],
+                'error' => Str::limit(class_basename($exception).': '.$exception->getMessage(), 500),
+            ]);
+            throw $exception;
+        }
+
+        AuditLog::record($request, 'store.create', $result['id'], [
+            'name' => $result['name'],
+            'login_id' => $result['login_id'],
+            'floor' => $result['floor'],
+            'type' => $result['type'],
+            'exhibition_day' => $result['exhibition_day'],
+        ]);
+
+        return response()->json(['data' => $result], 201, [], JSON_UNESCAPED_UNICODE);
+    }
+
+    private function createStore(array $validated): array
+    {
+        return DB::transaction(function () use ($validated) {
             $attributes = [
                 'id' => $validated['id'],
                 'name' => $validated['name'],
@@ -143,8 +169,6 @@ class AdminStoreController extends Controller
 
             return $this->serializeStore($store, $user, null, $facility);
         });
-
-        return response()->json(['data' => $result], 201, [], JSON_UNESCAPED_UNICODE);
     }
 
     public function update(Request $request, string $id)
@@ -179,6 +203,13 @@ class AdminStoreController extends Controller
             'current_wait_min' => ['required', 'integer', 'min:0'],
             'current_queue_count' => ['required', 'integer', 'min:0'],
         ]);
+
+        $before = $this->serializeStore(
+            $store,
+            $storeUser,
+            null,
+            MapFacilities::query()->where('store_id', $store->id)->first(),
+        );
 
         $result = DB::transaction(function () use ($store, $storeUser, $validated) {
             $attributes = [
@@ -220,6 +251,19 @@ class AdminStoreController extends Controller
             return $this->serializeStore($store->refresh(), $storeUser?->refresh(), null, $facility);
         });
 
+        $changes = [];
+        foreach ($result as $key => $value) {
+            if (in_array($key, ['revenue', 'order_count'], true) || ($before[$key] ?? null) === $value) {
+                continue;
+            }
+            $changes[$key] = ['from' => $before[$key] ?? null, 'to' => $value];
+        }
+        AuditLog::record($request, 'store.update', $store->id, [
+            'changes' => $changes,
+            'password_changed' => $storeUser !== null && ! empty($validated['password']),
+            'has_login_account' => $storeUser !== null,
+        ]);
+
         return response()->json(['data' => $result], 200, [], JSON_UNESCAPED_UNICODE);
     }
 
@@ -259,6 +303,10 @@ class AdminStoreController extends Controller
             ->where('store_id', $store->id)
             ->first();
         $facility = MapFacilities::query()->where('store_id', $store->id)->first();
+
+        AuditLog::record($request, 'store.monitor', $store->id, [
+            'show_on_monitor' => (bool) $validated['show_on_monitor'],
+        ]);
 
         return response()->json([
             'data' => $this->serializeStore($store->refresh(), $user, null, $facility),
@@ -322,6 +370,8 @@ class AdminStoreController extends Controller
         $store->fill($hidden);
         $store->save();
 
+        AuditLog::record($request, 'store.hide', $store->id, ['name' => $store->name]);
+
         $facility = MapFacilities::query()->where('store_id', $store->id)->first();
 
         return response()->json(['data' => $this->serializeStore($store->refresh(), null, null, $facility)], 200, [], JSON_UNESCAPED_UNICODE);
@@ -336,6 +386,12 @@ class AdminStoreController extends Controller
         $this->authorizeAdmin($request);
 
         $store = Store::query()->findOrFail($id);
+        $loginIds = User::query()
+            ->where('role', 'store')
+            ->where('store_id', $store->id)
+            ->pluck('login_id')
+            ->all();
+        $orderCount = Order::query()->where('store_id', $store->id)->count();
 
         DB::transaction(function () use ($store) {
             // order_items.menu_item_id は restrict のため、先に明細→注文→メニューの順で消す
@@ -363,6 +419,12 @@ class AdminStoreController extends Controller
             MapFacilities::query()->where('store_id', $store->id)->delete();
             $store->delete();
         });
+
+        AuditLog::record($request, 'store.force_delete', $store->id, [
+            'name' => $store->name,
+            'login_ids' => $loginIds,
+            'orders' => $orderCount,
+        ]);
 
         return response()->noContent();
     }
