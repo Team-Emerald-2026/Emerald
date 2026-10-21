@@ -167,6 +167,11 @@ function SalesOperations({ sales }: { sales: BoothSales }) {
   /** 店舗ごとの件数で選んでいる店舗。'all' は全店舗の合計 */
   const [statusStoreId, setStatusStoreId] = useState('all');
   const statusStore = counts.find((store) => store.store_id === statusStoreId);
+  const countsByName = [...counts].sort(
+    (a, b) =>
+      a.store_name.localeCompare(b.store_name, 'ja', { numeric: true }) ||
+      a.store_id.localeCompare(b.store_id),
+  );
   const statusTotals = counts.reduce(
     (sum, store) => ({
       served: sum.served + store.served,
@@ -195,7 +200,7 @@ function SalesOperations({ sales }: { sales: BoothSales }) {
               className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 text-base text-foreground sm:max-w-sm"
             >
               <option value="all">全店舗（合計）</option>
-              {counts.map((store) => (
+              {countsByName.map((store) => (
                 <option key={store.store_id} value={store.store_id}>
                   {store.store_name}
                 </option>

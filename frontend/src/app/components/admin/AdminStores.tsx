@@ -72,10 +72,13 @@ export default function AdminStores() {
   const floors = Array.from(new Set(stores.map((store) => store.floor))).sort((a, b) => a - b);
   // 店舗を消して、選んでいた階に店舗がなくなったら全フロアに戻す
   const activeFloor = floorFilter !== 'all' && floors.includes(floorFilter) ? floorFilter : 'all';
-  // 1F から上の階へ。同じ階は届いた順のまま
+  // 1F から上の階へ。同じ階は名前順（あいうえお・数字）
   const visibleStores = stores
     .filter((store) => activeFloor === 'all' || store.floor === activeFloor)
-    .sort((a, b) => a.floor - b.floor);
+    .sort(
+      (a, b) =>
+        a.floor - b.floor || a.name.localeCompare(b.name, 'ja', { numeric: true }) || a.id.localeCompare(b.id),
+    );
 
   const loadStores = (signal?: AbortSignal) => {
     if (!adminSession && !ADMIN_PUBLIC_ACCESS) return Promise.resolve();

@@ -104,6 +104,11 @@ export default function AdminDashboard() {
   };
 
   const canReset = resetText.trim() === RESET_CONFIRM_TEXT && !resetting;
+  const storesByName = [...(analytics?.stores ?? [])].sort(
+    (a, b) =>
+      a.store_name.localeCompare(b.store_name, 'ja', { numeric: true }) ||
+      a.store_id.localeCompare(b.store_id),
+  );
 
   const closeReset = () => {
     setResetOpen(false);
@@ -192,7 +197,7 @@ export default function AdminDashboard() {
               className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 text-base text-foreground sm:max-w-sm"
             >
               <option value="all">全店舗（合計）</option>
-              {analytics.stores.map((store) => (
+              {storesByName.map((store) => (
                 <option key={store.store_id} value={store.store_id}>
                   {store.store_name}
                 </option>
