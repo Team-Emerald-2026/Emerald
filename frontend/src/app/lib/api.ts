@@ -236,6 +236,10 @@ function normalizeCollection<T extends { id: string }>(payload: unknown): T[] {
   return [];
 }
 
+function asArray<T>(value: unknown): T[] {
+  return Array.isArray(value) ? (value as T[]) : [];
+}
+
 function normalizeItem<T extends { id: string }>(payload: unknown): T | null {
   if (!isRecord(payload)) return null;
 
@@ -342,9 +346,15 @@ export function fetchRestaurant(
   if (day) params.set('day', day);
   if (poll) params.set('poll', '1');
   const query = params.toString() ? `?${params.toString()}` : '';
-  return request(`/v1/restaurants/${encodeURIComponent(id)}${query}`, { signal }).then((payload) =>
-    normalizeItem<BackendStore>(payload),
-  );
+  return request(`/v1/restaurants/${encodeURIComponent(id)}${query}`, { signal }).then((payload) => {
+    const store = normalizeItem<BackendStore>(payload);
+    if (!store) return null;
+    return {
+      ...store,
+      // 呼び出し番号は配列以外でも画面を落とさない。メニューは呼び出し側で前回の内容を残す
+      ticket_numbers: asArray<string>(store.ticket_numbers),
+    };
+  });
 }
 
 export function fetchMapFacilities(signal?: AbortSignal, day?: FestivalDay) {

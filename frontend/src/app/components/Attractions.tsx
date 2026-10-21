@@ -126,7 +126,7 @@ function BoothDetail({ booth, detail }: { booth: Booth; detail?: DetailState }) 
   }
 
   const description = detail.store.description?.trim();
-  const menuItems = detail.store.menu_items ?? [];
+  const menuItems = Array.isArray(detail.store.menu_items) ? detail.store.menu_items : [];
   // 体験ブースなどは、メニューがなくて普通なので、メニューがあるときだけ出す（フードは未登録の案内も出す）
   const showMenu = menuItems.length > 0 || booth.category === 'フード';
 
@@ -255,7 +255,19 @@ export default function Attractions() {
         .then((store) => {
           if (controller.signal.aborted) return;
           if (!store) throw new Error('empty response');
-          setDetails((current) => ({ ...current, [detailId]: { status: 'ready', store } }));
+          setDetails((current) => {
+            const previous = current[detailId]?.status === 'ready' ? current[detailId].store.menu_items : undefined;
+            // キャッシュが壊れると menu_items がオブジェクトになる。配列以外のときは直前のメニューを残す
+            const menuItems = Array.isArray(store.menu_items)
+              ? store.menu_items
+              : Array.isArray(previous)
+                ? previous
+                : [];
+            return {
+              ...current,
+              [detailId]: { status: 'ready', store: { ...store, menu_items: menuItems } },
+            };
+          });
           setBooths((current) =>
             current.map((booth) =>
               booth.id === detailId

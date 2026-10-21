@@ -72,9 +72,10 @@ class StoreController extends Controller
         // day 指定時はその日の出展ブース詳細を見られる。未指定なら今日の学園祭日で絞る
         $filterDay = $validated['day'] ?? FestivalSetting::currentDay();
 
-        // 詳細を開いている来場者は数秒ごとに取り直すので、一覧と同じく短時間キャッシュする
+        // 詳細を開いている来場者は数秒ごとに取り直すので、一覧と同じく短時間キャッシュする。
+        // v2: 古いキーには Collection が壊れた値が残っているため使わない。
         $payload = Cache::remember(
-            'api:v1:restaurants:show:'.$id.':'.$filterDay,
+            'api:v1:restaurants:show:v2:'.$id.':'.$filterDay,
             config('cache.api_list_ttl'),
             function () use ($id, $filterDay) {
                 $store = Store::query()

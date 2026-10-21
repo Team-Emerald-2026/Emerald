@@ -155,6 +155,50 @@ class MissingApisTest extends TestCase
             ->assertJsonPath('data.ticket_numbers.0', 'C-120');
     }
 
+    public function test_restaurant_detail_cache_keeps_menu_items_as_list(): void
+    {
+        config(['cache.api_list_ttl' => 30]);
+        Cache::flush();
+
+        $store = $this->createStore();
+        MenuItem::query()->create([
+            'store_id' => $store->id,
+            'name' => 'ブレンドコーヒー',
+            'description' => 'ホット',
+            'price' => 350,
+            'is_available' => true,
+        ]);
+        Order::query()->create([
+            'store_id' => $store->id,
+            'ticket_number' => 'C-120',
+            'total_price' => 350,
+            'status' => 'issued',
+            'ordered_at' => now(),
+            'called_at' => now(),
+        ]);
+
+        $this->getJson("/api/v1/restaurants/{$store->id}")
+            ->assertOk()
+            ->assertJsonPath('data.menu_items.0.name', 'ブレンドコーヒー');
+
+        $day = \App\Models\FestivalSetting::currentDay();
+        $cached = Cache::get('api:v1:restaurants:show:v2:'.$store->id.':'.$day);
+
+        $this->assertIsArray($cached);
+        $this->assertIsArray($cached['menu_items']);
+        $this->assertTrue(array_is_list($cached['menu_items']));
+        $this->assertSame('ブレンドコーヒー', $cached['menu_items'][0]['name']);
+        $this->assertIsArray($cached['ticket_numbers']);
+        $this->assertTrue(array_is_list($cached['ticket_numbers']));
+        $this->assertIsArray($cached['attributes']['menu_items']);
+        $this->assertTrue(array_is_list($cached['attributes']['menu_items']));
+
+        $this->getJson("/api/v1/restaurants/{$store->id}")
+            ->assertOk()
+            ->assertJsonPath('data.menu_items.0.name', 'ブレンドコーヒー')
+            ->assertJsonPath('data.ticket_numbers.0', 'C-120');
+    }
+
     public function test_public_call_numbers_returns_currently_called_tickets(): void
     {
         $store = $this->createStore();

@@ -32,6 +32,8 @@ class StoreResource extends JsonResource
         ];
 
         if ($this->relationLoaded('menuItems')) {
+            // Collection のままキャッシュすると、DB保存時に壊れ、
+            // 再取得で配列ではなくなり画面の .map が落ちる。配列にして返す。
             $data['menu_items'] = $this->menuItems->map(fn ($item) => [
                 'id' => $item->id,
                 'name' => $item->name,
@@ -39,13 +41,14 @@ class StoreResource extends JsonResource
                 'price' => (int) $item->price,
                 'is_available' => (bool) $item->is_available,
                 'is_sold_out' => (bool) $item->is_sold_out,
-            ])->values();
+            ])->values()->all();
         }
 
         if ($this->relationLoaded('orders')) {
             $data['ticket_numbers'] = $this->orders
                 ->pluck('ticket_number')
-                ->values();
+                ->values()
+                ->all();
         }
 
         // 呼び出し画面は type=food で絞る。地図施設の種別を返す（無いときは booth）
