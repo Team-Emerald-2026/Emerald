@@ -9,6 +9,7 @@ import {
   type BackendStore,
   type EventNotice,
 } from '../lib/api';
+import { japanNowHm, slotState } from '../lib/boothSchedule';
 import { isNoticeVisibleAt, jstParts, timeLabel } from '../lib/eventSchedule';
 import {
   BUSY_QUEUE_COUNT,
@@ -153,9 +154,16 @@ export default function Home() {
     ])
       .then(([restaurantResult, facilities]) => {
         const stores = restaurantResult.stores;
+        const today = restaurantResult.meta?.current_day ?? 'day1';
+        const nowHm = japanNowHm();
         const facilityByStoreId = new Map(facilities.map((facility) => [facility.store_id, facility]));
         const nextBooths = stores
           .filter((store) => store.is_open)
+          // 出展時間外のブースはおすすめしない
+          .filter((store) => {
+            const state = slotState(store.time_slots, today, true, nowHm).kind;
+            return state === 'always' || state === 'active';
+          })
           .map((store) => {
             const wait = getWaitDisplay(store);
             return {

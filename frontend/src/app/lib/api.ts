@@ -67,8 +67,19 @@ export interface BackendStore {
   wait_display_text?: string | null;
   crowd_level?: CrowdLevel | null;
   map_facility_id?: string | null;
+  /** 地図上の階（地図に置かれていなければ null） */
+  floor?: number | null;
+  /** 出展時間（日本時間）。空なら一日中 */
+  time_slots?: BoothTimeSlot[];
   menu_items?: BackendMenuItem[];
   ticket_numbers?: string[];
+}
+
+/** 出展時間の1枠。day が null なら両日。時刻は日本時間の "HH:MM" */
+export interface BoothTimeSlot {
+  day: FestivalDay | null;
+  start: string;
+  end: string;
 }
 
 export interface BackendMenuItem {
@@ -104,6 +115,7 @@ export interface AdminStore {
   /** 使っていない（受付番号は数字だけ）。古いAPI互換のため残している */
   ticket_prefix?: string | null;
   exhibition_day: ExhibitionDay;
+  time_slots?: BoothTimeSlot[];
   is_open: boolean;
   is_visible: boolean;
   show_on_monitor: boolean;
@@ -157,6 +169,8 @@ export interface AdminStoreInput {
   show_on_call_page: boolean;
   current_wait_min: number;
   current_queue_count: number;
+  /** 送らなければ今の出展時間のまま。空配列で一日中に戻す */
+  time_slots?: BoothTimeSlot[];
 }
 
 const FOOD_FACILITY_TYPES = new Set(['food', 'フード', '飲食ブース']);
@@ -179,6 +193,8 @@ export interface BackendMapFacility {
   y: number;
   /** 紐づく店舗を受取番号ページに出すか。店舗が無い場所では未設定 */
   show_on_call_page?: boolean;
+  /** この日の出展時間（空なら一日中） */
+  time_slots?: BoothTimeSlot[];
 }
 
 type JsonApiItem = {

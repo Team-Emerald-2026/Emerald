@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Ticket, Flame, MapPin, Info, ShoppingBag, ChevronDown, ChevronUp, Armchair } from 'lucide-react';
+import { Ticket, Flame, MapPin, Info, ShoppingBag, ChevronDown, ChevronUp, Armchair, Clock } from 'lucide-react';
 import {
   fetchFestivalDay,
   fetchMapFacilities,
@@ -9,7 +9,9 @@ import {
   showsOnCallPage,
   type BackendMapFacility,
   type BackendStore,
+  type BoothTimeSlot,
 } from '../lib/api';
+import { formatSlots, japanNowHm, slotState, slotsForDay, type SlotState } from '../lib/boothSchedule';
 import { BUSY_QUEUE_COUNT, getWaitDisplay, waitLevelStyle, type WaitDisplay } from '../lib/waitDisplay';
 import { crowdLevelLabel, crowdLevelStyle, parseCrowdFromStore } from '../lib/crowdDisplay';
 import {
@@ -36,6 +38,7 @@ interface Booth {
   ticket?: boolean; // 整理券対応
   popular?: boolean; // 人気ブース
   showOnCallPage: boolean;
+  timeSlots: BoothTimeSlot[]; // 出展時間。空なら一日中
 }
 
 // 絞り込みのチップ。「ステージ」は出さない（ステージ・イベントもの のブースは「すべて」で表示される）
@@ -63,9 +66,10 @@ function toCategory(type?: string): Category {
   }
 }
 
-function toFloor(facility?: BackendMapFacility): number | null {
-  if (!facility) return null;
-  const floor = Number(facility.floor);
+function toFloor(store: BackendStore, facility?: BackendMapFacility): number | null {
+  const raw = facility?.floor ?? store.floor;
+  if (raw == null) return null;
+  const floor = Number(raw);
   return Number.isFinite(floor) ? floor : null;
 }
 
@@ -75,7 +79,7 @@ function toArea(store: BackendStore, facility?: BackendMapFacility): string {
     return description || '場所未設定';
   }
 
-  const floor = toFloor(facility);
+  const floor = toFloor(store, facility);
   const floorLabel = floor === null ? null : `${floor}F`;
   const room = facility.label?.trim();
   if (floorLabel && room) return `${floorLabel}・${room}`;
@@ -84,18 +88,34 @@ function toArea(store: BackendStore, facility?: BackendMapFacility): string {
 
 function toBooth(store: BackendStore, facility?: BackendMapFacility): Booth {
   const wait = getWaitDisplay(store);
+  const floor = toFloor(store, facility);
 
   return {
     id: store.id,
     name: store.name,
     area: toArea(store, facility),
-    floor: toFloor(facility),
+    floor,
     wait,
     crowdLevel: parseCrowdFromStore(store),
-    category: toCategory(facility?.type),
+    category: toCategory(facility?.type ?? store.type),
     popular: store.is_open && wait.queueCount >= BUSY_QUEUE_COUNT,
     showOnCallPage: showsOnCallPage(store),
+    timeSlots: store.time_slots ?? [],
   };
+}
+
+/** 出展時間のバッジ（時間指定のないブースは出さない） */
+function slotBadge(state: SlotState): { label: string; bg: string; fg: string } | null {
+  switch (state.kind) {
+    case 'active':
+      return { label: `出展中（${state.until}まで）`, bg: 'var(--primary)', fg: 'var(--primary-foreground)' };
+    case 'upcoming':
+      return { label: `${state.from}から`, bg: 'var(--info-soft)', fg: 'var(--info)' };
+    case 'ended':
+      return { label: '本日終了', bg: 'var(--muted)', fg: 'var(--muted-foreground)' };
+    default:
+      return null;
+  }
 }
 
 /** 詳細（説明・メニュー）の取得状況。開いたブースだけ、サーバーから取りに行く */
@@ -218,6 +238,14 @@ export default function Attractions() {
   const [booths, setBooths] = useState<Booth[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // 出展時間のバッジ用。サーバーには取りに行かず、表示だけ30秒ごとに更新する
+  const [nowHm, setNowHm] = useState(() => japanNowHm());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNowHm(japanNowHm()), 30_000);
+    return () => window.clearInterval(timer);
+  }, []);
+  const festivalDay = dayKey ? eventKeyToFestivalDay(dayKey) : null;
+  const isToday = dayKey !== null && dayKey === todayKey;
   const detailId = searchParams.get('detail');
   const floors = Array.from(
     new Set(booths.map((b) => b.floor).filter((f): f is number => f !== null)),
@@ -466,6 +494,8 @@ export default function Attractions() {
             const w = waitLevelStyle(b.wait.level);
             const crowdLevel = b.crowdLevel;
             const crowdColors = crowdLevel ? crowdLevelStyle(crowdLevel) : null;
+            const daySlots = festivalDay ? slotsForDay(b.timeSlots, festivalDay) : [];
+            const badge = festivalDay ? slotBadge(slotState(b.timeSlots, festivalDay, isToday, nowHm)) : null;
             return (
               <li
                 key={b.id}
@@ -491,6 +521,20 @@ export default function Attractions() {
                       <MapPin className="h-3.5 w-3.5" />
                       {b.area}
                     </p>
+                    {daySlots.length > 0 && (
+                      <p className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+                        <Clock className="h-3.5 w-3.5 shrink-0" />
+                        <span>出展時間 {formatSlots(daySlots)}</span>
+                        {badge && (
+                          <span
+                            className="rounded-full px-2 py-0.5 text-[11px] font-bold"
+                            style={{ backgroundColor: badge.bg, color: badge.fg }}
+                          >
+                            {badge.label}
+                          </span>
+                        )}
+                      </p>
+                    )}
                   </div>
                   <div className="shrink-0 text-right">
                     <span

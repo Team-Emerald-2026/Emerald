@@ -13,6 +13,7 @@ use App\Models\OrderItem;
 use App\Models\SalesEntry;
 use App\Models\Store;
 use App\Models\User;
+use App\Support\BoothSchedule;
 use App\Support\DbSchema;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -20,6 +21,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 class AdminStoreController extends Controller
 {
@@ -104,7 +106,9 @@ class AdminStoreController extends Controller
             'show_on_call_page' => ['sometimes', 'boolean'],
             'current_wait_min' => ['sometimes', 'integer', 'min:0'],
             'current_queue_count' => ['sometimes', 'integer', 'min:0'],
+            ...$this->timeSlotRules(),
         ]);
+        $this->assertTimeSlotsInOrder($validated);
 
         try {
             $result = $this->createStore($validated);
@@ -159,6 +163,9 @@ class AdminStoreController extends Controller
             }
             if (DbSchema::hasColumn('stores', 'ticket_limit')) {
                 $attributes['ticket_limit'] = 20;
+            }
+            if (DbSchema::hasColumn('stores', 'time_slots')) {
+                $attributes['time_slots'] = BoothSchedule::normalize($validated['time_slots'] ?? null);
             }
 
             $store = Store::query()->create($attributes);
@@ -216,7 +223,9 @@ class AdminStoreController extends Controller
             'show_on_call_page' => ['sometimes', 'boolean'],
             'current_wait_min' => ['required', 'integer', 'min:0'],
             'current_queue_count' => ['required', 'integer', 'min:0'],
+            ...$this->timeSlotRules(),
         ]);
+        $this->assertTimeSlotsInOrder($validated);
 
         $before = $this->serializeStore(
             $store,
@@ -242,6 +251,10 @@ class AdminStoreController extends Controller
             if (array_key_exists('show_on_call_page', $validated)) {
                 Store::ensureShowOnCallPageColumn();
                 $attributes['show_on_call_page'] = (bool) $validated['show_on_call_page'];
+            }
+            // 送られてこなければ今の出展時間のまま（モニター切り替えなどの一部更新で消さない）
+            if (array_key_exists('time_slots', $validated) && DbSchema::hasColumn('stores', 'time_slots')) {
+                $attributes['time_slots'] = BoothSchedule::normalize($validated['time_slots']);
             }
 
             $store->fill($attributes);
@@ -502,6 +515,30 @@ class AdminStoreController extends Controller
         abort_unless($request->user()?->role === 'admin', 403, '管理者権限が必要です。');
     }
 
+    private function timeSlotRules(): array
+    {
+        return [
+            'time_slots' => ['sometimes', 'nullable', 'array', 'max:8'],
+            'time_slots.*.day' => ['nullable', 'string', Rule::in(FestivalSetting::allowedDays())],
+            'time_slots.*.start' => ['required', 'date_format:H:i'],
+            'time_slots.*.end' => ['required', 'date_format:H:i'],
+        ];
+    }
+
+    private function assertTimeSlotsInOrder(array $validated): void
+    {
+        $errors = [];
+        foreach ($validated['time_slots'] ?? [] as $index => $slot) {
+            if ($slot['end'] <= $slot['start']) {
+                $errors["time_slots.{$index}.end"] = '終了時刻は開始時刻より後にしてください。';
+            }
+        }
+
+        if ($errors !== []) {
+            throw ValidationException::withMessages($errors);
+        }
+    }
+
     private function serializeStore(
         Store $store,
         ?User $user = null,
@@ -519,6 +556,7 @@ class AdminStoreController extends Controller
             'map_y' => (int) ($facility?->y ?? 50),
             'ticket_prefix' => $store->ticket_prefix,
             'exhibition_day' => $store->exhibition_day ?? FestivalSetting::DAY_BOTH,
+            'time_slots' => $store->time_slots ?? [],
             'is_open' => (bool) $store->is_open,
             'is_visible' => (bool) $store->is_visible,
             'show_on_monitor' => (bool) ($store->show_on_monitor ?? false),

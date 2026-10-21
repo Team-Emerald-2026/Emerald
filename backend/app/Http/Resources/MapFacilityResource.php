@@ -19,6 +19,8 @@ class MapFacilityResource extends JsonResource
             'y' => (int) $this->y,
             // 場所の名前（部屋番号など）。店舗が入った枠でも、同じ位置の空き枠の名前が入る
             'label' => $this->resource->getAttribute('label'),
+            // この日の出展時間（空なら一日中）
+            'time_slots' => $this->resource->getAttribute('time_slots') ?? [],
         ];
 
         // 店舗が無い場所は null のままにし、画面側はフードを今まで通り出す

@@ -39,9 +39,11 @@ class Store extends Model
         'wait_display_mode',
         'wait_display_text',
         'crowd_level',
+        'time_slots',
     ];
 
     protected $casts = [
+        'time_slots' => 'array',
         'is_open' => 'boolean',
         'is_visible' => 'boolean',
         'show_on_monitor' => 'boolean',
