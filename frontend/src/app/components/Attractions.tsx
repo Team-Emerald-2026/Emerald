@@ -28,6 +28,7 @@ interface Booth {
   id: string;
   name: string;
   area: string;
+  floor: number | null; // 並び替え用。地図に登録されていなければ null
   wait: WaitDisplay; // 待ち人数の表示（文字表示モードのときは文字）
   crowdLevel: ReturnType<typeof parseCrowdFromStore>;
   category: Category;
@@ -67,6 +68,12 @@ function toArea(store: BackendStore, facility?: BackendMapFacility): string {
   return Number.isFinite(floor) ? `${floor}F` : '場所未設定';
 }
 
+function toFloor(facility?: BackendMapFacility): number | null {
+  if (!facility) return null;
+  const floor = Number(facility.floor);
+  return Number.isFinite(floor) ? floor : null;
+}
+
 function toBooth(store: BackendStore, facility?: BackendMapFacility): Booth {
   const wait = getWaitDisplay(store);
 
@@ -74,6 +81,7 @@ function toBooth(store: BackendStore, facility?: BackendMapFacility): Booth {
     id: store.id,
     name: store.name,
     area: toArea(store, facility),
+    floor: toFloor(facility),
     wait,
     crowdLevel: parseCrowdFromStore(store),
     category: toCategory(facility?.type),
@@ -195,13 +203,23 @@ function BoothCardSkeleton() {
 export default function Attractions() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [filter, setFilter] = useState<'すべて' | Category>('すべて');
+  const [floorFilter, setFloorFilter] = useState<number | 'all'>('all');
   const [dayKey, setDayKey] = useState<EventDayKey | null>(null);
   const [todayKey, setTodayKey] = useState<EventDayKey | null>(null);
   const [booths, setBooths] = useState<Booth[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const detailId = searchParams.get('detail');
-  const list = booths.filter((b) => filter === 'すべて' || b.category === filter);
+  const floors = Array.from(
+    new Set(booths.map((b) => b.floor).filter((f): f is number => f !== null)),
+  ).sort((a, b) => a - b);
+  // 日付を切り替えて、選んでいた階にブースがなくなったら全フロアに戻す
+  const activeFloor = floorFilter !== 'all' && floors.includes(floorFilter) ? floorFilter : 'all';
+  // 1F から上の階へ。同じ階は届いた順（店舗ID順）のまま、場所未設定は最後
+  const list = booths
+    .filter((b) => filter === 'すべて' || b.category === filter)
+    .filter((b) => activeFloor === 'all' || b.floor === activeFloor)
+    .sort((a, b) => (a.floor ?? Infinity) - (b.floor ?? Infinity));
   const selectedBooth = booths.find((b) => b.id === detailId) ?? null;
   // 取り直しのたびにブースのオブジェクトは作り直されるので、下の effect は「一覧にあるか」だけで動かす
   const hasSelectedBooth = selectedBooth !== null;
@@ -373,6 +391,31 @@ export default function Attractions() {
           );
         })}
       </div>
+
+      {/* フロアフィルタ（チップ）。ブースが1つの階にしかないときは出さない */}
+      {floors.length > 1 && (
+        <div className="flex flex-wrap gap-2" role="tablist" aria-label="フロア">
+          {(['all', ...floors] as const).map((f) => {
+            const active = activeFloor === f;
+            return (
+              <button
+                key={f}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                onClick={() => setFloorFilter(f)}
+                className="rounded-full px-4 py-1.5 text-sm font-medium transition-colors"
+                style={{
+                  backgroundColor: active ? 'var(--primary)' : 'var(--muted)',
+                  color: active ? 'var(--primary-foreground)' : 'var(--muted-foreground)',
+                }}
+              >
+                {f === 'all' ? '全フロア' : `${f}F`}
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {loading && (
         <ul className="space-y-3" aria-label="ブース情報を読み込み中">
