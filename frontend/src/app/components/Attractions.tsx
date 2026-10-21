@@ -6,6 +6,7 @@ import {
   fetchMapFacilities,
   fetchRestaurant,
   fetchRestaurants,
+  showsOnCallPage,
   type BackendMapFacility,
   type BackendStore,
 } from '../lib/api';
@@ -34,6 +35,7 @@ interface Booth {
   category: Category;
   ticket?: boolean; // 整理券対応
   popular?: boolean; // 人気ブース
+  showOnCallPage: boolean;
 }
 
 // 絞り込みのチップ。「ステージ」は出さない（ステージ・イベントもの のブースは「すべて」で表示される）
@@ -92,6 +94,7 @@ function toBooth(store: BackendStore, facility?: BackendMapFacility): Booth {
     crowdLevel: parseCrowdFromStore(store),
     category: toCategory(facility?.type),
     popular: store.is_open && wait.queueCount >= BUSY_QUEUE_COUNT,
+    showOnCallPage: showsOnCallPage(store),
   };
 }
 
@@ -544,7 +547,7 @@ export default function Attractions() {
                     <MapPin className="h-3.5 w-3.5" />
                     マップ
                   </Link>
-                  {b.category === 'フード' && (
+                  {b.showOnCallPage && (
                     <Link
                       to={`/restaurants?store=${encodeURIComponent(b.id)}`}
                       className="inline-flex min-h-11 flex-1 items-center justify-center gap-1 rounded-xl px-3 py-2 text-xs font-bold text-white"

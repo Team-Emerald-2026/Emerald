@@ -31,6 +31,11 @@ class StoreResource extends JsonResource
                 : null,
         ];
 
+        // 列を読んでいない古いキャッシュではキーを出さない。画面はフードを今まで通り出す
+        if (array_key_exists('show_on_call_page', $this->resource->getAttributes())) {
+            $data['show_on_call_page'] = (bool) $this->show_on_call_page;
+        }
+
         if ($this->relationLoaded('menuItems')) {
             // Collection のままキャッシュすると、DB保存時に壊れ、
             // 再取得で配列ではなくなり画面の .map が落ちる。配列にして返す。

@@ -36,6 +36,7 @@ const emptyInput: AdminStoreInput = {
   is_open: true,
   is_visible: true,
   show_on_monitor: false,
+  show_on_call_page: false,
   current_wait_min: 5,
   current_queue_count: 0,
 };
@@ -88,6 +89,7 @@ export default function AdminStoreForm({
       is_open: store.is_open,
       is_visible: store.is_visible,
       show_on_monitor: Boolean(store.show_on_monitor),
+      show_on_call_page: Boolean(store.show_on_call_page),
       current_wait_min: store.current_wait_min,
       current_queue_count: store.current_queue_count,
     });
@@ -187,7 +189,22 @@ export default function AdminStoreForm({
           <span className="mb-1 block text-muted-foreground">種類</span>
           <select
             value={input.type}
-            onChange={(event) => update('type', event.target.value)}
+            onChange={(event) => {
+              const type = event.target.value;
+              setInput((current) => ({
+                ...current,
+                type,
+                // フードは受取番号ページに出したままにする。種類を戻したときは、保存済みの設定に戻す
+                show_on_call_page:
+                  type === 'food'
+                    ? true
+                    : store && current.type === 'food' && store.type !== 'food'
+                      ? Boolean(store.show_on_call_page)
+                      : store
+                        ? current.show_on_call_page
+                        : false,
+              }));
+            }}
             className="w-full rounded-lg border border-input bg-background px-3 py-2.5 text-foreground outline-none"
           >
             {facilityTypeOptions(input.type)
@@ -326,7 +343,18 @@ export default function AdminStoreForm({
           />
           校内モニターに表示
         </label>
+        <label className="flex items-center gap-2">
+          <input
+            type="checkbox"
+            checked={input.show_on_call_page}
+            onChange={(event) => update('show_on_call_page', event.target.checked)}
+          />
+          受取番号ページに表示
+        </label>
       </div>
+      <p className="mt-2 text-xs text-muted-foreground">
+        オンの店舗だけ、来場者の受取番号ページに出ます。フードは初めからオンです。オフにしても、店舗側の呼び出しは続けて使えます。
+      </p>
 
       <button
         type="button"

@@ -33,6 +33,7 @@ class Store extends Model
         'is_visible',
         'exhibition_day',
         'show_on_monitor',
+        'show_on_call_page',
         'current_wait_min',
         'current_queue_count',
         'wait_display_mode',
@@ -44,6 +45,7 @@ class Store extends Model
         'is_open' => 'boolean',
         'is_visible' => 'boolean',
         'show_on_monitor' => 'boolean',
+        'show_on_call_page' => 'boolean',
         'current_wait_min' => 'integer',
         'current_queue_count' => 'integer',
         'ticket_limit' => 'integer',
@@ -159,6 +161,65 @@ class Store extends Model
         } catch (\Throwable) {
             return false;
         }
+    }
+
+    /** 本番でマイグレーション未適用でも、受取番号ページの表示列だけ先に用意する */
+    public static function ensureShowOnCallPageColumn(): void
+    {
+        if (self::hasShowOnCallPageColumn()) {
+            return;
+        }
+
+        $driver = Schema::getConnection()->getDriverName();
+
+        try {
+            if ($driver === 'pgsql') {
+                DB::statement('ALTER TABLE stores ADD COLUMN IF NOT EXISTS show_on_call_page BOOLEAN NOT NULL DEFAULT FALSE');
+            } elseif (in_array($driver, ['mysql', 'mariadb'], true)) {
+                DB::statement('ALTER TABLE stores ADD COLUMN show_on_call_page TINYINT(1) NOT NULL DEFAULT 0');
+            } else {
+                Schema::table('stores', function (Blueprint $table) {
+                    $table->boolean('show_on_call_page')->default(false);
+                });
+            }
+            DbSchema::flush();
+        } catch (\Throwable $exception) {
+            DbSchema::flush();
+            if (! self::hasShowOnCallPageColumn()) {
+                throw $exception;
+            }
+        }
+
+        // 列を足した直後だけ。フードは今まで受取番号ページに出ていたので、そのまま出す
+        self::backfillShowOnCallPageForFood();
+    }
+
+    public static function hasShowOnCallPageColumn(): bool
+    {
+        try {
+            return DbSchema::hasColumn((new static)->getTable(), 'show_on_call_page');
+        } catch (\Throwable) {
+            return false;
+        }
+    }
+
+    /** すでに出店しているフードを、受取番号ページに出したままにする */
+    public static function backfillShowOnCallPageForFood(): void
+    {
+        if (! self::hasShowOnCallPageColumn() || ! Schema::hasTable('map_facilities')) {
+            return;
+        }
+
+        $ids = DB::table('map_facilities')
+            ->whereIn('type', ['food', 'フード', '飲食ブース'])
+            ->whereNotNull('store_id')
+            ->pluck('store_id');
+
+        if ($ids->isEmpty()) {
+            return;
+        }
+
+        DB::table('stores')->whereIn('id', $ids)->update(['show_on_call_page' => true]);
     }
 
     /** 本番でマイグレーション未適用でも、店内混雑列だけ先に用意する */

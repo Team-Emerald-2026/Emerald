@@ -306,6 +306,126 @@ class MissingApisTest extends TestCase
             ->assertJsonPath('data.0.current_call_number', 'Y-10');
     }
 
+    public function test_admin_can_choose_whether_a_store_appears_on_the_call_page(): void
+    {
+        $store = $this->createStore();
+        Sanctum::actingAs($this->createAdmin());
+
+        $this->patchJson("/api/v1/admin/stores/{$store->id}/call-page", [
+            'show_on_call_page' => true,
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.show_on_call_page', true);
+
+        $this->assertTrue($store->refresh()->show_on_call_page);
+
+        $this->getJson('/api/v1/restaurants')
+            ->assertOk()
+            ->assertJsonPath('data.0.id', $store->id)
+            ->assertJsonPath('data.0.show_on_call_page', true);
+
+        $this->patchJson("/api/v1/admin/stores/{$store->id}/call-page", [
+            'show_on_call_page' => false,
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.show_on_call_page', false);
+
+        $this->assertFalse($store->refresh()->show_on_call_page);
+    }
+
+    public function test_new_food_store_stays_on_the_call_page_and_other_types_do_not(): void
+    {
+        Sanctum::actingAs($this->createAdmin());
+
+        $this->postJson('/api/v1/admin/stores', [
+            'id' => 'store-food',
+            'name' => 'たこ焼き',
+            'type' => 'food',
+            'floor' => 1,
+            'map_x' => 10,
+            'map_y' => 20,
+            'login_id' => 'takoyaki',
+            'password' => 'password123',
+        ])->assertCreated()
+            ->assertJsonPath('data.show_on_call_page', true);
+
+        $this->assertTrue(Store::query()->find('store-food')?->show_on_call_page);
+
+        $this->postJson('/api/v1/admin/stores', [
+            'id' => 'store-booth',
+            'name' => '体験ブース',
+            'type' => 'booth',
+            'floor' => 1,
+            'map_x' => 30,
+            'map_y' => 40,
+            'login_id' => 'taiken',
+            'password' => 'password123',
+        ])->assertCreated()
+            ->assertJsonPath('data.show_on_call_page', false);
+
+        $this->assertFalse(Store::query()->find('store-booth')?->show_on_call_page);
+    }
+
+    public function test_existing_food_stores_are_kept_on_the_call_page(): void
+    {
+        $food = $this->createStore('store-food', ['show_on_call_page' => false]);
+        MapFacilities::query()->create([
+            'store_id' => $food->id,
+            'name' => 'たこ焼き',
+            'type' => 'food',
+            'floor' => 1,
+            'x' => 10,
+            'y' => 20,
+        ]);
+        $booth = $this->createStore('store-booth', ['name' => '体験', 'show_on_call_page' => false]);
+        MapFacilities::query()->create([
+            'store_id' => $booth->id,
+            'name' => '体験',
+            'type' => 'booth',
+            'floor' => 1,
+            'x' => 30,
+            'y' => 40,
+        ]);
+
+        Store::backfillShowOnCallPageForFood();
+
+        $this->assertTrue($food->refresh()->show_on_call_page);
+        $this->assertFalse($booth->refresh()->show_on_call_page);
+    }
+
+    public function test_hiding_from_the_call_page_does_not_stop_store_calling(): void
+    {
+        $store = $this->createStore('store-hidden', ['show_on_call_page' => false]);
+        MapFacilities::query()->create([
+            'store_id' => $store->id,
+            'name' => 'たこ焼き',
+            'type' => 'food',
+            'floor' => 1,
+            'x' => 10,
+            'y' => 20,
+        ]);
+        Sanctum::actingAs($this->createStoreUser($store));
+        $order = Order::query()->create([
+            'store_id' => $store->id,
+            'ticket_number' => '88',
+            'total_price' => 500,
+            'status' => 'issued',
+            'ordered_at' => now(),
+        ]);
+
+        $this->patchJson("/api/v1/booth/accounting/orders/{$order->id}/call")->assertOk();
+
+        $this->getJson('/api/v1/call-numbers?store_id='.$store->id)
+            ->assertOk()
+            ->assertJsonPath('data.0.ticket_number', '88')
+            ->assertJsonPath('data.0.store_id', 'store-hidden');
+
+        $this->getJson('/api/v1/restaurants')
+            ->assertOk()
+            ->assertJsonPath('data.0.id', 'store-hidden')
+            ->assertJsonPath('data.0.show_on_call_page', false);
+    }
+
     public function test_published_events_are_listed_and_unpublished_are_hidden(): void
     {
         $published = EventNotice::query()->create([

@@ -14,7 +14,7 @@ import {
   DoorOpen,
   type LucideIcon,
 } from 'lucide-react';
-import { fetchFestivalDay, fetchMapFacilities, type BackendMapFacility } from '../lib/api';
+import { fetchFestivalDay, fetchMapFacilities, showsOnCallPage, type BackendMapFacility } from '../lib/api';
 import { floors, mapImageByFloor, type MapFloor } from '../lib/campusMap';
 import {
   eventKeyToFestivalDay,
@@ -68,6 +68,8 @@ interface Facility {
   floor: Floor;
   x: number; // マップ上の相対座標（%）
   y: number;
+  /** 受取番号ページ（呼び出し）へ案内するか */
+  showOnCallPage: boolean;
 }
 
 /** 地図のピンに表示する文字（部屋番号などの場所の名前。なければ名前） */
@@ -186,6 +188,7 @@ function toFacility(facility: BackendMapFacility): Facility {
     // 位置は管理画面の「マップ編集」で保存した値をそのまま使う
     x: toPercent(Number(facility.x), 240),
     y: toPercent(Number(facility.y), 180),
+    showOnCallPage: showsOnCallPage(facility),
   };
 }
 
@@ -592,7 +595,7 @@ export default function CampusMap() {
                 詳細準備中
               </span>
             )}
-            {selectedFacility.type === 'フード' && selectedFacility.storeId && (
+            {selectedFacility.showOnCallPage && selectedFacility.storeId && (
               <Link
                 to={`/restaurants?store=${encodeURIComponent(selectedFacility.storeId)}`}
                 className="min-h-11 flex-1 rounded-xl border border-border px-3 py-2 text-center text-sm font-bold text-foreground"

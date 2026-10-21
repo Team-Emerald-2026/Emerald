@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Resources\MapFacilityResource;
 use App\Models\FestivalSetting;
 use App\Models\MapFacilities;
+use App\Models\Store;
 use App\Support\DbSchema;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -17,6 +18,8 @@ class FacilityController extends Controller
 {
     public function index(Request $request): JsonResponse
     {
+        Store::ensureShowOnCallPageColumn();
+
         $validated = $request->validate([
             'day' => ['nullable', 'string', Rule::in(FestivalSetting::allowedDays())],
         ]);
@@ -61,7 +64,7 @@ class FacilityController extends Controller
                         ->orWhere('stores.exhibition_day', FestivalSetting::DAY_BOTH);
                 });
             })
-            ->select([
+            ->select(array_values(array_filter([
                 'map_facilities.id',
                 'map_facilities.store_id',
                 'map_facilities.name',
@@ -69,7 +72,8 @@ class FacilityController extends Controller
                 'map_facilities.floor',
                 'map_facilities.x',
                 'map_facilities.y',
-            ])
+                DbSchema::hasColumn('stores', 'show_on_call_page') ? 'stores.show_on_call_page' : null,
+            ])))
             ->orderByRaw('map_facilities.store_id is null')
             ->orderBy('map_facilities.id')
             ->get();

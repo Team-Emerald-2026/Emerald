@@ -47,6 +47,7 @@ return [
         'is_open' => '営業中',
         'is_visible' => '来場者画面に表示',
         'show_on_monitor' => '校内モニターに表示',
+        'show_on_call_page' => '受取番号ページに表示',
         'current_wait_min' => '待ち時間',
         'current_queue_count' => '待ち人数',
         'day' => '開催日',

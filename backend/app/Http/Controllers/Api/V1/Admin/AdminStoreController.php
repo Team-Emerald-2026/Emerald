@@ -49,6 +49,7 @@ class AdminStoreController extends Controller
     public function index(Request $request)
     {
         $this->authorizeAdmin($request);
+        Store::ensureShowOnCallPageColumn();
 
         $usersByStoreId = User::query()
             ->where('role', 'store')
@@ -84,6 +85,7 @@ class AdminStoreController extends Controller
     public function store(Request $request)
     {
         $this->authorizeAdmin($request);
+        Store::ensureShowOnCallPageColumn();
 
         $validated = $request->validate([
             'id' => ['required', 'string', 'max:64', 'unique:stores,id'],
@@ -99,6 +101,7 @@ class AdminStoreController extends Controller
             'exhibition_day' => ['sometimes', 'string', Rule::in(FestivalSetting::allowedExhibitionDays())],
             'is_open' => ['sometimes', 'boolean'],
             'show_on_monitor' => ['sometimes', 'boolean'],
+            'show_on_call_page' => ['sometimes', 'boolean'],
             'current_wait_min' => ['sometimes', 'integer', 'min:0'],
             'current_queue_count' => ['sometimes', 'integer', 'min:0'],
         ]);
@@ -122,6 +125,8 @@ class AdminStoreController extends Controller
             'exhibition_day' => $result['exhibition_day'],
         ]);
 
+        FestivalSetting::forgetVisitorListCaches();
+
         return response()->json(['data' => $result], 201, [], JSON_UNESCAPED_UNICODE);
     }
 
@@ -144,6 +149,13 @@ class AdminStoreController extends Controller
             }
             if (DbSchema::hasColumn('stores', 'show_on_monitor')) {
                 $attributes['show_on_monitor'] = $validated['show_on_monitor'] ?? false;
+            }
+            Store::ensureShowOnCallPageColumn();
+            if (Store::hasShowOnCallPageColumn()) {
+                // 指定がなければフードだけ受取番号ページに出す（今までの呼び出しを続ける）
+                $attributes['show_on_call_page'] = array_key_exists('show_on_call_page', $validated)
+                    ? (bool) $validated['show_on_call_page']
+                    : ($validated['type'] === 'food');
             }
             if (DbSchema::hasColumn('stores', 'ticket_limit')) {
                 $attributes['ticket_limit'] = 20;
@@ -174,6 +186,7 @@ class AdminStoreController extends Controller
     public function update(Request $request, string $id)
     {
         $this->authorizeAdmin($request);
+        Store::ensureShowOnCallPageColumn();
 
         $store = Store::query()->findOrFail($id);
         $storeUser = User::query()
@@ -200,6 +213,7 @@ class AdminStoreController extends Controller
             'is_open' => ['required', 'boolean'],
             'is_visible' => ['required', 'boolean'],
             'show_on_monitor' => ['required', 'boolean'],
+            'show_on_call_page' => ['sometimes', 'boolean'],
             'current_wait_min' => ['required', 'integer', 'min:0'],
             'current_queue_count' => ['required', 'integer', 'min:0'],
         ]);
@@ -225,6 +239,10 @@ class AdminStoreController extends Controller
             }
             Store::ensureShowOnMonitorColumn();
             $attributes['show_on_monitor'] = $validated['show_on_monitor'];
+            if (array_key_exists('show_on_call_page', $validated)) {
+                Store::ensureShowOnCallPageColumn();
+                $attributes['show_on_call_page'] = (bool) $validated['show_on_call_page'];
+            }
 
             $store->fill($attributes);
             $store->save();
@@ -263,6 +281,8 @@ class AdminStoreController extends Controller
             'password_changed' => $storeUser !== null && ! empty($validated['password']),
             'has_login_account' => $storeUser !== null,
         ]);
+
+        FestivalSetting::forgetVisitorListCaches();
 
         return response()->json(['data' => $result], 200, [], JSON_UNESCAPED_UNICODE);
     }
@@ -306,6 +326,54 @@ class AdminStoreController extends Controller
 
         AuditLog::record($request, 'store.monitor', $store->id, [
             'show_on_monitor' => (bool) $validated['show_on_monitor'],
+        ]);
+
+        return response()->json([
+            'data' => $this->serializeStore($store->refresh(), $user, null, $facility),
+        ], 200, [], JSON_UNESCAPED_UNICODE);
+    }
+
+    public function updateCallPage(Request $request, string $id)
+    {
+        $this->authorizeAdmin($request);
+
+        $validated = $request->validate([
+            'show_on_call_page' => ['required', 'boolean'],
+        ]);
+
+        try {
+            Store::ensureShowOnCallPageColumn();
+            $store = Store::query()->findOrFail($id);
+            $store->fill([
+                'show_on_call_page' => $validated['show_on_call_page'],
+            ]);
+            $store->save();
+        } catch (\Throwable $exception) {
+            Store::ensureShowOnCallPageColumn();
+            $store = Store::query()->findOrFail($id);
+            $store->show_on_call_page = $validated['show_on_call_page'];
+            try {
+                $store->save();
+            } catch (\Throwable $retryException) {
+                return response()->json([
+                    'error' => [
+                        'code' => 'INTERNAL_ERROR',
+                        'message' => '受取番号ページの表示更新に失敗しました: '.$retryException->getMessage(),
+                    ],
+                ], 500, [], JSON_UNESCAPED_UNICODE);
+            }
+        }
+
+        FestivalSetting::forgetVisitorListCaches();
+
+        $user = User::query()
+            ->where('role', 'store')
+            ->where('store_id', $store->id)
+            ->first();
+        $facility = MapFacilities::query()->where('store_id', $store->id)->first();
+
+        AuditLog::record($request, 'store.call_page', $store->id, [
+            'show_on_call_page' => (bool) $validated['show_on_call_page'],
         ]);
 
         return response()->json([
@@ -454,6 +522,10 @@ class AdminStoreController extends Controller
             'is_open' => (bool) $store->is_open,
             'is_visible' => (bool) $store->is_visible,
             'show_on_monitor' => (bool) ($store->show_on_monitor ?? false),
+            // 列がまだ無いあいだは、フードだけ今まで通り受取番号ページに出ているものとして扱う
+            'show_on_call_page' => Store::hasShowOnCallPageColumn()
+                ? (bool) ($store->show_on_call_page ?? false)
+                : ($facility?->type === 'food'),
             'current_wait_min' => (int) $store->current_wait_min,
             'current_queue_count' => (int) $store->current_queue_count,
             'login_id' => $user?->login_id,

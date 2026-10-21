@@ -16,6 +16,7 @@ class StoreController extends Controller
     public function index(Request $request)
     {
         Store::ensureCrowdLevelColumn();
+        Store::ensureShowOnCallPageColumn();
 
         $validated = $request->validate([
             'day' => ['nullable', 'string', Rule::in(FestivalSetting::allowedDays())],
@@ -41,6 +42,9 @@ class StoreController extends Controller
             if (Store::hasCrowdLevelColumn()) {
                 $columns[] = 'crowd_level';
             }
+            if (Store::hasShowOnCallPageColumn()) {
+                $columns[] = 'show_on_call_page';
+            }
 
             $stores = Store::query()
                 ->select($columns)
@@ -65,6 +69,7 @@ class StoreController extends Controller
     public function show(Request $request, string $id)
     {
         Store::ensureCrowdLevelColumn();
+        Store::ensureShowOnCallPageColumn();
 
         $validated = $request->validate([
             'day' => ['nullable', 'string', Rule::in(FestivalSetting::allowedDays())],

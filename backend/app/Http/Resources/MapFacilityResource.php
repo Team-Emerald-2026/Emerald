@@ -21,6 +21,14 @@ class MapFacilityResource extends JsonResource
             'label' => $this->resource->getAttribute('label'),
         ];
 
+        // 店舗が無い場所は null のままにし、画面側はフードを今まで通り出す
+        if (array_key_exists('show_on_call_page', $this->resource->getAttributes())
+            && $this->show_on_call_page !== null) {
+            $raw = $this->show_on_call_page;
+            // MySQL は "0"/"1"、PostgreSQL は t/f や bool で返ることがある
+            $data['show_on_call_page'] = in_array($raw, [true, 1, '1', 't', 'true', 'on'], true);
+        }
+
         return [
             ...$data,
             'attributes' => $data,

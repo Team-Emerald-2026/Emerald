@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Edit3, EyeOff, Monitor, Plus } from 'lucide-react';
+import { Edit3, EyeOff, Hash, Monitor, Plus } from 'lucide-react';
 import AdminShell from './AdminShell';
 import AdminStoreForm from './AdminStoreForm';
 import {
@@ -12,6 +12,7 @@ import {
   hideAdminStore,
   updateAdminFestivalDay,
   updateAdminStore,
+  updateAdminStoreCallPage,
   updateAdminStoreMonitor,
   type AdminMapFacility,
   type AdminStore,
@@ -49,6 +50,7 @@ function toStoreInput(store: AdminStore, overrides: Partial<AdminStoreInput> = {
     is_open: store.is_open,
     is_visible: store.is_visible,
     show_on_monitor: Boolean(store.show_on_monitor),
+    show_on_call_page: Boolean(store.show_on_call_page),
     current_wait_min: store.current_wait_min,
     current_queue_count: store.current_queue_count,
     ...overrides,
@@ -200,6 +202,35 @@ export default function AdminStores() {
       await loadStores();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : '保存に失敗しました。');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const toggleCallPage = async (store: AdminStore) => {
+    if ((!adminSession && !ADMIN_PUBLIC_ACCESS) || saving) return;
+
+    const next = !store.show_on_call_page;
+    setSaving(true);
+    setError('');
+    setMessage('');
+    try {
+      const updated = await updateAdminStoreCallPage(adminSession?.token, store.id, next);
+      const shown = Boolean(updated?.show_on_call_page);
+      if (!updated || shown !== next) {
+        setError('受取番号ページの表示更新に失敗しました。');
+        return;
+      }
+      setStores((current) =>
+        current.map((item) => (item.id === updated.id ? { ...item, ...updated, show_on_call_page: shown } : item)),
+      );
+      setMessage(
+        shown
+          ? `${store.name} を受取番号ページに表示しました。`
+          : `${store.name} を受取番号ページから外しました。店舗の呼び出しは続けて使えます。`,
+      );
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : '受取番号ページの表示更新に失敗しました。');
     } finally {
       setSaving(false);
     }
@@ -426,6 +457,15 @@ export default function AdminStores() {
                     >
                       {store.show_on_monitor ? 'モニター表示' : 'モニター非表示'}
                     </span>
+                    <span
+                      className="rounded-md px-2 py-0.5 text-xs font-bold"
+                      style={{
+                        backgroundColor: store.show_on_call_page ? 'var(--ok-soft)' : 'var(--busy-soft)',
+                        color: store.show_on_call_page ? 'var(--ok)' : 'var(--busy)',
+                      }}
+                    >
+                      {store.show_on_call_page ? '受取番号に表示' : '受取番号は非表示'}
+                    </span>
                   </div>
                   <p className="mt-1 text-sm text-muted-foreground">{store.description}</p>
                   <p className="mt-1 text-xs text-muted-foreground">
@@ -451,6 +491,15 @@ export default function AdminStores() {
                 >
                   <Edit3 className="h-4 w-4" />
                   編集
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void toggleCallPage(store)}
+                  disabled={saving}
+                  className="inline-flex items-center justify-center gap-1 rounded-xl border border-border px-3 py-2 text-sm font-bold text-foreground hover:bg-muted disabled:opacity-40"
+                >
+                  <Hash className="h-4 w-4" />
+                  {store.show_on_call_page ? '受取番号を非表示' : '受取番号に表示'}
                 </button>
                 <button
                   type="button"

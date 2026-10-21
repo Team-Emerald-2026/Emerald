@@ -55,6 +55,11 @@ export interface BackendStore {
   is_open: boolean;
   is_visible?: boolean;
   type?: string;
+  /**
+   * 受取番号ページに出すか。
+   * 未設定の古い応答では、画面側がフードだけ今まで通り出す。
+   */
+  show_on_call_page?: boolean;
   current_wait_min: number;
   current_queue_count: number;
   wait_time?: number;
@@ -102,6 +107,7 @@ export interface AdminStore {
   is_open: boolean;
   is_visible: boolean;
   show_on_monitor: boolean;
+  show_on_call_page: boolean;
   current_wait_min: number;
   current_queue_count: number;
   login_id: string | null;
@@ -148,8 +154,17 @@ export interface AdminStoreInput {
   is_open: boolean;
   is_visible: boolean;
   show_on_monitor: boolean;
+  show_on_call_page: boolean;
   current_wait_min: number;
   current_queue_count: number;
+}
+
+const FOOD_FACILITY_TYPES = new Set(['food', 'フード', '飲食ブース']);
+
+/** 受取番号ページに出す店。フラグが無い古い応答では、今まで通りフードだけ出す */
+export function showsOnCallPage(store: Pick<BackendStore, 'show_on_call_page' | 'type'>): boolean {
+  if (typeof store.show_on_call_page === 'boolean') return store.show_on_call_page;
+  return FOOD_FACILITY_TYPES.has(store.type ?? 'food');
 }
 
 export interface BackendMapFacility {
@@ -162,6 +177,8 @@ export interface BackendMapFacility {
   floor: number;
   x: number;
   y: number;
+  /** 紐づく店舗を受取番号ページに出すか。店舗が無い場所では未設定 */
+  show_on_call_page?: boolean;
 }
 
 type JsonApiItem = {
@@ -490,6 +507,7 @@ export function fetchAdminStores(token?: string, signal?: AbortSignal) {
         ...store,
         exhibition_day: (store.exhibition_day ?? 'both') as ExhibitionDay,
         show_on_monitor: Boolean(store.show_on_monitor),
+        show_on_call_page: Boolean(store.show_on_call_page),
       }));
     }
     return [];
@@ -557,6 +575,20 @@ export function updateAdminStoreMonitor(
     signal,
     token,
     body: { show_on_monitor: showOnMonitor },
+  }).then((payload) => (isRecord(payload) ? (payload.data as AdminStore) : null));
+}
+
+export function updateAdminStoreCallPage(
+  token: string | undefined,
+  id: string,
+  showOnCallPage: boolean,
+  signal?: AbortSignal,
+) {
+  return request(`/v1/admin/stores/${encodeURIComponent(id)}/call-page`, {
+    method: 'PATCH',
+    signal,
+    token,
+    body: { show_on_call_page: showOnCallPage },
   }).then((payload) => (isRecord(payload) ? (payload.data as AdminStore) : null));
 }
 

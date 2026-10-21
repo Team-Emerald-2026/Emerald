@@ -4,6 +4,7 @@ import { ArrowLeft, Hash, Info, Megaphone } from 'lucide-react';
 import {
   fetchCallNumbers,
   fetchRestaurants,
+  showsOnCallPage,
   type BackendStore,
   type CallNumber,
 } from '../lib/api';
@@ -64,7 +65,7 @@ export default function Restaurants() {
       .then(({ stores: backendStores }) => {
         setStores(
           backendStores
-            .filter((store) => (store.type ?? 'food') === 'food')
+            .filter(showsOnCallPage)
             .map(toStore),
         );
       })
