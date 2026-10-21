@@ -63,13 +63,13 @@
   }
 }
 
-/* 校内モニターの案内スライド（Monitor.tsx）。同じ並びを2つ横に置き、半分だけ動かして途切れなく流す */
+/* 校内モニターの案内カード（Monitor.tsx）。同じ並びを2つ縦に置き、半分だけ動かして途切れなく流す */
 @keyframes monitor-slide-scroll {
   from {
-    transform: translateX(0);
+    transform: translateY(0);
   }
   to {
-    transform: translateX(-50%);
+    transform: translateY(-50%);
   }
 }
 

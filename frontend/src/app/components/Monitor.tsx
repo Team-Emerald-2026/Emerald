@@ -7,7 +7,7 @@ const CALL_NUMBERS_INTERVAL_MS = 5000;
 const ROTATE_INTERVAL_MS = 12000;
 
 /**
- * 校内モニター下部に流す案内スライド。
+ * 呼び出し番号カードの横に出す案内カードの中身。
  * 先生のパワポが届くまでは、下の TEST_SLIDES を流す。
  * 本番の画像（png / jpg / webp）を assets/monitor-slides に置くと、ファイル名の昇順でそちらに切り替わる。
  */
@@ -121,6 +121,7 @@ function useClock() {
 /**
  * 校内モニター（プロジェクター）向け呼び出し番号。
  * 管理画面で「校内モニターに表示」にした店舗を、2店舗ずつ左右に出して切り替える。
+ * 右端には、同じ形の案内カードを1枚置き、パワポのスクショを流す。
  */
 export default function Monitor() {
   const [monitorData, setMonitorData] = useState<MonitorCallNumber[]>([]);
@@ -191,7 +192,7 @@ export default function Monitor() {
         </div>
       </header>
 
-      <main className="grid flex-1 grid-cols-2 content-stretch gap-5">
+      <main className="grid min-h-0 flex-1 grid-cols-3 gap-5">
         {pairCount === 0 ? (
           <p className="col-span-2 grid place-items-center text-xl text-[#93a39b]">
             ただいま表示する店舗はありません
@@ -202,6 +203,7 @@ export default function Monitor() {
             <StorePanel entry={right} />
           </>
         )}
+        <SlidePanel slides={slides} test={imageSlides.length === 0} />
       </main>
 
       {pairCount > 1 && (
@@ -223,35 +225,32 @@ export default function Monitor() {
         </footer>
       )}
 
-      <SlideReel slides={slides} test={imageSlides.length === 0} />
     </div>
   );
 }
 
-function SlideReel({ slides, test }: { slides: MonitorSlide[]; test: boolean }) {
-  if (slides.length === 0) return null;
-
+function SlidePanel({ slides, test }: { slides: MonitorSlide[]; test: boolean }) {
   const duration = Math.max(36, slides.length * 8);
 
   return (
     <section
-      className="mt-4 shrink-0 overflow-hidden rounded-3xl border border-[#243831] bg-[#0f1a16]"
+      className="flex h-full min-h-0 flex-col overflow-hidden rounded-3xl border border-[#243831] bg-[#121d19] p-6"
       aria-label={test ? '案内スライド（テスト）' : '案内スライド'}
     >
-      <div className="flex items-center justify-between gap-3 px-5 pt-3 text-sm text-[#93a39b]">
-        <p>ご案内</p>
-        {test && <p>テスト表示</p>}
-      </div>
+      <header className="flex items-baseline justify-between gap-3">
+        <h2 className="font-display text-3xl font-bold">ご案内</h2>
+        {test && <p className="text-sm text-[#93a39b]">テスト表示</p>}
+      </header>
       <p className="sr-only">{slides.map((slide) => slide.label).join('、')}</p>
-      <div className="overflow-hidden px-4 py-3">
+      <div className="mt-4 min-h-0 flex-1 overflow-hidden">
         <div
-          className="monitor-slide-track flex w-max"
+          className="monitor-slide-track flex flex-col"
           style={{ ['--monitor-slide-duration' as string]: `${duration}s` }}
         >
           {[0, 1].map((copy) => (
-            <ul key={copy} className="flex gap-4 pr-4" aria-hidden="true">
+            <ul key={copy} className="flex flex-col gap-3 pb-3" aria-hidden="true">
               {slides.map((slide, index) => (
-                <li key={`${copy}-${slide.label}-${index}`} className="shrink-0">
+                <li key={`${copy}-${slide.label}-${index}`}>
                   <SlideCard slide={slide} />
                 </li>
               ))}
@@ -264,22 +263,30 @@ function SlideReel({ slides, test }: { slides: MonitorSlide[]; test: boolean }) 
 }
 
 function SlideCard({ slide }: { slide: MonitorSlide }) {
-  const frame = 'aspect-video h-[clamp(168px,30vh,340px)] w-auto max-w-none shrink-0 rounded-2xl';
-
   if (slide.kind === 'image') {
-    return <img src={slide.src} alt="" draggable={false} className={`${frame} border border-[#243831] object-cover`} />;
+    return (
+      <img
+        src={slide.src}
+        alt=""
+        draggable={false}
+        className="aspect-video w-full rounded-2xl border border-[#243831] object-contain bg-[#0b1310]"
+      />
+    );
   }
 
   return (
-    <article className={`${frame} flex flex-col justify-between px-6 py-4`} style={{ backgroundColor: slide.background }}>
+    <article
+      className="flex aspect-video w-full flex-col justify-between rounded-2xl px-5 py-4"
+      style={{ backgroundColor: slide.background }}
+    >
       <p className="text-sm font-bold tracking-wide" style={{ color: slide.accent }}>
         {slide.kicker}
       </p>
       <div className="min-w-0">
-        <h3 className="truncate font-display text-3xl font-bold text-white">{slide.title}</h3>
-        <div className="mt-2 space-y-1">
+        <p className="font-display text-2xl font-bold leading-tight text-white">{slide.title}</p>
+        <div className="mt-2 space-y-0.5">
           {slide.lines.map((line) => (
-            <p key={line} className="truncate text-lg text-white/85">
+            <p key={line} className="text-base text-white/85">
               {line}
             </p>
           ))}
@@ -293,7 +300,7 @@ function SlideCard({ slide }: { slide: MonitorSlide }) {
 function StorePanel({ entry }: { entry: MonitorCallNumber | null }) {
   if (!entry) {
     return (
-      <section className="flex min-h-0 flex-col rounded-3xl border border-[#243831] bg-[#0f1a16] p-6 opacity-50">
+      <section className="flex h-full min-h-0 flex-col rounded-3xl border border-[#243831] bg-[#0f1a16] p-6 opacity-50">
         <p className="grid flex-1 place-items-center text-lg text-[#93a39b]">—</p>
       </section>
     );
@@ -301,7 +308,7 @@ function StorePanel({ entry }: { entry: MonitorCallNumber | null }) {
 
   if (entry.is_open === false) {
     return (
-      <section className="flex min-h-0 flex-col rounded-3xl border border-[#243831] bg-[#0f1a16] p-6 opacity-70">
+      <section className="flex h-full min-h-0 flex-col rounded-3xl border border-[#243831] bg-[#0f1a16] p-6 opacity-70">
         <StoreHeader entry={entry} />
         <p className="grid flex-1 place-items-center text-2xl text-[#93a39b]">準備中</p>
       </section>
@@ -311,7 +318,7 @@ function StorePanel({ entry }: { entry: MonitorCallNumber | null }) {
   const calledNumbers = Array.isArray(entry.called_numbers) ? entry.called_numbers : [];
 
   return (
-    <section className="flex min-h-0 flex-col rounded-3xl border border-[#243831] bg-[#121d19] p-6">
+    <section className="flex h-full min-h-0 flex-col rounded-3xl border border-[#243831] bg-[#121d19] p-6">
       <StoreHeader entry={entry} />
 
       {calledNumbers.length === 0 ? (
