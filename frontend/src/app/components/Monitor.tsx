@@ -6,8 +6,10 @@ import { fetchMonitorCallNumbers, type MonitorCallNumber } from '../lib/api';
 const CALL_NUMBERS_INTERVAL_MS = 5000;
 /** カードを1枚分スワイプする間隔（ミリ秒） */
 const ROTATE_INTERVAL_MS = 12000;
-/** スワイプのアニメーション時間（ミリ秒） */
-const SWIPE_MS = 700;
+/** スワイプのアニメーション時間（ミリ秒）。動き出しと止まりをゆるやかにつなぐ */
+const SWIPE_MS = 1500;
+/** 急に動き出さず、ゆっくり滑ってから静かに止まる */
+const SWIPE_EASING = 'cubic-bezier(0.45, 0.05, 0.25, 1)';
 /** 同時に見える2枚のあいだのすき間（ピクセル） */
 const CARD_GAP_PX = 20;
 
@@ -218,8 +220,13 @@ export default function Monitor() {
   useEffect(() => {
     if (cards.length <= 1) return;
     const timer = window.setInterval(() => {
+      // 先にトランジションを有効にして描画してから位置を変えないと、切り替わりが一瞬で終わる
       setAnimate(true);
-      setIndex((current) => current + 1);
+      window.requestAnimationFrame(() => {
+        window.requestAnimationFrame(() => {
+          setIndex((current) => current + 1);
+        });
+      });
     }, ROTATE_INTERVAL_MS);
     return () => window.clearInterval(timer);
   }, [cards.length]);
@@ -267,11 +274,10 @@ export default function Monitor() {
             className="flex h-full"
             style={{
               gap: CARD_GAP_PX,
-              transform: `translateX(-${index * (cardWidth + CARD_GAP_PX)}px)`,
+              transform: `translate3d(-${index * (cardWidth + CARD_GAP_PX)}px, 0, 0)`,
+              willChange: 'transform',
               transition:
-                animate && !reduceMotion
-                  ? `transform ${SWIPE_MS}ms cubic-bezier(0.22, 1, 0.36, 1)`
-                  : 'none',
+                animate && !reduceMotion ? `transform ${SWIPE_MS}ms ${SWIPE_EASING}` : 'none',
             }}
             onTransitionEnd={handleTransitionEnd}
           >
