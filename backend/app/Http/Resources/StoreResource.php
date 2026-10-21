@@ -29,6 +29,11 @@ class StoreResource extends JsonResource
             'map_facility_id' => $this->relationLoaded('mapFacility')
                 ? ($this->mapFacility?->id !== null ? (string) $this->mapFacility->id : null)
                 : null,
+            'floor' => $this->relationLoaded('mapFacility') && $this->mapFacility?->floor !== null
+                ? (int) $this->mapFacility->floor
+                : null,
+            // 出展時間（日本時間）。空なら一日中
+            'time_slots' => $this->time_slots ?? [],
         ];
 
         // 列を読んでいない古いキャッシュではキーを出さない。画面はフードを今まで通り出す

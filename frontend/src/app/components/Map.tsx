@@ -15,6 +15,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { fetchFestivalDay, fetchMapFacilities, showsOnCallPage, type BackendMapFacility } from '../lib/api';
+import { compareRank, formatSlots, japanNowHm, pinRank } from '../lib/boothSchedule';
 import { floors, mapImageByFloor, type MapFloor } from '../lib/campusMap';
 import {
   eventKeyToFestivalDay,
@@ -70,7 +71,12 @@ interface Facility {
   y: number;
   /** 受取番号ページ（呼び出し）へ案内するか */
   showOnCallPage: boolean;
+  /** この日の出展時間（空なら一日中） */
+  timeSlots: { start: string; end: string }[];
 }
+
+/** 同じ教室（同じ位置）かどうかの判定に使うキー */
+const positionKey = (f: Facility) => `${f.floor}:${Math.round(f.x)}:${Math.round(f.y)}`;
 
 /** 地図のピンに表示する文字（部屋番号などの場所の名前。なければ名前） */
 const pinText = (f: Facility) => f.label ?? f.name;
@@ -189,38 +195,8 @@ function toFacility(facility: BackendMapFacility): Facility {
     x: toPercent(Number(facility.x), 240),
     y: toPercent(Number(facility.y), 180),
     showOnCallPage: showsOnCallPage(facility),
+    timeSlots: (facility.time_slots ?? []).map(({ start, end }) => ({ start, end })),
   };
-}
-
-/**
- * 同じ教室に複数の企画があるとき、ピンが完全に重なって片方しか押せなくなる。
- * 見た目だけ少しずらす。保存されている位置は変えない。
- */
-function pinOffsets(items: Facility[]): Map<string, { x: number; y: number }> {
-  const groups = new Map<string, Facility[]>();
-  for (const item of items) {
-    const key = `${item.floor}:${Math.round(item.x)}:${Math.round(item.y)}`;
-    const group = groups.get(key) ?? [];
-    group.push(item);
-    groups.set(key, group);
-  }
-
-  const positions = new Map<string, { x: number; y: number }>();
-  for (const group of groups.values()) {
-    if (group.length === 1) {
-      positions.set(group[0].id, { x: group[0].x, y: group[0].y });
-      continue;
-    }
-    const radius = 4;
-    group.forEach((item, index) => {
-      const angle = (Math.PI * 2 * index) / group.length - Math.PI / 2;
-      positions.set(item.id, {
-        x: Math.min(97, Math.max(3, item.x + Math.cos(angle) * radius)),
-        y: Math.min(97, Math.max(3, item.y + Math.sin(angle) * radius)),
-      });
-    });
-  }
-  return positions;
 }
 
 export default function CampusMap() {
@@ -292,7 +268,13 @@ export default function CampusMap() {
     return Object.values(unique);
   }, [facilities]);
 
-  const offsets = useMemo(() => pinOffsets(displayFacilities), [displayFacilities]);
+  // 出展時間の表示とピンの切り替え用。サーバーには取りに行かず、30秒ごとに時刻だけ更新する
+  const [nowHm, setNowHm] = useState(() => japanNowHm());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNowHm(japanNowHm()), 30_000);
+    return () => window.clearInterval(timer);
+  }, []);
+  const isToday = dayKey !== null && dayKey === todayKey;
 
   useEffect(() => {
     const target = displayFacilities.find(
@@ -314,14 +296,76 @@ export default function CampusMap() {
   );
 
   const match = (f: Facility) => f.floor === floor && (type === 'すべて' || f.type === type);
-  // ピンは管理画面で登録した位置のまま表示する（自動で動かすと管理画面の見た目とずれるため）
-  const filtered = displayFacilities.filter(match);
+  // 下の一覧は、同じ教室のブースも全部出す（教室ごと・開始時刻の順。時刻では消さない）
+  const filtered = displayFacilities
+    .filter(match)
+    .sort((a, b) => {
+      const byRoom = positionKey(a).localeCompare(positionKey(b));
+      if (byRoom !== 0) return byRoom;
+      const byStart = (a.timeSlots[0]?.start ?? '').localeCompare(b.timeSlots[0]?.start ?? '');
+      if (byStart !== 0) return byStart;
+      return a.name.localeCompare(b.name, 'ja');
+    });
   const selectedFacility =
     displayFacilities.find(
       (f) =>
         (targetStoreId != null && f.storeId === targetStoreId) ||
         (targetFacilityId != null && f.id === targetFacilityId),
     ) ?? null;
+
+  // 同じ教室のブース（開始時刻の順）
+  const facilitiesByPosition = useMemo(() => {
+    const groups = new Map<string, Facility[]>();
+    for (const f of displayFacilities) {
+      const key = positionKey(f);
+      groups.set(key, [...(groups.get(key) ?? []), f]);
+    }
+    return groups;
+  }, [displayFacilities]);
+  const roommates = (f: Facility) => facilitiesByPosition.get(positionKey(f)) ?? [f];
+
+  // ピンは管理画面で登録した位置のまま、1つの教室に1つだけ出す。
+  // 選んだブースがあればそれ、なければ今出展中（→一日中→これから→終了）のブース
+  const pins = Array.from(facilitiesByPosition.values())
+    .map((group) => {
+      const candidates = group.filter(match);
+      if (candidates.length === 0) return null;
+      const selected = candidates.find((f) => f.id === selectedFacility?.id);
+      if (selected) return selected;
+      return candidates.reduce((best, f) =>
+        compareRank(pinRank(f.timeSlots, isToday, nowHm), pinRank(best.timeSlots, isToday, nowHm)) < 0
+          ? f
+          : best,
+      );
+    })
+    .filter((f): f is Facility => f !== null);
+  const selectedRoom = selectedFacility ? roommates(selectedFacility).filter((f) => f.storeId) : [];
+
+  /** 一覧・時間割に出す、出展時間の状態 */
+  const slotBadge = (f: Facility): { label: string; active: boolean } | null => {
+    if (f.timeSlots.length === 0 || !isToday) return null;
+    const active = f.timeSlots.find((slot) => slot.start <= nowHm && nowHm < slot.end);
+    if (active) return { label: '出展中', active: true };
+    const next = f.timeSlots.find((slot) => nowHm < slot.start);
+    return { label: next ? `${next.start}から` : '本日終了', active: false };
+  };
+
+  const SlotBadge = ({ f }: { f: Facility }) => {
+    const badge = slotBadge(f);
+    if (!badge) return null;
+    return (
+      <span
+        className="rounded-full px-1.5 py-0.5 text-[10px] font-bold"
+        style={
+          badge.active
+            ? { backgroundColor: 'var(--primary)', color: 'var(--primary-foreground)' }
+            : { backgroundColor: 'var(--muted)', color: 'var(--muted-foreground)' }
+        }
+      >
+        {badge.label}
+      </span>
+    );
+  };
 
   useEffect(() => {
     if (!selectedFacility) return;
@@ -376,6 +420,12 @@ export default function CampusMap() {
               {f.floor}
               {roomNote(f) ? `・${roomNote(f)}` : ''}・{f.type}
             </p>
+            {f.timeSlots.length > 0 && (
+              <p className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+                <span>{formatSlots(f.timeSlots)}</span>
+                <SlotBadge f={f} />
+              </p>
+            )}
           </div>
           <span className="shrink-0 text-xs font-bold" style={{ color: 'var(--primary)' }}>
             {isSelected ? '選択中' : '地図で見る'}
@@ -473,8 +523,9 @@ export default function CampusMap() {
           >
             {floor}
           </span>
-          {filtered.map((f) => {
-            const isSelected = selectedFacility?.id === f.id;
+          {pins.map((f) => {
+            const isSelected =
+              selectedFacility != null && positionKey(selectedFacility) === positionKey(f);
             const hasSelection = selectedFacility != null;
             const PinIcon = typeIcon[f.type];
             return (
@@ -489,10 +540,7 @@ export default function CampusMap() {
                 className={`absolute -translate-x-1/2 -translate-y-1/2 p-1 transition ${
                   isSelected ? 'z-20' : hasSelection ? 'z-0 opacity-55' : 'z-0'
                 }`}
-                style={{
-                  left: `${offsets.get(f.id)?.x ?? f.x}%`,
-                  top: `${offsets.get(f.id)?.y ?? f.y}%`,
-                }}
+                style={{ left: `${f.x}%`, top: `${f.y}%` }}
                 title={pinText(f)}
                 aria-label={roomNote(f) ? `${f.name}（${roomNote(f)}）` : f.name}
                 aria-pressed={isSelected}
@@ -520,7 +568,7 @@ export default function CampusMap() {
               </button>
             );
           })}
-          {filtered.length === 0 && (
+          {pins.length === 0 && (
             <p className="absolute bottom-3 left-1/2 z-10 -translate-x-1/2 rounded-full bg-white/90 px-3 py-1 text-xs text-muted-foreground">
               この階に表示できるブースはありません
             </p>
@@ -581,6 +629,34 @@ export default function CampusMap() {
               閉じる
             </button>
           </div>
+          {selectedFacility.storeId && (selectedRoom.length > 1 || selectedFacility.timeSlots.length > 0) && (
+            <div className="mt-3 rounded-xl bg-muted p-3">
+              <p className="text-xs font-bold text-muted-foreground">この教室の出展時間</p>
+              <ul className="mt-1.5 space-y-1">
+                {selectedRoom.map((f) => {
+                  const isSelected = f.id === selectedFacility.id;
+                  return (
+                    <li key={f.id}>
+                      <button
+                        type="button"
+                        onClick={() => selectFacility(f)}
+                        className={`flex w-full items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-left text-sm ${
+                          isSelected ? 'bg-card font-bold text-foreground' : 'text-foreground'
+                        }`}
+                        aria-pressed={isSelected}
+                      >
+                        <span className="min-w-0 truncate">{f.name}</span>
+                        <span className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
+                          {f.timeSlots.length > 0 ? formatSlots(f.timeSlots) : '終日'}
+                          <SlotBadge f={f} />
+                        </span>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          )}
           <div className="mt-4 flex gap-2">
             {selectedFacility.storeId ? (
               <Link

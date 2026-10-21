@@ -1,6 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import type { AdminMapFacility, AdminStore, AdminStoreInput, ExhibitionDay } from '../../lib/api';
+import type {
+  AdminMapFacility,
+  AdminStore,
+  AdminStoreInput,
+  BoothTimeSlot,
+  ExhibitionDay,
+  FestivalDay,
+} from '../../lib/api';
 import { facilityTypeOptions, PLACE_ONLY_TYPES } from '../../lib/campusMap';
 
 const EXHIBITION_DAY_OPTIONS: { value: ExhibitionDay; label: string }[] = [
@@ -39,7 +46,14 @@ const emptyInput: AdminStoreInput = {
   show_on_call_page: false,
   current_wait_min: 5,
   current_queue_count: 0,
+  time_slots: [],
 };
+
+const SLOT_DAY_OPTIONS: { value: 'both' | FestivalDay; label: string }[] = [
+  { value: 'both', label: '両日' },
+  { value: 'day1', label: '24日(土)' },
+  { value: 'day2', label: '25日(日)' },
+];
 
 interface LocationOption {
   key: string;
@@ -92,12 +106,22 @@ export default function AdminStoreForm({
       show_on_call_page: Boolean(store.show_on_call_page),
       current_wait_min: store.current_wait_min,
       current_queue_count: store.current_queue_count,
+      time_slots: store.time_slots ?? [],
     });
   }, [store]);
 
   const update = <K extends keyof AdminStoreInput>(key: K, value: AdminStoreInput[K]) => {
     setInput((current) => ({ ...current, [key]: value }));
   };
+
+  const timeSlots = input.time_slots ?? [];
+  const updateSlot = (index: number, patch: Partial<BoothTimeSlot>) => {
+    update(
+      'time_slots',
+      timeSlots.map((slot, i) => (i === index ? { ...slot, ...patch } : slot)),
+    );
+  };
+  const invalidSlot = timeSlots.some((slot) => !slot.start || !slot.end || slot.end <= slot.start);
 
   // 候補は「店舗がまだ入っていない場所」＋「他の店舗が使用中の場所（選べない）」
   const locationOptions = useMemo<LocationOption[]>(() => {
@@ -129,7 +153,7 @@ export default function AdminStoreForm({
           // 日替わりブースは同じ場所を共有できるので、使用中でも選べる
           label: `${place.floor}F ${place.name}${
             usedByOther
-              ? `（他店舗あり: ${usedByOther.store_name ?? usedByOther.store_id}／日替わり可）`
+              ? `（他店舗あり: ${usedByOther.store_name ?? usedByOther.store_id}／日替わり・時間替わり可）`
               : ''
           }`,
           disabled: false,
@@ -233,6 +257,74 @@ export default function AdminStoreForm({
             同じ場所（例: 604）を日替わりで使う場合は、店舗を2つ作り出展日を分けます。
           </span>
         </label>
+        <div className="sm:col-span-2 text-sm">
+          <span className="mb-1 block text-muted-foreground">出展時間（任意）</span>
+          {timeSlots.length === 0 ? (
+            <p className="text-xs text-muted-foreground">未設定（出展日は一日中）</p>
+          ) : (
+            <ul className="space-y-2">
+              {timeSlots.map((slot, index) => (
+                <li key={index} className="flex flex-wrap items-center gap-2">
+                  <select
+                    value={slot.day ?? 'both'}
+                    onChange={(event) =>
+                      updateSlot(index, {
+                        day: event.target.value === 'both' ? null : (event.target.value as FestivalDay),
+                      })
+                    }
+                    aria-label="日"
+                    className="rounded-lg border border-input bg-background px-2 py-2 text-foreground outline-none"
+                  >
+                    {SLOT_DAY_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    type="time"
+                    value={slot.start}
+                    onChange={(event) => updateSlot(index, { start: event.target.value })}
+                    aria-label="開始"
+                    className="rounded-lg border border-input bg-background px-2 py-2 text-foreground outline-none"
+                  />
+                  <span className="text-muted-foreground">〜</span>
+                  <input
+                    type="time"
+                    value={slot.end}
+                    onChange={(event) => updateSlot(index, { end: event.target.value })}
+                    aria-label="終了"
+                    className="rounded-lg border border-input bg-background px-2 py-2 text-foreground outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => update('time_slots', timeSlots.filter((_, i) => i !== index))}
+                    className="rounded-lg border border-border px-2.5 py-2 text-xs text-foreground hover:bg-muted"
+                  >
+                    削除
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          {timeSlots.length < 8 && (
+            <button
+              type="button"
+              onClick={() =>
+                update('time_slots', [...timeSlots, { day: null, start: '11:00', end: '12:00' }])
+              }
+              className="mt-2 rounded-lg border border-border px-3 py-1.5 text-xs font-bold text-foreground hover:bg-muted"
+            >
+              ＋ 時間帯を追加
+            </button>
+          )}
+          {invalidSlot && (
+            <span className="mt-1 block text-xs text-red-500">終了時刻は開始時刻より後にしてください。</span>
+          )}
+          <span className="mt-1 block text-xs text-muted-foreground">
+            801 や 603 のように同じ教室を時間で入れ替える場合は、店舗ごとに同じ場所を選んで時間帯を入れます。地図のピンには今の時間のブースが出ます。
+          </span>
+        </div>
         <label className="sm:col-span-2 text-sm">
           <span className="mb-1 block text-muted-foreground">説明（任意）</span>
           <textarea
@@ -359,7 +451,7 @@ export default function AdminStoreForm({
       <button
         type="button"
         onClick={() => onSubmit(input)}
-        disabled={saving}
+        disabled={saving || invalidSlot}
         className="mt-4 w-full rounded-xl py-3 font-bold text-white disabled:opacity-50"
         style={{ backgroundColor: 'var(--primary)' }}
       >

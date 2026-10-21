@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Resources\StoreResource;
 use App\Models\FestivalSetting;
 use App\Models\Store;
+use App\Support\BoothSchedule;
 use App\Support\DbSchema;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -45,14 +46,21 @@ class StoreController extends Controller
             if (Store::hasShowOnCallPageColumn()) {
                 $columns[] = 'show_on_call_page';
             }
+            if (DbSchema::hasColumn('stores', 'time_slots')) {
+                $columns[] = 'time_slots';
+            }
 
             $stores = Store::query()
                 ->select($columns)
                 ->when(DbSchema::hasColumn('stores', 'is_visible'), fn ($query) => $query->where('is_visible', true))
                 ->forCurrentFestivalDay($filterDay)
-                ->with(['mapFacility:id,store_id,type'])
+                ->with(['mapFacility:id,store_id,type,floor'])
                 ->orderBy('id')
-                ->get();
+                ->get()
+                // 出展時間がある店舗は、その日に時間帯があるときだけ出す
+                ->filter(fn (Store $store) => empty($store->time_slots)
+                    || BoothSchedule::slotsForDay($store->time_slots, $filterDay) !== [])
+                ->values();
 
             return StoreResource::collection($stores)->resolve();
         });

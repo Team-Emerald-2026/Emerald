@@ -7,6 +7,7 @@ use App\Http\Resources\MapFacilityResource;
 use App\Models\FestivalSetting;
 use App\Models\MapFacilities;
 use App\Models\Store;
+use App\Support\BoothSchedule;
 use App\Support\DbSchema;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -73,10 +74,25 @@ class FacilityController extends Controller
                 'map_facilities.x',
                 'map_facilities.y',
                 DbSchema::hasColumn('stores', 'show_on_call_page') ? 'stores.show_on_call_page' : null,
+                DbSchema::hasColumn('stores', 'time_slots') ? 'stores.time_slots as store_time_slots' : null,
             ])))
             ->orderByRaw('map_facilities.store_id is null')
             ->orderBy('map_facilities.id')
             ->get();
+
+        // 出展時間がある店舗は、その日の時間帯だけに絞る。その日に時間帯が無ければ出さない
+        $facilities = $facilities
+            ->filter(function ($facility) use ($filterDay) {
+                $raw = $facility->getAttribute('store_time_slots');
+                $facility->offsetUnset('store_time_slots');
+                $slots = $facility->store_id === null ? [] : BoothSchedule::slotsForDay($raw, $filterDay);
+                $facility->setAttribute('time_slots', $slots);
+
+                return $facility->store_id === null
+                    || BoothSchedule::decode($raw) === []
+                    || $slots !== [];
+            })
+            ->values();
 
         // 空き枠は本来いつでも出るが、同じ位置に店舗ピンがあるのに
         // 今日（filterDay）出展の店舗が1件も無いときは出さない。
@@ -117,12 +133,15 @@ class FacilityController extends Controller
                 ->values();
         }
 
-        // 同じ位置に複数のブースがあるときは、その日のブースを全部返す。
+        // 同じ位置に複数のブースがあるときは、その日のブースを全部返す（同じ教室の中は開始時刻の順）。
         // 部屋番号だけの空き枠は、同じ位置にブースがあるときだけ隠す。
+        // 時間で入れ替わる教室のピンをどれにするかは、画面側で今の時刻から決める。
         return $facilities
             ->groupBy(fn ($facility) => MapFacilities::positionKey($facility->floor, $facility->x, $facility->y))
             ->flatMap(function ($group) {
-                $stores = $group->filter(fn ($facility) => $facility->store_id !== null)->values();
+                $stores = $group->filter(fn ($facility) => $facility->store_id !== null)
+                    ->sortBy(fn ($facility) => $facility->time_slots[0]['start'] ?? '')
+                    ->values();
 
                 return $stores->isNotEmpty() ? $stores : $group->take(1);
             })

@@ -531,6 +531,17 @@ export default function AdminStores() {
                   <p className="mt-1 text-xs text-muted-foreground">
                     ID: {store.id} / ログインID: {store.login_id ?? '未設定'} / 出展日:{' '}
                     {exhibitionDayLabel(store.exhibition_day)}
+                    {(store.time_slots ?? []).length > 0 && (
+                      <>
+                        {' '}/ 出展時間:{' '}
+                        {(store.time_slots ?? [])
+                          .map(
+                            (slot) =>
+                              `${slot.day === 'day1' ? '24日 ' : slot.day === 'day2' ? '25日 ' : ''}${slot.start}〜${slot.end}`,
+                          )
+                          .join('、')}
+                      </>
+                    )}
                   </p>
                   <p className="mt-1 text-xs text-muted-foreground">
                     種類: {typeLabel(store.type)} / 位置: {locationLabel(store)}

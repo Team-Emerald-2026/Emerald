@@ -377,7 +377,11 @@ class MissingApisTest extends TestCase
             'x' => 10,
             'y' => 20,
         ]);
-        $booth = $this->createStore('store-booth', ['name' => '体験', 'show_on_call_page' => false]);
+        $booth = $this->createStore('store-booth', [
+            'name' => '体験',
+            'ticket_prefix' => 'B',
+            'show_on_call_page' => false,
+        ]);
         MapFacilities::query()->create([
             'store_id' => $booth->id,
             'name' => '体験',
