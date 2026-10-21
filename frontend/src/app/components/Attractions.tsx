@@ -203,13 +203,15 @@ export default function Attractions() {
   const detailId = searchParams.get('detail');
   const list = booths.filter((b) => filter === 'すべて' || b.category === filter);
   const selectedBooth = booths.find((b) => b.id === detailId) ?? null;
+  // 取り直しのたびにブースのオブジェクトは作り直されるので、下の effect は「一覧にあるか」だけで動かす
+  const hasSelectedBooth = selectedBooth !== null;
 
   // 開いたブースの詳細（説明・メニュー・店内混雑）。開いているあいだは取り直す
   const [details, setDetails] = useState<Record<string, DetailState>>({});
   const detailPanelRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    if (!detailId || !selectedBooth) return;
+    if (!detailId || !hasSelectedBooth) return;
 
     const controller = new AbortController();
 
@@ -257,13 +259,13 @@ export default function Attractions() {
       controller.abort();
       window.clearInterval(timer);
     };
-  }, [detailId, selectedBooth, dayKey]);
+  }, [detailId, hasSelectedBooth, dayKey]);
 
   // 詳細を開いたら、その位置までスクロールして見える場所に出す
   useEffect(() => {
-    if (!detailId || !selectedBooth) return;
+    if (!detailId || !hasSelectedBooth) return;
     detailPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-  }, [detailId, selectedBooth]);
+  }, [detailId, hasSelectedBooth]);
 
   const showDetail = (id: string) => {
     const next = new URLSearchParams(searchParams);
