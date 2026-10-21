@@ -1,10 +1,15 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import type { TransitionEvent } from 'react';
 import { fetchMonitorCallNumbers, type MonitorCallNumber } from '../lib/api';
 
 /** 呼び出し番号の取得間隔（ミリ秒） */
 const CALL_NUMBERS_INTERVAL_MS = 5000;
-/** 左右2店舗の切り替え間隔（ミリ秒） */
+/** カードを1枚分スワイプする間隔（ミリ秒） */
 const ROTATE_INTERVAL_MS = 12000;
+/** スワイプのアニメーション時間（ミリ秒） */
+const SWIPE_MS = 700;
+/** 同時に見える2枚のあいだのすき間（ピクセル） */
+const CARD_GAP_PX = 20;
 
 /**
  * 呼び出し番号カードの横に出す案内カードの中身。
@@ -99,14 +104,32 @@ function monitorImageSlides(): MonitorSlide[] {
     }));
 }
 
-function pairStores(
-  stores: MonitorCallNumber[],
-): Array<[MonitorCallNumber | null, MonitorCallNumber | null]> {
-  const pairs: Array<[MonitorCallNumber | null, MonitorCallNumber | null]> = [];
-  for (let i = 0; i < stores.length; i += 2) {
-    pairs.push([stores[i] ?? null, stores[i + 1] ?? null]);
+type MonitorCard =
+  | { kind: 'store'; key: string; entry: MonitorCallNumber }
+  | { kind: 'slide'; key: string; slide: MonitorSlide };
+
+/** ブースとスライドを交互に並べる。店舗がないときはスライドだけ、スライドがないときは店舗だけ。 */
+function buildStrip(stores: MonitorCallNumber[], slides: MonitorSlide[]): MonitorCard[] {
+  if (stores.length === 0) {
+    return slides.map((slide, index) => ({ kind: 'slide', key: `slide-${index}`, slide }));
   }
-  return pairs;
+  if (slides.length === 0) {
+    return stores.map((entry, index) => ({
+      kind: 'store',
+      key: `store-${index}-${entry.store_id}`,
+      entry,
+    }));
+  }
+
+  const count = Math.max(stores.length, slides.length);
+  const cards: MonitorCard[] = [];
+  for (let index = 0; index < count; index += 1) {
+    const entry = stores[index % stores.length];
+    const slide = slides[index % slides.length];
+    cards.push({ kind: 'store', key: `store-${index}-${entry.store_id}`, entry });
+    cards.push({ kind: 'slide', key: `slide-${index}`, slide });
+  }
+  return cards;
 }
 
 function useClock() {
@@ -120,15 +143,20 @@ function useClock() {
 
 /**
  * 校内モニター（プロジェクター）向け呼び出し番号。
- * 管理画面で「校内モニターに表示」にした店舗を、2店舗ずつ左右に出して切り替える。
- * 右端には、同じ形の案内カードを1枚置き、パワポのスクショを流す。
+ * ブースとスライドを交互に並べ、2枚だけ見せて1枚分ずつスワイプする。
  */
 export default function Monitor() {
   const [monitorData, setMonitorData] = useState<MonitorCallNumber[]>([]);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [hasError, setHasError] = useState(false);
-  const [pairIndex, setPairIndex] = useState(0);
+  const [ready, setReady] = useState(false);
+  const [index, setIndex] = useState(0);
+  const [animate, setAnimate] = useState(true);
+  const viewportRef = useRef<HTMLDivElement>(null);
+  const [cardWidth, setCardWidth] = useState(0);
   const now = useClock();
+  const reduceMotion =
+    typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   useEffect(() => {
     const controller = new AbortController();
@@ -138,10 +166,12 @@ export default function Monitor() {
           setMonitorData(data);
           setLastUpdated(new Date());
           setHasError(false);
+          setReady(true);
         })
         .catch(() => {
           if (controller.signal.aborted) return;
           setHasError(true);
+          setReady(true);
         });
     };
     load();
@@ -152,22 +182,57 @@ export default function Monitor() {
     };
   }, []);
 
-  const pairs = useMemo(() => pairStores(monitorData), [monitorData]);
-  const pairCount = pairs.length;
-
-  useEffect(() => {
-    if (pairCount <= 1) return;
-    const timer = setInterval(() => {
-      setPairIndex((current) => (current + 1) % pairCount);
-    }, ROTATE_INTERVAL_MS);
-    return () => clearInterval(timer);
-  }, [pairCount]);
-
-  const safeIndex = pairCount === 0 ? 0 : pairIndex % pairCount;
-  const [left, right] = pairs[safeIndex] ?? [null, null];
-
   const imageSlides = useMemo(() => monitorImageSlides(), []);
   const slides = imageSlides.length > 0 ? imageSlides : TEST_SLIDES;
+  const cards = useMemo(
+    () => (ready ? buildStrip(monitorData, slides) : []),
+    [ready, monitorData, slides],
+  );
+  const cardsKey = cards.map((card) => card.key).join('|');
+  const track = useMemo(() => {
+    if (cards.length < 2) return cards;
+    return [
+      ...cards,
+      { ...cards[0], key: `loop-a-${cards[0].key}` },
+      { ...cards[1], key: `loop-b-${cards[1].key}` },
+    ];
+  }, [cards]);
+
+  useLayoutEffect(() => {
+    const viewport = viewportRef.current;
+    if (!viewport) return;
+    const measure = () => {
+      setCardWidth(Math.max(0, (viewport.clientWidth - CARD_GAP_PX) / 2));
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(viewport);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    setAnimate(false);
+    setIndex(0);
+  }, [cardsKey]);
+
+  useEffect(() => {
+    if (cards.length <= 1) return;
+    const timer = window.setInterval(() => {
+      setAnimate(true);
+      setIndex((current) => current + 1);
+    }, ROTATE_INTERVAL_MS);
+    return () => window.clearInterval(timer);
+  }, [cards.length]);
+
+  const safeIndex = cards.length === 0 ? 0 : index % cards.length;
+
+  const handleTransitionEnd = (event: TransitionEvent<HTMLDivElement>) => {
+    if (event.target !== event.currentTarget || event.propertyName !== 'transform') return;
+    if (cards.length > 0 && index >= cards.length) {
+      setAnimate(false);
+      setIndex(0);
+    }
+  };
 
   return (
     <div className="flex h-dvh flex-col overflow-hidden bg-[#0b1310] px-6 py-5 text-[#e8efec]">
@@ -192,35 +257,52 @@ export default function Monitor() {
         </div>
       </header>
 
-      <main className="grid min-h-0 flex-1 grid-cols-3 gap-5">
-        {pairCount === 0 ? (
-          <p className="col-span-2 grid place-items-center text-xl text-[#93a39b]">
-            ただいま表示する店舗はありません
+      <main ref={viewportRef} className="min-h-0 flex-1 overflow-hidden">
+        {cards.length === 0 ? (
+          <p className="grid h-full place-items-center text-xl text-[#93a39b]">
+            {ready ? 'ただいま表示する店舗はありません' : '読み込み中…'}
           </p>
         ) : (
-          <>
-            <StorePanel entry={left} />
-            <StorePanel entry={right} />
-          </>
+          <div
+            className="flex h-full"
+            style={{
+              gap: CARD_GAP_PX,
+              transform: `translateX(-${index * (cardWidth + CARD_GAP_PX)}px)`,
+              transition:
+                animate && !reduceMotion
+                  ? `transform ${SWIPE_MS}ms cubic-bezier(0.22, 1, 0.36, 1)`
+                  : 'none',
+            }}
+            onTransitionEnd={handleTransitionEnd}
+          >
+            {track.map((card) => (
+              <div key={card.key} className="h-full shrink-0" style={{ width: cardWidth || undefined }}>
+                {card.kind === 'store' ? (
+                  <StorePanel entry={card.entry} />
+                ) : (
+                  <SlidePanel slide={card.slide} />
+                )}
+              </div>
+            ))}
+          </div>
         )}
-        <SlidePanel slides={slides} test={imageSlides.length === 0} />
       </main>
 
-      {pairCount > 1 && (
+      {cards.length > 1 && (
         <footer className="mt-4 flex items-center justify-center gap-2">
-          {pairs.map((_, index) => (
+          {cards.map((card, cardIndex) => (
             <span
-              key={index}
+              key={card.key}
               className={
-                index === safeIndex
+                cardIndex === safeIndex
                   ? 'h-2.5 w-8 rounded-full bg-[#2bc79a]'
                   : 'h-2.5 w-2.5 rounded-full bg-[#243831]'
               }
-              aria-current={index === safeIndex ? 'true' : undefined}
+              aria-current={cardIndex === safeIndex ? 'true' : undefined}
             />
           ))}
           <span className="ml-2 text-sm text-[#93a39b]">
-            {safeIndex + 1} / {pairCount}
+            {safeIndex + 1} / {cards.length}
           </span>
         </footer>
       )}
@@ -229,8 +311,8 @@ export default function Monitor() {
   );
 }
 
-function SlidePanel({ slides, test }: { slides: MonitorSlide[]; test: boolean }) {
-  const duration = Math.max(36, slides.length * 8);
+function SlidePanel({ slide }: { slide: MonitorSlide }) {
+  const test = slide.kind === 'test';
 
   return (
     <section
@@ -241,59 +323,38 @@ function SlidePanel({ slides, test }: { slides: MonitorSlide[]; test: boolean })
         <h2 className="font-display text-3xl font-bold">ご案内</h2>
         {test && <p className="text-sm text-[#93a39b]">テスト表示</p>}
       </header>
-      <p className="sr-only">{slides.map((slide) => slide.label).join('、')}</p>
-      <div className="mt-4 min-h-0 flex-1 overflow-hidden">
-        <div
-          className="monitor-slide-track flex flex-col"
-          style={{ ['--monitor-slide-duration' as string]: `${duration}s` }}
-        >
-          {[0, 1].map((copy) => (
-            <ul key={copy} className="flex flex-col gap-3 pb-3" aria-hidden="true">
-              {slides.map((slide, index) => (
-                <li key={`${copy}-${slide.label}-${index}`}>
-                  <SlideCard slide={slide} />
-                </li>
-              ))}
-            </ul>
-          ))}
-        </div>
+      <p className="sr-only">{slide.label}</p>
+      <div className="mt-4 min-h-0 flex-1">
+        {slide.kind === 'image' ? (
+          <img
+            src={slide.src}
+            alt=""
+            draggable={false}
+            className="h-full w-full rounded-2xl object-contain"
+          />
+        ) : (
+          <article
+            className="flex h-full flex-col justify-between rounded-2xl px-6 py-5"
+            style={{ backgroundColor: slide.background }}
+          >
+            <p className="text-sm font-bold tracking-wide" style={{ color: slide.accent }}>
+              {slide.kicker}
+            </p>
+            <div>
+              <p className="font-display text-4xl font-bold leading-tight text-white">{slide.title}</p>
+              <div className="mt-3 space-y-1">
+                {slide.lines.map((line) => (
+                  <p key={line} className="text-2xl text-white/85">
+                    {line}
+                  </p>
+                ))}
+              </div>
+            </div>
+            <p className="text-sm text-white/55">テストデータ</p>
+          </article>
+        )}
       </div>
     </section>
-  );
-}
-
-function SlideCard({ slide }: { slide: MonitorSlide }) {
-  if (slide.kind === 'image') {
-    return (
-      <img
-        src={slide.src}
-        alt=""
-        draggable={false}
-        className="aspect-video w-full rounded-2xl border border-[#243831] object-contain bg-[#0b1310]"
-      />
-    );
-  }
-
-  return (
-    <article
-      className="flex aspect-video w-full flex-col justify-between rounded-2xl px-5 py-4"
-      style={{ backgroundColor: slide.background }}
-    >
-      <p className="text-sm font-bold tracking-wide" style={{ color: slide.accent }}>
-        {slide.kicker}
-      </p>
-      <div className="min-w-0">
-        <p className="font-display text-2xl font-bold leading-tight text-white">{slide.title}</p>
-        <div className="mt-2 space-y-0.5">
-          {slide.lines.map((line) => (
-            <p key={line} className="text-base text-white/85">
-              {line}
-            </p>
-          ))}
-        </div>
-      </div>
-      <p className="text-sm text-white/55">テストデータ</p>
-    </article>
   );
 }
 

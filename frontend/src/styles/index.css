@@ -63,22 +63,3 @@
   }
 }
 
-/* 校内モニターの案内カード（Monitor.tsx）。同じ並びを2つ縦に置き、半分だけ動かして途切れなく流す */
-@keyframes monitor-slide-scroll {
-  from {
-    transform: translateY(0);
-  }
-  to {
-    transform: translateY(-50%);
-  }
-}
-
-.monitor-slide-track {
-  animation: monitor-slide-scroll var(--monitor-slide-duration, 48s) linear infinite;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .monitor-slide-track {
-    animation: none;
-  }
-}
