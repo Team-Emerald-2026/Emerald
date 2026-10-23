@@ -42,7 +42,7 @@ export interface BoothDashboard {
   /** 商品ごとの売上数・金額（売れた数が多い順） */
   item_sales?: BoothItemSales[];
   type?: string;
-  /** 整理券の枚数（1〜この番号までを使い回す。既定20） */
+  /** 整理券の枚数（1〜この番号までを使い回す。既定10） */
   ticket_limit?: number;
   /** 非表示（紛失など）にした整理券の番号。発番時に飛ばされる */
   disabled_ticket_numbers?: number[];
@@ -1266,7 +1266,7 @@ export interface StoreProfile {
   current_queue_count: number;
   type?: string;
   revenue?: number;
-  /** 整理券の枚数（1〜この番号までを使い回す。既定20） */
+  /** 整理券の枚数（1〜この番号までを使い回す。既定10） */
   ticket_limit?: number;
   /** 非表示（紛失など）にした整理券の番号。発番時に飛ばされる */
   disabled_ticket_numbers?: number[];

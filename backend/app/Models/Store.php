@@ -19,7 +19,7 @@ class Store extends Model
     protected $keyType = 'string';
 
     protected $attributes = [
-        'ticket_limit' => 20,
+        'ticket_limit' => 10,
     ];
 
     protected $fillable = [
@@ -89,7 +89,7 @@ class Store extends Model
         });
     }
 
-    /** 本番でマイグレーション未適用でも、整理券の既定を20にし、旧既定の50を直す */
+    /** 本番でマイグレーション未適用でも、整理券の既定を10にし、旧既定の20・50を直す */
     public static function ensureTicketLimitDefault(): void
     {
         static $done = false;
@@ -103,23 +103,23 @@ class Store extends Model
         }
 
         try {
-            if (Cache::get('ticket_limit_default_20_applied')) {
+            if (Cache::get('ticket_limit_default_10_applied')) {
                 return;
             }
 
             $driver = Schema::getConnection()->getDriverName();
             if (in_array($driver, ['mysql', 'mariadb'], true)) {
-                DB::statement('ALTER TABLE stores MODIFY ticket_limit INT UNSIGNED NOT NULL DEFAULT 20');
+                DB::statement('ALTER TABLE stores MODIFY ticket_limit INT UNSIGNED NOT NULL DEFAULT 10');
             } elseif ($driver === 'pgsql') {
-                DB::statement('ALTER TABLE stores ALTER COLUMN ticket_limit SET DEFAULT 20');
+                DB::statement('ALTER TABLE stores ALTER COLUMN ticket_limit SET DEFAULT 10');
             }
 
-            DB::table('stores')->where('ticket_limit', 50)->update(['ticket_limit' => 20]);
-            Cache::forever('ticket_limit_default_20_applied', true);
+            DB::table('stores')->whereIn('ticket_limit', [20, 50])->update(['ticket_limit' => 10]);
+            Cache::forever('ticket_limit_default_10_applied', true);
         } catch (\Throwable) {
             try {
-                DB::table('stores')->where('ticket_limit', 50)->update(['ticket_limit' => 20]);
-                Cache::forever('ticket_limit_default_20_applied', true);
+                DB::table('stores')->whereIn('ticket_limit', [20, 50])->update(['ticket_limit' => 10]);
+                Cache::forever('ticket_limit_default_10_applied', true);
             } catch (\Throwable) {
                 // 権限がない／列が無いときは、保存済みの値のままにする
             }

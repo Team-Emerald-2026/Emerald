@@ -162,7 +162,7 @@ class AdminStoreController extends Controller
                     : ($validated['type'] === 'food');
             }
             if (DbSchema::hasColumn('stores', 'ticket_limit')) {
-                $attributes['ticket_limit'] = 20;
+                $attributes['ticket_limit'] = 10;
             }
             if (DbSchema::hasColumn('stores', 'time_slots')) {
                 $attributes['time_slots'] = BoothSchedule::normalize($validated['time_slots'] ?? null);
