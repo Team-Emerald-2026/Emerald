@@ -53,7 +53,7 @@ export const router = createBrowserRouter([
       { path: '/map', element: <CampusMap /> },
     ],
   },
-  // 校内モニター（プロジェクター）向け呼び出し番号一覧（認証不要）
+  // 校内モニター（階段上プロジェクター）向け案内スライド＋呼び出し番号（認証不要）
   { path: '/monitor', element: withSuspense(<Monitor />) },
   // 店舗向け画面（来場者ナビとは独立）
   { path: '/store/login', element: withSuspense(<StoreLogin />) },
