@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import type { TransitionEvent } from 'react';
 import {
   fetchFestivalDay,
   fetchMonitorCallNumbers,
@@ -12,6 +13,8 @@ const CALL_NUMBERS_INTERVAL_MS = 5000;
 const FESTIVAL_DAY_INTERVAL_MS = 30000;
 /** スライド／呼び出し番号の切り替え間隔（ミリ秒） */
 const ROTATE_INTERVAL_MS = 12000;
+/** フェードイン／フェードアウトの時間（ミリ秒） */
+const FADE_MS = 900;
 
 type ImageSlide = {
   kind: 'image';
@@ -28,6 +31,17 @@ type CallView = {
 };
 
 type MonitorView = ImageSlide | CallView;
+
+type FadeLayer = {
+  key: string;
+  view: MonitorView;
+  visible: boolean;
+};
+
+function viewKey(view: MonitorView): string {
+  if (view.kind === 'image') return `image:${view.src}`;
+  return `calls:${view.left?.store_id ?? '-'}:${view.right?.store_id ?? '-'}`;
+}
 
 const IMAGE_SLIDES: ImageSlide[] = [
   { kind: 'image', src: '/monitor-slides/slide-01.png', label: '京都テック学園祭2026' },
@@ -90,6 +104,7 @@ export default function Monitor() {
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [hasError, setHasError] = useState(false);
   const [viewIndex, setViewIndex] = useState(0);
+  const [layers, setLayers] = useState<FadeLayer[]>([]);
   const now = useClock();
 
   useEffect(() => {
@@ -151,6 +166,42 @@ export default function Monitor() {
 
   const safeIndex = viewCount === 0 ? 0 : viewIndex % viewCount;
   const current = views[safeIndex];
+  const currentKey = current ? viewKey(current) : '';
+
+  useEffect(() => {
+    if (!current) return;
+
+    setLayers((prev) => {
+      const shown = prev.find((layer) => layer.key === currentKey && layer.visible);
+      if (shown) {
+        return prev.map((layer) => (layer.key === currentKey ? { ...layer, view: current } : layer));
+      }
+
+      const next = prev.map((layer) => ({
+        ...layer,
+        visible: false,
+        view: layer.key === currentKey ? current : layer.view,
+      }));
+      if (!next.some((layer) => layer.key === currentKey)) {
+        next.push({ key: currentKey, view: current, visible: false });
+      }
+      return next;
+    });
+
+    const frame = window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        setLayers((prev) =>
+          prev.map((layer) => ({ ...layer, visible: layer.key === currentKey })),
+        );
+      });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [current, currentKey]);
+
+  const handleFadeEnd = (event: TransitionEvent<HTMLDivElement>, key: string) => {
+    if (event.target !== event.currentTarget || event.propertyName !== 'opacity') return;
+    setLayers((prev) => prev.filter((layer) => layer.visible || layer.key !== key));
+  };
 
   return (
     <div className="flex min-h-dvh flex-col bg-[#0b1310] px-6 py-5 text-[#e8efec]">
@@ -175,16 +226,29 @@ export default function Monitor() {
         </div>
       </header>
 
-      <main className="grid min-h-0 flex-1 grid-cols-2 content-stretch gap-5">
-        {!current ? (
-          <p className="col-span-2 grid place-items-center text-xl text-[#93a39b]">読み込み中…</p>
-        ) : current.kind === 'image' ? (
-          <SlidePanel slide={current} />
+      <main className="relative min-h-0 flex-1">
+        {layers.length === 0 ? (
+          <p className="grid h-full place-items-center text-xl text-[#93a39b]">読み込み中…</p>
         ) : (
-          <>
-            <StorePanel entry={current.left} />
-            <StorePanel entry={current.right} />
-          </>
+          layers.map((layer) => (
+            <div
+              key={layer.key}
+              className={`absolute inset-0 grid grid-cols-2 content-stretch gap-5 transition-opacity ease-in-out ${
+                layer.visible ? 'opacity-100' : 'opacity-0'
+              }`}
+              style={{ transitionDuration: `${FADE_MS}ms` }}
+              onTransitionEnd={(event) => handleFadeEnd(event, layer.key)}
+            >
+              {layer.view.kind === 'image' ? (
+                <SlidePanel slide={layer.view} />
+              ) : (
+                <>
+                  <StorePanel entry={layer.view.left} />
+                  <StorePanel entry={layer.view.right} />
+                </>
+              )}
+            </div>
+          ))
         )}
       </main>
     </div>
@@ -193,7 +257,7 @@ export default function Monitor() {
 
 function SlidePanel({ slide }: { slide: ImageSlide }) {
   return (
-    <section className="relative col-span-2 min-h-0 overflow-hidden rounded-3xl border border-[#243831] bg-[#7ec8ff]">
+    <section className="relative col-span-2 h-full min-h-0 overflow-hidden rounded-3xl border border-[#243831] bg-[#7ec8ff]">
       <img
         src={slide.src}
         alt={slide.label}
@@ -206,7 +270,7 @@ function SlidePanel({ slide }: { slide: ImageSlide }) {
 function StorePanel({ entry }: { entry: MonitorCallNumber | null }) {
   if (!entry) {
     return (
-      <section className="flex min-h-0 flex-col rounded-3xl border border-[#243831] bg-[#0f1a16] p-6 opacity-50">
+      <section className="flex h-full min-h-0 flex-col rounded-3xl border border-[#243831] bg-[#0f1a16] p-6 opacity-50">
         <p className="grid flex-1 place-items-center text-lg text-[#93a39b]">—</p>
       </section>
     );
@@ -214,7 +278,7 @@ function StorePanel({ entry }: { entry: MonitorCallNumber | null }) {
 
   if (entry.is_open === false) {
     return (
-      <section className="flex min-h-0 flex-col rounded-3xl border border-[#243831] bg-[#0f1a16] p-6 opacity-70">
+      <section className="flex h-full min-h-0 flex-col rounded-3xl border border-[#243831] bg-[#0f1a16] p-6 opacity-70">
         <StoreHeader entry={entry} />
         <p className="grid flex-1 place-items-center text-2xl text-[#93a39b]">準備中</p>
       </section>
@@ -224,7 +288,7 @@ function StorePanel({ entry }: { entry: MonitorCallNumber | null }) {
   const calledNumbers = Array.isArray(entry.called_numbers) ? entry.called_numbers : [];
 
   return (
-    <section className="flex min-h-0 flex-col rounded-3xl border border-[#243831] bg-[#121d19] p-6">
+    <section className="flex h-full min-h-0 flex-col rounded-3xl border border-[#243831] bg-[#121d19] p-6">
       <StoreHeader entry={entry} />
 
       {calledNumbers.length === 0 ? (
