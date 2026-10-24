@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { TransitionEvent } from 'react';
 import {
   fetchFestivalDay,
   fetchMonitorCallNumbers,
@@ -11,10 +10,10 @@ import {
 const CALL_NUMBERS_INTERVAL_MS = 5000;
 /** 本日フラグの再取得間隔（ミリ秒） */
 const FESTIVAL_DAY_INTERVAL_MS = 30000;
-/** スライド／呼び出し番号の切り替え間隔（ミリ秒） */
-const ROTATE_INTERVAL_MS = 12000;
+/** 完全に見えている時間（ミリ秒） */
+const HOLD_MS = 3000;
 /** フェードイン／フェードアウトの時間（ミリ秒） */
-const FADE_MS = 900;
+const FADE_MS = 1000;
 
 type ImageSlide = {
   kind: 'image';
@@ -31,17 +30,6 @@ type CallView = {
 };
 
 type MonitorView = ImageSlide | CallView;
-
-type FadeLayer = {
-  key: string;
-  view: MonitorView;
-  visible: boolean;
-};
-
-function viewKey(view: MonitorView): string {
-  if (view.kind === 'image') return `image:${view.src}`;
-  return `calls:${view.left?.store_id ?? '-'}:${view.right?.store_id ?? '-'}`;
-}
 
 const IMAGE_SLIDES: ImageSlide[] = [
   { kind: 'image', src: '/monitor-slides/slide-01.png', label: '京都テック学園祭2026' },
@@ -104,7 +92,7 @@ export default function Monitor() {
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [hasError, setHasError] = useState(false);
   const [viewIndex, setViewIndex] = useState(0);
-  const [layers, setLayers] = useState<FadeLayer[]>([]);
+  const [opacity, setOpacity] = useState(0);
   const now = useClock();
 
   useEffect(() => {
@@ -155,53 +143,45 @@ export default function Monitor() {
 
   const views = useMemo(() => buildViews(festivalDay, monitorData), [festivalDay, monitorData]);
   const viewCount = views.length;
-
-  useEffect(() => {
-    if (viewCount <= 1) return;
-    const timer = setInterval(() => {
-      setViewIndex((current) => (current + 1) % viewCount);
-    }, ROTATE_INTERVAL_MS);
-    return () => clearInterval(timer);
-  }, [viewCount]);
-
   const safeIndex = viewCount === 0 ? 0 : viewIndex % viewCount;
   const current = views[safeIndex];
-  const currentKey = current ? viewKey(current) : '';
 
   useEffect(() => {
-    if (!current) return;
+    if (viewCount === 0) return;
 
-    setLayers((prev) => {
-      const shown = prev.find((layer) => layer.key === currentKey && layer.visible);
-      if (shown) {
-        return prev.map((layer) => (layer.key === currentKey ? { ...layer, view: current } : layer));
-      }
+    let cancelled = false;
+    let timeoutId = 0;
+    let frameId = 0;
 
-      const next = prev.map((layer) => ({
-        ...layer,
-        visible: false,
-        view: layer.key === currentKey ? current : layer.view,
-      }));
-      if (!next.some((layer) => layer.key === currentKey)) {
-        next.push({ key: currentKey, view: current, visible: false });
-      }
-      return next;
-    });
-
-    const frame = window.requestAnimationFrame(() => {
-      window.requestAnimationFrame(() => {
-        setLayers((prev) =>
-          prev.map((layer) => ({ ...layer, visible: layer.key === currentKey })),
-        );
+    const fadeIn = () => {
+      if (cancelled) return;
+      setOpacity(0);
+      frameId = window.requestAnimationFrame(() => {
+        window.requestAnimationFrame(() => {
+          if (!cancelled) setOpacity(1);
+        });
       });
-    });
-    return () => window.cancelAnimationFrame(frame);
-  }, [current, currentKey]);
+      if (viewCount <= 1) return;
+      timeoutId = window.setTimeout(fadeOut, FADE_MS + HOLD_MS);
+    };
 
-  const handleFadeEnd = (event: TransitionEvent<HTMLDivElement>, key: string) => {
-    if (event.target !== event.currentTarget || event.propertyName !== 'opacity') return;
-    setLayers((prev) => prev.filter((layer) => layer.visible || layer.key !== key));
-  };
+    const fadeOut = () => {
+      if (cancelled) return;
+      setOpacity(0);
+      timeoutId = window.setTimeout(() => {
+        if (cancelled) return;
+        setViewIndex((index) => (index + 1) % viewCount);
+        fadeIn();
+      }, FADE_MS);
+    };
+
+    fadeIn();
+    return () => {
+      cancelled = true;
+      window.cancelAnimationFrame(frameId);
+      window.clearTimeout(timeoutId);
+    };
+  }, [viewCount]);
 
   return (
     <div className="flex min-h-dvh flex-col bg-[#0b1310] px-6 py-5 text-[#e8efec]">
@@ -227,28 +207,22 @@ export default function Monitor() {
       </header>
 
       <main className="relative min-h-0 flex-1">
-        {layers.length === 0 ? (
+        {!current ? (
           <p className="grid h-full place-items-center text-xl text-[#93a39b]">読み込み中…</p>
         ) : (
-          layers.map((layer) => (
-            <div
-              key={layer.key}
-              className={`absolute inset-0 grid grid-cols-2 content-stretch gap-5 transition-opacity ease-in-out ${
-                layer.visible ? 'opacity-100' : 'opacity-0'
-              }`}
-              style={{ transitionDuration: `${FADE_MS}ms` }}
-              onTransitionEnd={(event) => handleFadeEnd(event, layer.key)}
-            >
-              {layer.view.kind === 'image' ? (
-                <SlidePanel slide={layer.view} />
-              ) : (
-                <>
-                  <StorePanel entry={layer.view.left} />
-                  <StorePanel entry={layer.view.right} />
-                </>
-              )}
-            </div>
-          ))
+          <div
+            className="absolute inset-0 grid grid-cols-2 content-stretch gap-5 transition-opacity ease-in-out"
+            style={{ opacity, transitionDuration: `${FADE_MS}ms` }}
+          >
+            {current.kind === 'image' ? (
+              <SlidePanel slide={current} />
+            ) : (
+              <>
+                <StorePanel entry={current.left} />
+                <StorePanel entry={current.right} />
+              </>
+            )}
+          </div>
         )}
       </main>
     </div>
