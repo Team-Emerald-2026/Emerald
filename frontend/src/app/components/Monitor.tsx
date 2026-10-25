@@ -23,10 +23,12 @@ type ImageSlide = {
   days?: FestivalDay[];
 };
 
+/** 呼び出し番号画面に同時表示するブース数 */
+const BOOTHS_PER_VIEW = 4;
+
 type CallView = {
   kind: 'calls';
-  left: MonitorCallNumber | null;
-  right: MonitorCallNumber | null;
+  stores: Array<MonitorCallNumber | null>;
 };
 
 type MonitorView = ImageSlide | CallView;
@@ -40,33 +42,34 @@ const IMAGE_SLIDES: ImageSlide[] = [
   { kind: 'image', src: '/monitor-slides/slide-06.png', label: '6F' },
   { kind: 'image', src: '/monitor-slides/slide-07.png', label: '7F' },
   { kind: 'image', src: '/monitor-slides/slide-08.png', label: '8F' },
-  { kind: 'image', src: '/monitor-slides/slide-09.png', label: 'スペシャルゲスト', days: ['day1'] },
 ];
 
-function pairStores(
+function chunkStores(
   stores: MonitorCallNumber[],
-): Array<[MonitorCallNumber | null, MonitorCallNumber | null]> {
-  const pairs: Array<[MonitorCallNumber | null, MonitorCallNumber | null]> = [];
-  for (let i = 0; i < stores.length; i += 2) {
-    pairs.push([stores[i] ?? null, stores[i + 1] ?? null]);
+  size = BOOTHS_PER_VIEW,
+): Array<Array<MonitorCallNumber | null>> {
+  const chunks: Array<Array<MonitorCallNumber | null>> = [];
+  for (let i = 0; i < stores.length; i += size) {
+    const chunk: Array<MonitorCallNumber | null> = stores.slice(i, i + size);
+    while (chunk.length < size) chunk.push(null);
+    chunks.push(chunk);
   }
-  return pairs;
+  return chunks;
 }
 
 /**
- * 2店舗カードのあとに、同じ枠へ位置スライドを1枚入れる。
+ * 4店舗カードのあとに、同じ枠へ位置スライドを1枚入れる。
  * 店舗が無いときはスライドだけを回す。
  */
 function buildViews(day: FestivalDay, stores: MonitorCallNumber[]): MonitorView[] {
   const slides = IMAGE_SLIDES.filter((slide) => !slide.days || slide.days.includes(day));
-  const pairs = pairStores(stores);
-  if (pairs.length === 0) return slides;
+  const groups = chunkStores(stores);
+  if (groups.length === 0) return slides;
 
   const views: MonitorView[] = [];
-  const rounds = Math.max(pairs.length, slides.length);
+  const rounds = Math.max(groups.length, slides.length);
   for (let i = 0; i < rounds; i++) {
-    const [left, right] = pairs[i % pairs.length];
-    views.push({ kind: 'calls', left, right });
+    views.push({ kind: 'calls', stores: groups[i % groups.length] });
     views.push(slides[i % slides.length]);
   }
   return views;
@@ -83,8 +86,8 @@ function useClock() {
 
 /**
  * 校内モニター（階段上プロジェクター）向け画面。
- * 2店舗カードのあとに、同じ大きさの枠へ位置スライドを画像ごと出す。
- * 2日目はゲストスライドを出さない。
+ * 4店舗カードのあとに、同じ大きさの枠へ位置スライドを画像ごと出す。
+ * ゲスト（ブリとカワウソ）の9枚目は2日目は出さない。
  */
 export default function Monitor() {
   const [monitorData, setMonitorData] = useState<MonitorCallNumber[]>([]);
@@ -211,16 +214,15 @@ export default function Monitor() {
           <p className="grid h-full place-items-center text-xl text-[#93a39b]">読み込み中…</p>
         ) : (
           <div
-            className="absolute inset-0 grid grid-cols-2 content-stretch gap-5 transition-opacity ease-in-out"
+            className="absolute inset-0 grid grid-cols-2 grid-rows-2 content-stretch gap-4 transition-opacity ease-in-out"
             style={{ opacity, transitionDuration: `${FADE_MS}ms` }}
           >
             {current.kind === 'image' ? (
               <SlidePanel slide={current} />
             ) : (
-              <>
-                <StorePanel entry={current.left} />
-                <StorePanel entry={current.right} />
-              </>
+              current.stores.map((entry, index) => (
+                <StorePanel key={entry?.store_id ?? `empty-${index}`} entry={entry} />
+              ))
             )}
           </div>
         )}
@@ -231,7 +233,7 @@ export default function Monitor() {
 
 function SlidePanel({ slide }: { slide: ImageSlide }) {
   return (
-    <section className="relative col-span-2 h-full min-h-0 overflow-hidden rounded-3xl border border-[#243831] bg-[#7ec8ff]">
+    <section className="relative col-span-2 row-span-2 h-full min-h-0 overflow-hidden rounded-3xl border border-[#243831] bg-[#7ec8ff]">
       <img
         src={slide.src}
         alt={slide.label}
@@ -244,7 +246,7 @@ function SlidePanel({ slide }: { slide: ImageSlide }) {
 function StorePanel({ entry }: { entry: MonitorCallNumber | null }) {
   if (!entry) {
     return (
-      <section className="flex h-full min-h-0 flex-col rounded-3xl border border-[#243831] bg-[#0f1a16] p-6 opacity-50">
+      <section className="flex h-full min-h-0 flex-col rounded-3xl border border-[#243831] bg-[#0f1a16] p-5 opacity-50">
         <p className="grid flex-1 place-items-center text-lg text-[#93a39b]">—</p>
       </section>
     );
@@ -252,9 +254,9 @@ function StorePanel({ entry }: { entry: MonitorCallNumber | null }) {
 
   if (entry.is_open === false) {
     return (
-      <section className="flex h-full min-h-0 flex-col rounded-3xl border border-[#243831] bg-[#0f1a16] p-6 opacity-70">
+      <section className="flex h-full min-h-0 flex-col rounded-3xl border border-[#243831] bg-[#0f1a16] p-5 opacity-70">
         <StoreHeader entry={entry} />
-        <p className="grid flex-1 place-items-center text-2xl text-[#93a39b]">準備中</p>
+        <p className="grid flex-1 place-items-center text-xl text-[#93a39b]">準備中</p>
       </section>
     );
   }
@@ -262,21 +264,21 @@ function StorePanel({ entry }: { entry: MonitorCallNumber | null }) {
   const calledNumbers = Array.isArray(entry.called_numbers) ? entry.called_numbers : [];
 
   return (
-    <section className="flex h-full min-h-0 flex-col rounded-3xl border border-[#243831] bg-[#121d19] p-6">
+    <section className="flex h-full min-h-0 flex-col rounded-3xl border border-[#243831] bg-[#121d19] p-5">
       <StoreHeader entry={entry} />
 
       {calledNumbers.length === 0 ? (
-        <p className="grid flex-1 place-items-center text-center text-2xl text-[#93a39b]">
+        <p className="grid flex-1 place-items-center text-center text-xl text-[#93a39b]">
           ただいまお呼び出し中の番号はありません
         </p>
       ) : (
-        <div className="flex flex-1 flex-col justify-center">
-          <p className="text-center text-lg text-[#93a39b]">お呼び出し中</p>
-          <ul className="mt-4 flex flex-wrap items-center justify-center gap-3">
+        <div className="flex min-h-0 flex-1 flex-col justify-center">
+          <p className="text-center text-base text-[#93a39b]">お呼び出し中</p>
+          <ul className="mt-3 flex flex-wrap items-center justify-center gap-2">
             {calledNumbers.map((number) => (
               <li
                 key={number}
-                className="rounded-3xl bg-[#2bc79a] px-6 py-2 font-display text-7xl font-bold text-[#06241b]"
+                className="rounded-2xl bg-[#2bc79a] px-5 py-1.5 font-display text-6xl font-bold text-[#06241b]"
               >
                 {number}
               </li>
@@ -285,9 +287,9 @@ function StorePanel({ entry }: { entry: MonitorCallNumber | null }) {
         </div>
       )}
 
-      <p className="mt-4 border-t border-[#243831] pt-3 text-right text-lg text-[#93a39b]">
+      <p className="mt-3 border-t border-[#243831] pt-2 text-right text-base text-[#93a39b]">
         待ち{' '}
-        <span className="font-display text-3xl font-bold text-[#e8efec]">{entry.waiting_count}</span>{' '}
+        <span className="font-display text-2xl font-bold text-[#e8efec]">{entry.waiting_count}</span>{' '}
         組
       </p>
     </section>
@@ -305,7 +307,7 @@ function StoreHeader({ entry }: { entry: MonitorCallNumber }) {
           {locationName}
         </span>
       )}
-      <h2 className="truncate font-display text-3xl font-bold">{entry.store_name}</h2>
+      <h2 className="truncate font-display text-2xl font-bold">{entry.store_name}</h2>
     </header>
   );
 }
