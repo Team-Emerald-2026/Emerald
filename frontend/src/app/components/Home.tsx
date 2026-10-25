@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Clock, ShoppingBag, MapPin, ChevronRight, Sparkles, Megaphone } from 'lucide-react';
+import { Clock, ShoppingBag, MapPin, ClipboardList, ChevronRight, Sparkles, Megaphone } from 'lucide-react';
 import {
   fetchEvents,
   fetchMapFacilities,
@@ -47,6 +47,9 @@ function shouldLoadHeroVideo(): boolean {
   return true;
 }
 
+const SURVEY_URL =
+  'https://forms.cloud.microsoft/Pages/ResponsePage.aspx?id=ayQ05X5z-keKpy3ftq9Xxm86-CHQVhRBs1-vWwLshCpURjNUMzFIUVpNVjJMSjE2OFI5N1BIUFk4Wi4u';
+
 const quickMenu = [
   {
     to: '/attractions',
@@ -68,6 +71,13 @@ const quickMenu = [
     title: 'マップ',
     desc: '会場とブースの場所を確認',
     color: '#7c5cff',
+  },
+  {
+    href: SURVEY_URL,
+    icon: ClipboardList,
+    title: 'アンケート',
+    desc: '学園祭のご感想をお聞かせください',
+    color: '#0ea5e9',
   },
 ];
 
@@ -382,12 +392,11 @@ export default function Home() {
           まずはここから
         </h2>
         <ul className="space-y-3">
-          {quickMenu.map(({ to, icon: Icon, title, desc, color }) => (
-            <li key={to}>
-              <Link
-                to={to}
-                className="flex items-center gap-4 rounded-2xl border border-border bg-card p-4 transition-colors hover:bg-muted"
-              >
+          {quickMenu.map(({ to, href, icon: Icon, title, desc, color }) => {
+            const className =
+              'flex items-center gap-4 rounded-2xl border border-border bg-card p-4 transition-colors hover:bg-muted';
+            const content = (
+              <>
                 <span
                   className="grid h-12 w-12 shrink-0 place-items-center rounded-xl"
                   style={{ backgroundColor: color }}
@@ -399,9 +408,28 @@ export default function Home() {
                   <span className="block text-sm text-muted-foreground">{desc}</span>
                 </span>
                 <ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground" />
-              </Link>
-            </li>
-          ))}
+              </>
+            );
+
+            return (
+              <li key={to ?? href}>
+                {href ? (
+                  <a
+                    href={href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={className}
+                  >
+                    {content}
+                  </a>
+                ) : (
+                  <Link to={to!} className={className}>
+                    {content}
+                  </Link>
+                )}
+              </li>
+            );
+          })}
         </ul>
       </section>
     </div>
