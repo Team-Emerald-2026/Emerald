@@ -7,6 +7,7 @@ use App\Http\Resources\Booth\WaitTimeResource;
 use App\Models\Store;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
 class WaitTimeController extends Controller
@@ -19,6 +20,7 @@ class WaitTimeController extends Controller
      * - current_queue_delta: 待ち人数を、いまの値から増減する（例: +1 / -1）。
      *   注文の登録・提供と同時に操作しても数え違いが起きないよう、
      *   サーバー側で最新の値に足し引きする。current_queue_count とは同時に使えない
+     * - crowd_level: 店内の混雑（empty / moderate / crowded）。待ち人数とは別
      */
     public function update(Request $request)
     {
@@ -28,13 +30,18 @@ class WaitTimeController extends Controller
             abort(403);
         }
 
-        $validated = $request->validate([
+        Store::ensureCrowdLevelColumn();
+
+        $rules = [
             'current_wait_min' => ['sometimes', 'integer', 'min:0', 'max:180'],
             'current_queue_count' => ['sometimes', 'integer', 'min:0', 'max:999', 'prohibits:current_queue_delta'],
             'current_queue_delta' => ['sometimes', 'integer', 'min:-999', 'max:999'],
             'wait_display_mode' => ['sometimes', 'string', 'in:minutes,text'],
             'wait_display_text' => ['nullable', 'string', 'max:255'],
-        ]);
+            'crowd_level' => ['sometimes', 'nullable', 'string', 'in:empty,moderate,crowded'],
+        ];
+
+        $validated = $request->validate($rules);
 
         $delta = $validated['current_queue_delta'] ?? null;
         unset($validated['current_queue_delta']);
@@ -46,10 +53,38 @@ class WaitTimeController extends Controller
                 $validated['current_queue_count'] = max(0, min(999, (int) $store->current_queue_count + $delta));
             }
 
-            $store->fill($validated);
-            $store->save();
+            if (array_key_exists('crowd_level', $validated)) {
+                $level = $validated['crowd_level'];
+                $currentText = trim((string) ($validated['wait_display_text'] ?? $store->wait_display_text ?? ''));
+                $currentMode = $validated['wait_display_mode'] ?? $store->wait_display_mode ?? 'minutes';
+                $canBackup = $currentMode !== 'text'
+                    || str_starts_with($currentText, Store::CROWD_TEXT_PREFIX)
+                    || $currentText === '';
+                if (is_string($level) && $level !== '' && $canBackup) {
+                    $validated['wait_display_text'] = Store::CROWD_TEXT_PREFIX.$level;
+                    $validated['wait_display_mode'] = 'minutes';
+                }
+                if (! Store::hasCrowdLevelColumn()) {
+                    unset($validated['crowd_level']);
+                }
+            }
 
-            return $store;
+            $store->fill($validated);
+            try {
+                $store->save();
+            } catch (\Throwable $exception) {
+                if (! array_key_exists('crowd_level', $validated)) {
+                    throw $exception;
+                }
+                unset($validated['crowd_level']);
+                $store->offsetUnset('crowd_level');
+                $store->fill($validated);
+                $store->save();
+            }
+
+            Cache::forget('api:v1:restaurants:index');
+
+            return $store->refresh();
         });
 
         return WaitTimeResource::make($store)

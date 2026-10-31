@@ -151,6 +151,51 @@ class MissingApisTest extends TestCase
         $this->getJson("/api/v1/restaurants/{$store->id}")
             ->assertOk()
             ->assertJsonPath('data.name', 'KTCカフェ')
+            ->assertJsonPath('data.crowd_level', null)
+            ->assertJsonPath('data.menu_items.0.name', 'ブレンドコーヒー')
+            ->assertJsonPath('data.ticket_numbers.0', 'C-120');
+    }
+
+    public function test_restaurant_detail_cache_keeps_menu_items_as_list(): void
+    {
+        config(['cache.api_list_ttl' => 30]);
+        Cache::flush();
+
+        $store = $this->createStore();
+        MenuItem::query()->create([
+            'store_id' => $store->id,
+            'name' => 'ブレンドコーヒー',
+            'description' => 'ホット',
+            'price' => 350,
+            'is_available' => true,
+        ]);
+        Order::query()->create([
+            'store_id' => $store->id,
+            'ticket_number' => 'C-120',
+            'total_price' => 350,
+            'status' => 'issued',
+            'ordered_at' => now(),
+            'called_at' => now(),
+        ]);
+
+        $this->getJson("/api/v1/restaurants/{$store->id}")
+            ->assertOk()
+            ->assertJsonPath('data.menu_items.0.name', 'ブレンドコーヒー');
+
+        $day = \App\Models\FestivalSetting::currentDay();
+        $cached = Cache::get('api:v1:restaurants:show:v2:'.$store->id.':'.$day);
+
+        $this->assertIsArray($cached);
+        $this->assertIsArray($cached['menu_items']);
+        $this->assertTrue(array_is_list($cached['menu_items']));
+        $this->assertSame('ブレンドコーヒー', $cached['menu_items'][0]['name']);
+        $this->assertIsArray($cached['ticket_numbers']);
+        $this->assertTrue(array_is_list($cached['ticket_numbers']));
+        $this->assertIsArray($cached['attributes']['menu_items']);
+        $this->assertTrue(array_is_list($cached['attributes']['menu_items']));
+
+        $this->getJson("/api/v1/restaurants/{$store->id}")
+            ->assertOk()
             ->assertJsonPath('data.menu_items.0.name', 'ブレンドコーヒー')
             ->assertJsonPath('data.ticket_numbers.0', 'C-120');
     }
@@ -184,7 +229,7 @@ class MissingApisTest extends TestCase
 
     public function test_monitor_call_numbers_groups_by_store(): void
     {
-        $store = $this->createStore();
+        $store = $this->createStore('store-101', ['show_on_monitor' => true]);
         Order::query()->create([
             'store_id' => $store->id,
             'ticket_number' => 'C-120',
@@ -206,6 +251,184 @@ class MissingApisTest extends TestCase
             ->assertJsonPath('data.0.store_id', 'store-101')
             ->assertJsonPath('data.0.current_call_number', 'C-120')
             ->assertJsonPath('data.0.waiting_numbers.0', 'C-121');
+    }
+
+    public function test_admin_can_toggle_store_monitor_display(): void
+    {
+        $store = $this->createStore();
+        Sanctum::actingAs($this->createAdmin());
+
+        $this->patchJson("/api/v1/admin/stores/{$store->id}/monitor", [
+            'show_on_monitor' => true,
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.show_on_monitor', true);
+
+        $this->assertTrue($store->refresh()->show_on_monitor);
+
+        $this->patchJson("/api/v1/admin/stores/{$store->id}/monitor", [
+            'show_on_monitor' => false,
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.show_on_monitor', false);
+
+        $this->assertFalse($store->refresh()->show_on_monitor);
+    }
+
+    public function test_monitor_excludes_stores_not_marked_for_display(): void
+    {
+        $hidden = $this->createStore('store-101', ['show_on_monitor' => false]);
+        $visible = $this->createStore('store-102', [
+            'name' => 'やきそば',
+            'ticket_prefix' => 'Y',
+            'show_on_monitor' => true,
+        ]);
+        Order::query()->create([
+            'store_id' => $hidden->id,
+            'ticket_number' => 'C-120',
+            'total_price' => 350,
+            'status' => 'issued',
+            'ordered_at' => now(),
+            'called_at' => now(),
+        ]);
+        Order::query()->create([
+            'store_id' => $visible->id,
+            'ticket_number' => 'Y-10',
+            'total_price' => 400,
+            'status' => 'issued',
+            'ordered_at' => now(),
+            'called_at' => now(),
+        ]);
+
+        $this->getJson('/api/v1/monitor/call-numbers')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.store_id', 'store-102')
+            ->assertJsonPath('data.0.current_call_number', 'Y-10');
+    }
+
+    public function test_admin_can_choose_whether_a_store_appears_on_the_call_page(): void
+    {
+        $store = $this->createStore();
+        Sanctum::actingAs($this->createAdmin());
+
+        $this->patchJson("/api/v1/admin/stores/{$store->id}/call-page", [
+            'show_on_call_page' => true,
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.show_on_call_page', true);
+
+        $this->assertTrue($store->refresh()->show_on_call_page);
+
+        $this->getJson('/api/v1/restaurants')
+            ->assertOk()
+            ->assertJsonPath('data.0.id', $store->id)
+            ->assertJsonPath('data.0.show_on_call_page', true);
+
+        $this->patchJson("/api/v1/admin/stores/{$store->id}/call-page", [
+            'show_on_call_page' => false,
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.show_on_call_page', false);
+
+        $this->assertFalse($store->refresh()->show_on_call_page);
+    }
+
+    public function test_new_food_store_stays_on_the_call_page_and_other_types_do_not(): void
+    {
+        Sanctum::actingAs($this->createAdmin());
+
+        $this->postJson('/api/v1/admin/stores', [
+            'id' => 'store-food',
+            'name' => 'たこ焼き',
+            'type' => 'food',
+            'floor' => 1,
+            'map_x' => 10,
+            'map_y' => 20,
+            'login_id' => 'takoyaki',
+            'password' => 'password123',
+        ])->assertCreated()
+            ->assertJsonPath('data.show_on_call_page', true);
+
+        $this->assertTrue(Store::query()->find('store-food')?->show_on_call_page);
+
+        $this->postJson('/api/v1/admin/stores', [
+            'id' => 'store-booth',
+            'name' => '体験ブース',
+            'type' => 'booth',
+            'floor' => 1,
+            'map_x' => 30,
+            'map_y' => 40,
+            'login_id' => 'taiken',
+            'password' => 'password123',
+        ])->assertCreated()
+            ->assertJsonPath('data.show_on_call_page', false);
+
+        $this->assertFalse(Store::query()->find('store-booth')?->show_on_call_page);
+    }
+
+    public function test_existing_food_stores_are_kept_on_the_call_page(): void
+    {
+        $food = $this->createStore('store-food', ['show_on_call_page' => false]);
+        MapFacilities::query()->create([
+            'store_id' => $food->id,
+            'name' => 'たこ焼き',
+            'type' => 'food',
+            'floor' => 1,
+            'x' => 10,
+            'y' => 20,
+        ]);
+        $booth = $this->createStore('store-booth', [
+            'name' => '体験',
+            'ticket_prefix' => 'B',
+            'show_on_call_page' => false,
+        ]);
+        MapFacilities::query()->create([
+            'store_id' => $booth->id,
+            'name' => '体験',
+            'type' => 'booth',
+            'floor' => 1,
+            'x' => 30,
+            'y' => 40,
+        ]);
+
+        Store::backfillShowOnCallPageForFood();
+
+        $this->assertTrue($food->refresh()->show_on_call_page);
+        $this->assertFalse($booth->refresh()->show_on_call_page);
+    }
+
+    public function test_hiding_from_the_call_page_does_not_stop_store_calling(): void
+    {
+        $store = $this->createStore('store-hidden', ['show_on_call_page' => false]);
+        MapFacilities::query()->create([
+            'store_id' => $store->id,
+            'name' => 'たこ焼き',
+            'type' => 'food',
+            'floor' => 1,
+            'x' => 10,
+            'y' => 20,
+        ]);
+        Sanctum::actingAs($this->createStoreUser($store));
+        $order = Order::query()->create([
+            'store_id' => $store->id,
+            'ticket_number' => '88',
+            'total_price' => 500,
+            'status' => 'issued',
+            'ordered_at' => now(),
+        ]);
+
+        $this->patchJson("/api/v1/booth/accounting/orders/{$order->id}/call")->assertOk();
+
+        $this->getJson('/api/v1/call-numbers?store_id='.$store->id)
+            ->assertOk()
+            ->assertJsonPath('data.0.ticket_number', '88')
+            ->assertJsonPath('data.0.store_id', 'store-hidden');
+
+        $this->getJson('/api/v1/restaurants')
+            ->assertOk()
+            ->assertJsonPath('data.0.id', 'store-hidden')
+            ->assertJsonPath('data.0.show_on_call_page', false);
     }
 
     public function test_published_events_are_listed_and_unpublished_are_hidden(): void
@@ -546,6 +769,92 @@ class MissingApisTest extends TestCase
 
         $this->postJson('/api/v1/booth/auth/login', [
             'login_id' => 'cafe_admin',
+            'password' => 'wrong-password',
+        ])->assertStatus(429);
+    }
+
+    public function test_login_rate_limit_does_not_block_other_accounts_on_same_ip(): void
+    {
+        Cache::flush();
+        $store = $this->createStore();
+        $this->createStoreUser($store);
+        $other = $this->createStore('store-102', ['name' => '焼きそば', 'ticket_prefix' => 'Y']);
+        $this->createStoreUser($other, 'yakisoba');
+
+        for ($i = 0; $i < 6; $i++) {
+            $this->postJson('/api/v1/booth/auth/login', [
+                'login_id' => 'cafe_admin',
+                'password' => 'wrong-password',
+            ]);
+        }
+
+        $this->postJson('/api/v1/booth/auth/login', [
+            'login_id' => 'yakisoba',
+            'password' => 'password123',
+        ])->assertOk();
+    }
+
+    public function test_login_rate_limit_uses_forwarded_client_ip(): void
+    {
+        Cache::flush();
+        $store = $this->createStore();
+        $this->createStoreUser($store);
+        $login = ['login_id' => 'cafe_admin', 'password' => 'wrong-password'];
+
+        for ($i = 0; $i < 5; $i++) {
+            $this->withHeader('X-Forwarded-For', '203.0.113.1')
+                ->postJson('/api/v1/booth/auth/login', $login)
+                ->assertUnauthorized();
+        }
+
+        $this->withHeader('X-Forwarded-For', '203.0.113.1')
+            ->postJson('/api/v1/booth/auth/login', $login)
+            ->assertStatus(429);
+
+        $this->withHeader('X-Forwarded-For', '203.0.113.2')
+            ->postJson('/api/v1/booth/auth/login', $login)
+            ->assertUnauthorized();
+    }
+
+    public function test_login_rate_limit_uses_cloudflare_client_ip(): void
+    {
+        Cache::flush();
+        $store = $this->createStore();
+        $this->createStoreUser($store);
+        $login = ['login_id' => 'cafe_admin', 'password' => 'wrong-password'];
+
+        for ($i = 0; $i < 5; $i++) {
+            $this->withHeaders([
+                'CF-Connecting-IP' => '198.51.100.7',
+                'X-Forwarded-For' => '198.51.100.7, 172.71.0.'.$i,
+            ])->postJson('/api/v1/booth/auth/login', $login)->assertUnauthorized();
+        }
+
+        $this->withHeaders([
+            'CF-Connecting-IP' => '198.51.100.7',
+            'X-Forwarded-For' => '198.51.100.7, 172.71.0.99',
+        ])->postJson('/api/v1/booth/auth/login', $login)->assertStatus(429);
+
+        $this->withHeaders([
+            'CF-Connecting-IP' => '198.51.100.8',
+            'X-Forwarded-For' => '198.51.100.8, 172.71.0.99',
+        ])->postJson('/api/v1/booth/auth/login', $login)->assertUnauthorized();
+    }
+
+    public function test_admin_login_is_rate_limited(): void
+    {
+        Cache::flush();
+        $this->createAdmin();
+
+        for ($i = 0; $i < 5; $i++) {
+            $this->postJson('/api/v1/admin/auth/login', [
+                'login_id' => 'admin',
+                'password' => 'wrong-password',
+            ])->assertUnauthorized();
+        }
+
+        $this->postJson('/api/v1/admin/auth/login', [
+            'login_id' => 'admin',
             'password' => 'wrong-password',
         ])->assertStatus(429);
     }

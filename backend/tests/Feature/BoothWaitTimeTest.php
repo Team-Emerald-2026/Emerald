@@ -134,6 +134,40 @@ class BoothWaitTimeTest extends TestCase
         $this->patchJson('/api/v1/booth/wait-time', ['current_queue_count' => -1])->assertStatus(422);
         $this->patchJson('/api/v1/booth/wait-time', ['current_wait_min' => 181])->assertStatus(422);
         $this->patchJson('/api/v1/booth/wait-time', ['current_queue_delta' => 'many'])->assertStatus(422);
+        $this->patchJson('/api/v1/booth/wait-time', ['crowd_level' => 'full'])->assertStatus(422);
+    }
+
+    public function test_crowd_level_can_be_updated_without_changing_queue(): void
+    {
+        $store = $this->loginAsStore();
+
+        $this->patchJson('/api/v1/booth/wait-time', ['crowd_level' => 'moderate'])
+            ->assertOk()
+            ->assertJsonPath('data.crowd_level', 'moderate')
+            ->assertJsonPath('data.wait_display_text', '__crowd__:moderate')
+            ->assertJsonPath('data.current_queue_count', 3);
+
+        $this->patchJson('/api/v1/booth/wait-time', ['crowd_level' => 'crowded'])
+            ->assertOk()
+            ->assertJsonPath('data.crowd_level', 'crowded');
+
+        $store->refresh();
+        $this->assertSame('crowded', $store->crowd_level);
+        $this->assertSame(3, $store->current_queue_count);
+        $this->assertSame(4, $store->current_wait_min);
+
+        $this->getJson("/api/v1/restaurants/{$store->id}")
+            ->assertOk()
+            ->assertJsonPath('data.crowd_level', 'crowded');
+
+        $this->getJson('/api/v1/restaurants')
+            ->assertOk()
+            ->assertJsonPath('data.0.crowd_level', 'crowded');
+
+        $this->getJson('/api/v1/booth/dashboard')
+            ->assertOk()
+            ->assertJsonPath('data.crowd_level', 'crowded')
+            ->assertJsonPath('data.wait_display_text', '__crowd__:crowded');
     }
 
     public function test_dashboard_update_does_not_require_wait_minutes(): void

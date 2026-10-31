@@ -485,12 +485,12 @@ class AccountingOrderFlowTest extends TestCase
         $this->postJson('/api/v1/booth/accounting/orders', [
             'items' => [['menu_item_id' => $coffee->id, 'quantity' => 1]],
         ])->assertCreated()
-            ->assertJsonPath('data.ticket_number', 'C-1');
+            ->assertJsonPath('data.ticket_number', '1');
 
         $this->postJson('/api/v1/booth/accounting/orders', [
             'items' => [['menu_item_id' => $coffee->id, 'quantity' => 1]],
         ])->assertCreated()
-            ->assertJsonPath('data.ticket_number', 'C-2');
+            ->assertJsonPath('data.ticket_number', '2');
     }
 
     public function test_disabled_ticket_numbers_are_skipped(): void
@@ -503,12 +503,12 @@ class AccountingOrderFlowTest extends TestCase
         $this->postJson('/api/v1/booth/accounting/orders', [
             'items' => [['menu_item_id' => $coffee->id, 'quantity' => 1]],
         ])->assertCreated()
-            ->assertJsonPath('data.ticket_number', 'C-2');
+            ->assertJsonPath('data.ticket_number', '2');
 
         $this->postJson('/api/v1/booth/accounting/orders', [
             'items' => [['menu_item_id' => $coffee->id, 'quantity' => 1]],
         ])->assertCreated()
-            ->assertJsonPath('data.ticket_number', 'C-4');
+            ->assertJsonPath('data.ticket_number', '4');
     }
 
     public function test_ticket_numbers_wrap_around_and_reuse_returned_tickets(): void
@@ -520,12 +520,12 @@ class AccountingOrderFlowTest extends TestCase
         $first = $this->postJson('/api/v1/booth/accounting/orders', [
             'items' => [['menu_item_id' => $coffee->id, 'quantity' => 1]],
         ])->assertCreated();
-        $first->assertJsonPath('data.ticket_number', 'C-1');
+        $first->assertJsonPath('data.ticket_number', '1');
 
         $this->postJson('/api/v1/booth/accounting/orders', [
             'items' => [['menu_item_id' => $coffee->id, 'quantity' => 1]],
         ])->assertCreated()
-            ->assertJsonPath('data.ticket_number', 'C-2');
+            ->assertJsonPath('data.ticket_number', '2');
 
         // 整理券が全部出払っている間は発番できない
         $this->postJson('/api/v1/booth/accounting/orders', [
@@ -540,7 +540,7 @@ class AccountingOrderFlowTest extends TestCase
         $this->postJson('/api/v1/booth/accounting/orders', [
             'items' => [['menu_item_id' => $coffee->id, 'quantity' => 1]],
         ])->assertCreated()
-            ->assertJsonPath('data.ticket_number', 'C-1');
+            ->assertJsonPath('data.ticket_number', '1');
     }
 
     // ------------------------------------------------------------------
@@ -682,6 +682,6 @@ class AccountingOrderFlowTest extends TestCase
         $this->postJson('/api/v1/booth/accounting/orders', [
             'items' => [['menu_item_id' => $coffee->id, 'quantity' => 1]],
         ])->assertCreated()
-            ->assertJsonPath('data.ticket_number', 'C-1');
+            ->assertJsonPath('data.ticket_number', '1');
     }
 }

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { Home, Tent, Hash, CalendarDays, MapPin, Sun, Moon } from 'lucide-react';
 import HomeTicker from './HomeTicker';
+import logoMark from '../../assets/brand/kyoto-tech-logo-mark.svg';
 
 /** ライト/ダークの切替ボタン。選択は localStorage('theme') に保存。 */
 function ThemeToggle() {
@@ -51,8 +52,11 @@ export default function Layout() {
     <div className="mx-auto flex h-dvh w-full flex-col bg-background">
       {/* ヘッダー */}
       <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center justify-center border-b border-border bg-card/90 px-4 backdrop-blur">
-        <span className="font-display text-lg font-bold tracking-wide text-foreground">
-          京都TECH学園祭
+        <span className="flex items-center gap-2">
+          <img src={logoMark} alt="" className="h-8 w-8" />
+          <span className="font-display text-lg font-bold tracking-wide text-foreground">
+            京都TECH学園祭
+          </span>
         </span>
         <ThemeToggle />
       </header>

@@ -3,6 +3,7 @@ set -e
 
 php artisan migrate --force
 php artisan db:seed --class=AdminUserSeeder --force || echo "admin seed failed; continuing"
+php artisan optimize || echo "optimize failed; continuing"
 
 PORT="${PORT:-10000}"
 
@@ -34,5 +35,7 @@ server {
 EOF
 
 rm -f /etc/nginx/sites-enabled/default
+# 上の artisan は root で動くので、作られたキャッシュを php-fpm（www-data）が書き換えられるよう戻す
+chown -R www-data:www-data storage bootstrap/cache
 php-fpm -D
 exec nginx -g 'daemon off;'

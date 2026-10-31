@@ -1,7 +1,15 @@
 import { useEffect, useState } from 'react';
 import { BarChart3, Receipt, Store, Trash2 } from 'lucide-react';
 import AdminShell from './AdminShell';
-import { ApiError, fetchAdminAnalytics, resetAdminSales, type AdminAnalytics } from '../../lib/api';
+import {
+  ApiError,
+  downloadAdminAccessLog,
+  fetchAdminAccess,
+  fetchAdminAnalytics,
+  resetAdminSales,
+  type AdminAccessSummary,
+  type AdminAnalytics,
+} from '../../lib/api';
 import { logoutAdminSession, useFestival } from '../../lib/festivalStore';
 import { ADMIN_PUBLIC_ACCESS } from '../../lib/adminAccess';
 
@@ -20,6 +28,14 @@ export default function AdminDashboard() {
   const [resetting, setResetting] = useState(false);
   const [resetError, setResetError] = useState('');
   const [resetDone, setResetDone] = useState(false);
+  const [access, setAccess] = useState<AdminAccessSummary | null>(null);
+  const [accessDate, setAccessDate] = useState('');
+  const [accessError, setAccessError] = useState('');
+  const [accessLoading, setAccessLoading] = useState(true);
+  const [downloading, setDownloading] = useState(false);
+  const [downloadError, setDownloadError] = useState('');
+  /** 店舗別収益で選んでいる店舗。'all' は全店舗の合計 */
+  const [selectedStoreId, setSelectedStoreId] = useState('all');
 
   useEffect(() => {
     if (!adminSession && !ADMIN_PUBLIC_ACCESS) return;
@@ -44,7 +60,55 @@ export default function AdminDashboard() {
     return () => controller.abort();
   }, [adminSession, reloadKey]);
 
+  useEffect(() => {
+    if (!adminSession && !ADMIN_PUBLIC_ACCESS) return;
+    const controller = new AbortController();
+
+    setAccessLoading(true);
+    setAccessError('');
+    fetchAdminAccess(adminSession?.token, accessDate || undefined, controller.signal)
+      .then((data) => {
+        setAccess(data);
+        if (data?.date && !accessDate) setAccessDate(data.date);
+      })
+      .catch((err: unknown) => {
+        if (controller.signal.aborted) return;
+        if (err instanceof ApiError && err.status === 401) {
+          logoutAdminSession();
+          return;
+        }
+        setAccessError('アクセス状況を取得できませんでした。');
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setAccessLoading(false);
+      });
+
+    return () => controller.abort();
+  }, [adminSession, accessDate, reloadKey]);
+
+  const downloadLog = async () => {
+    if (!access?.date || access.total === 0) return;
+    setDownloading(true);
+    setDownloadError('');
+    try {
+      await downloadAdminAccessLog(adminSession?.token, access.date);
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) {
+        logoutAdminSession();
+        return;
+      }
+      setDownloadError(err instanceof ApiError ? err.message : 'アクセスログをダウンロードできませんでした。');
+    } finally {
+      setDownloading(false);
+    }
+  };
+
   const canReset = resetText.trim() === RESET_CONFIRM_TEXT && !resetting;
+  const storesByName = [...(analytics?.stores ?? [])].sort(
+    (a, b) =>
+      a.store_name.localeCompare(b.store_name, 'ja', { numeric: true }) ||
+      a.store_id.localeCompare(b.store_id),
+  );
 
   const closeReset = () => {
     setResetOpen(false);
@@ -121,37 +185,175 @@ export default function AdminDashboard() {
 
       <section className="mt-5 rounded-2xl border border-border bg-card p-4">
         <h2 className="font-display text-lg font-bold text-foreground">店舗別収益</h2>
-        <div className="mt-3 space-y-2">
-          {analytics?.stores.length ? (
-            analytics.stores.map((store) => (
-              <div
-                key={store.store_id}
-                className="flex items-center justify-between gap-3 rounded-xl bg-muted px-3 py-2"
-              >
-                <div className="min-w-0">
+        {analytics?.stores.length ? (
+          <>
+            <label className="mt-3 block text-sm text-muted-foreground" htmlFor="revenue-store-select">
+              表示する店舗を選択
+            </label>
+            <select
+              id="revenue-store-select"
+              value={selectedStoreId}
+              onChange={(event) => setSelectedStoreId(event.target.value)}
+              className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 text-base text-foreground sm:max-w-sm"
+            >
+              <option value="all">全店舗（合計）</option>
+              {storesByName.map((store) => (
+                <option key={store.store_id} value={store.store_id}>
+                  {store.store_name}
+                </option>
+              ))}
+            </select>
+
+            {(() => {
+              if (selectedStoreId === 'all') {
+                return (
+                  <div className="mt-3 rounded-xl bg-muted px-4 py-3">
+                    <p className="text-xs text-muted-foreground">
+                      全{analytics.stores.length}店舗・会計 {analytics.total_orders}件
+                    </p>
+                    <p className="font-display text-2xl font-bold text-foreground">
+                      {yen(analytics.total_revenue)}
+                    </p>
+                  </div>
+                );
+              }
+
+              const store = analytics.stores.find((s) => s.store_id === selectedStoreId);
+              if (!store) {
+                return (
+                  <p className="mt-3 rounded-xl bg-muted p-4 text-center text-sm text-muted-foreground">
+                    選択した店舗が見つかりません。
+                  </p>
+                );
+              }
+
+              return (
+                <div className="mt-3 rounded-xl bg-muted px-4 py-3">
                   <p className="truncate font-bold text-foreground">{store.store_name}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {store.is_visible ? (store.is_open ? '営業中' : '準備中') : '非表示'}・{store.order_count}件
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    {store.is_visible ? (store.is_open ? '営業中' : '準備中') : '非表示'}・会計 {store.order_count}件
+                  </p>
+                  <p className="mt-1 font-display text-2xl font-bold text-foreground">
+                    {yen(store.revenue)}
                   </p>
                 </div>
-                <p className="shrink-0 font-display text-lg font-bold text-foreground">
-                  {yen(store.revenue)}
-                </p>
-              </div>
-            ))
-          ) : (
-            <p className="rounded-xl bg-muted p-6 text-center text-sm text-muted-foreground">
-              収益データはまだありません。
+              );
+            })()}
+          </>
+        ) : (
+          <p className="mt-3 rounded-xl bg-muted p-6 text-center text-sm text-muted-foreground">
+            収益データはまだありません。
+          </p>
+        )}
+      </section>
+
+      <section className="mt-5 rounded-2xl border border-border bg-card p-4">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h2 className="font-display text-lg font-bold text-foreground">サーバーのアクセス</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              API を呼んだ回数です。来場者の人数ではありません。時刻は日本時間です。
             </p>
-          )}
+          </div>
+          <label className="text-sm text-muted-foreground">
+            日付
+            <input
+              type="date"
+              value={accessDate}
+              onChange={(event) => setAccessDate(event.target.value)}
+              className="mt-1 block rounded-lg border border-input bg-background px-3 py-2 text-base text-foreground scheme-light dark:scheme-dark"
+            />
+          </label>
         </div>
+
+        {accessLoading && (
+          <p className="mt-3 text-sm text-muted-foreground">アクセス状況を読み込み中です...</p>
+        )}
+        {accessError && <p className="mt-3 text-sm text-red-500">{accessError}</p>}
+
+        {access && !accessError && (
+          <>
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+              <p className="rounded-xl bg-muted px-3 py-2 text-sm text-foreground">
+                合計 <span className="font-display text-lg font-bold">{access.total}</span> 件
+              </p>
+              <p className="rounded-xl bg-muted px-3 py-2 text-sm text-foreground">
+                ピーク{' '}
+                <span className="font-display text-lg font-bold">
+                  {access.peak ? `${Number(access.peak.hour)}時台 ${access.peak.count}件` : 'なし'}
+                </span>
+              </p>
+              <p className="rounded-xl bg-muted px-3 py-2 text-sm text-foreground">
+                サーバーエラー <span className="font-bold">{access.server_error}</span> 件
+              </p>
+              <p className="rounded-xl bg-muted px-3 py-2 text-sm text-foreground">
+                応答が{Math.round(access.slow_ms / 1000)}秒以上 <span className="font-bold">{access.slow}</span> 件
+              </p>
+            </div>
+
+            <dl className="mt-3 grid grid-cols-2 gap-2 text-sm sm:grid-cols-4">
+              <div className="rounded-xl border border-border px-3 py-2">
+                <dt className="text-muted-foreground">来場者の画面</dt>
+                <dd className="font-bold text-foreground">{access.visitor}件</dd>
+              </div>
+              <div className="rounded-xl border border-border px-3 py-2">
+                <dt className="text-muted-foreground">5秒ごとの再取得</dt>
+                <dd className="font-bold text-foreground">{access.poll}件</dd>
+              </div>
+              <div className="rounded-xl border border-border px-3 py-2">
+                <dt className="text-muted-foreground">店舗の操作</dt>
+                <dd className="font-bold text-foreground">{access.store}件</dd>
+              </div>
+              <div className="rounded-xl border border-border px-3 py-2">
+                <dt className="text-muted-foreground">管理画面</dt>
+                <dd className="font-bold text-foreground">{access.admin}件</dd>
+              </div>
+            </dl>
+
+            <div className="mt-4 space-y-1.5">
+              {access.hours.length ? (
+                access.hours.map((hour) => {
+                  const max = access.peak?.count || 1;
+                  return (
+                    <div key={hour.hour} className="grid grid-cols-[4.5rem_1fr_auto] items-center gap-2 text-xs">
+                      <span className="text-muted-foreground">{Number(hour.hour)}時台</span>
+                      <span className="h-2 overflow-hidden rounded-full bg-muted">
+                        <span
+                          className="block h-full rounded-full bg-[var(--primary)]"
+                          style={{ width: `${Math.max(4, Math.round((hour.total / max) * 100))}%` }}
+                        />
+                      </span>
+                      <span className="text-foreground">{hour.total}件</span>
+                    </div>
+                  );
+                })
+              ) : (
+                <p className="rounded-xl bg-muted p-4 text-center text-sm text-muted-foreground">
+                  この日のアクセスログはまだありません。
+                </p>
+              )}
+            </div>
+
+            <div className="mt-4">
+              <button
+                type="button"
+                onClick={() => void downloadLog()}
+                disabled={downloading || access.total === 0}
+                className="rounded-lg border border-border px-3 py-2 text-sm font-bold text-foreground hover:bg-muted disabled:opacity-40"
+              >
+                {downloading ? 'ダウンロード中...' : 'この日のログをテキストで保存'}
+              </button>
+              {downloadError && <p className="mt-2 text-sm text-red-500">{downloadError}</p>}
+            </div>
+          </>
+        )}
       </section>
 
       <section className="mt-5 rounded-2xl border border-border bg-card p-4">
         <h2 className="font-display text-lg font-bold text-foreground">売上データのリセット</h2>
         <p className="mt-1 text-sm text-muted-foreground">
           本番前に、テストで入れた会計・売上をすべて消して 0 に戻します。店舗・メニュー・ログイン情報は消えません。
-          各店舗の待ち人数も 0 に戻り、受取番号は C-101 から振り直されます。
+          各店舗の待ち人数も 0 に戻り、受取番号は 1 から振り直されます。
         </p>
 
         {resetDone && !resetOpen && (

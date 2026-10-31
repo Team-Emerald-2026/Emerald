@@ -10,6 +10,14 @@
     @apply bg-background text-foreground;
     font-family: var(--font-sans);
   }
+  /* 日付入力の中の文字は、テーマの文字色に合わせる（白背景に白い文字にならないように） */
+  input[type='date']::-webkit-datetime-edit,
+  input[type='date']::-webkit-datetime-edit-text,
+  input[type='date']::-webkit-datetime-edit-year-field,
+  input[type='date']::-webkit-datetime-edit-month-field,
+  input[type='date']::-webkit-datetime-edit-day-field {
+    color: var(--foreground);
+  }
   /* キーボード操作時のフォーカスを常に見えるように */
   :focus-visible {
     outline: 2px solid var(--ring);
@@ -54,3 +62,4 @@
     line-height: 2.75rem;
   }
 }
+

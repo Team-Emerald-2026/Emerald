@@ -2,7 +2,14 @@
 
 namespace App\Providers;
 
+use App\Support\DbSchema;
+use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Database\Events\MigrationsEnded;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
+use Illuminate\Support\Str;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -11,7 +18,7 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        $this->app->singleton(DbSchema::class);
     }
 
     /**
@@ -19,6 +26,20 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        //
+        Event::listen(MigrationsEnded::class, fn () => DbSchema::flush());
+
+        // 総当たり対策はアカウント単位で数える。学内Wi-Fiなどで全店舗が同じIPになっても、
+        // 朝の一斉ログインで他の店舗まで弾かれないようにする
+        RateLimiter::for('login', function (Request $request) {
+            $loginId = Str::lower(trim((string) $request->input('login_id')));
+            // Render の前段の Cloudflare が実際の接続元を入れるヘッダー。
+            // X-Forwarded-For だと Cloudflare のIP（毎回変わる）を拾ってしまう
+            $ip = (string) ($request->header('CF-Connecting-IP') ?: $request->ip());
+
+            return [
+                Limit::perMinute(5)->by('login:'.$request->path().'|'.$loginId.'|'.$ip),
+                Limit::perMinute(60)->by('login-ip:'.$ip),
+            ];
+        });
     }
 }

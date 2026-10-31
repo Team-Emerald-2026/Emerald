@@ -4,6 +4,8 @@ namespace App\Http\Controllers\Api\V1\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Http\Resources\Booth\WaitTimeResource;
+use App\Models\AuditLog;
+use App\Models\FestivalSetting;
 use App\Models\MapFacilities;
 use App\Models\MenuItem;
 use App\Models\Order;
@@ -11,12 +13,15 @@ use App\Models\OrderItem;
 use App\Models\SalesEntry;
 use App\Models\Store;
 use App\Models\User;
+use App\Support\BoothSchedule;
+use App\Support\DbSchema;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 class AdminStoreController extends Controller
 {
@@ -46,6 +51,7 @@ class AdminStoreController extends Controller
     public function index(Request $request)
     {
         $this->authorizeAdmin($request);
+        Store::ensureShowOnCallPageColumn();
 
         $usersByStoreId = User::query()
             ->where('role', 'store')
@@ -81,34 +87,88 @@ class AdminStoreController extends Controller
     public function store(Request $request)
     {
         $this->authorizeAdmin($request);
+        Store::ensureShowOnCallPageColumn();
 
         $validated = $request->validate([
             'id' => ['required', 'string', 'max:64', 'unique:stores,id'],
             'name' => ['required', 'string', 'max:255'],
-            'description' => ['required', 'string', 'max:1000'],
+            'description' => ['nullable', 'string', 'max:1000'],
             'type' => ['required', 'string', 'max:64'],
             'floor' => ['required', 'integer', 'min:1', 'max:8'],
             'map_x' => ['required', 'integer', 'min:0', 'max:100'],
             'map_y' => ['required', 'integer', 'min:0', 'max:100'],
-            'ticket_prefix' => ['nullable', 'string', 'max:16', 'unique:stores,ticket_prefix'],
             'login_id' => ['required', 'string', 'max:255', 'unique:users,login_id'],
-            'password' => ['required', 'string', 'min:8'],
+            // 英数字のみ・8文字以上
+            'password' => ['required', 'string', 'min:8', 'regex:/^[A-Za-z0-9]+$/'],
+            'exhibition_day' => ['sometimes', 'string', Rule::in(FestivalSetting::allowedExhibitionDays())],
             'is_open' => ['sometimes', 'boolean'],
+            'show_on_monitor' => ['sometimes', 'boolean'],
+            'show_on_call_page' => ['sometimes', 'boolean'],
             'current_wait_min' => ['sometimes', 'integer', 'min:0'],
             'current_queue_count' => ['sometimes', 'integer', 'min:0'],
+            ...$this->timeSlotRules(),
+        ]);
+        $this->assertTimeSlotsInOrder($validated);
+
+        try {
+            $result = $this->createStore($validated);
+        } catch (\Throwable $exception) {
+            AuditLog::record($request, 'store.create_failed', $validated['id'], [
+                'name' => $validated['name'],
+                'login_id' => $validated['login_id'],
+                'error' => Str::limit(class_basename($exception).': '.$exception->getMessage(), 500),
+            ]);
+            throw $exception;
+        }
+
+        AuditLog::record($request, 'store.create', $result['id'], [
+            'name' => $result['name'],
+            'login_id' => $result['login_id'],
+            'floor' => $result['floor'],
+            'type' => $result['type'],
+            'exhibition_day' => $result['exhibition_day'],
         ]);
 
-        $result = DB::transaction(function () use ($validated) {
-            $store = Store::query()->create([
+        FestivalSetting::forgetVisitorListCaches();
+
+        return response()->json(['data' => $result], 201, [], JSON_UNESCAPED_UNICODE);
+    }
+
+    private function createStore(array $validated): array
+    {
+        return DB::transaction(function () use ($validated) {
+            $attributes = [
                 'id' => $validated['id'],
                 'name' => $validated['name'],
-                'description' => $validated['description'],
-                'ticket_prefix' => $this->makeTicketPrefix($validated['ticket_prefix'] ?? $validated['name']),
+                'description' => $validated['description'] ?? '',
+                // 受付番号は数字だけにしたので、頭文字は使わない
+                'ticket_prefix' => null,
                 'is_open' => $validated['is_open'] ?? true,
                 'is_visible' => true,
                 'current_wait_min' => $validated['current_wait_min'] ?? 5,
                 'current_queue_count' => $validated['current_queue_count'] ?? 0,
-            ]);
+            ];
+            if (DbSchema::hasColumn('stores', 'exhibition_day')) {
+                $attributes['exhibition_day'] = $validated['exhibition_day'] ?? FestivalSetting::DAY_BOTH;
+            }
+            if (DbSchema::hasColumn('stores', 'show_on_monitor')) {
+                $attributes['show_on_monitor'] = $validated['show_on_monitor'] ?? false;
+            }
+            Store::ensureShowOnCallPageColumn();
+            if (Store::hasShowOnCallPageColumn()) {
+                // 指定がなければフードだけ受取番号ページに出す（今までの呼び出しを続ける）
+                $attributes['show_on_call_page'] = array_key_exists('show_on_call_page', $validated)
+                    ? (bool) $validated['show_on_call_page']
+                    : ($validated['type'] === 'food');
+            }
+            if (DbSchema::hasColumn('stores', 'ticket_limit')) {
+                $attributes['ticket_limit'] = 10;
+            }
+            if (DbSchema::hasColumn('stores', 'time_slots')) {
+                $attributes['time_slots'] = BoothSchedule::normalize($validated['time_slots'] ?? null);
+            }
+
+            $store = Store::query()->create($attributes);
 
             $user = User::query()->create([
                 'store_id' => $store->id,
@@ -128,13 +188,12 @@ class AdminStoreController extends Controller
 
             return $this->serializeStore($store, $user, null, $facility);
         });
-
-        return response()->json(['data' => $result], 201, [], JSON_UNESCAPED_UNICODE);
     }
 
     public function update(Request $request, string $id)
     {
         $this->authorizeAdmin($request);
+        Store::ensureShowOnCallPageColumn();
 
         $store = Store::query()->findOrFail($id);
         $storeUser = User::query()
@@ -144,42 +203,61 @@ class AdminStoreController extends Controller
 
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
-            'description' => ['required', 'string', 'max:1000'],
+            'description' => ['nullable', 'string', 'max:1000'],
             'type' => ['required', 'string', 'max:64'],
             'floor' => ['required', 'integer', 'min:1', 'max:8'],
             'map_x' => ['required', 'integer', 'min:0', 'max:100'],
             'map_y' => ['required', 'integer', 'min:0', 'max:100'],
-            'ticket_prefix' => [
-                'nullable',
-                'string',
-                'max:16',
-                Rule::unique('stores', 'ticket_prefix')->ignore($store->id, 'id'),
-            ],
             'login_id' => [
                 'nullable',
                 'string',
                 'max:255',
                 Rule::unique('users', 'login_id')->ignore($storeUser?->id),
             ],
-            'password' => ['nullable', 'string', 'min:8'],
+            // 変更時のみ。入れるなら英数字8文字以上
+            'password' => ['nullable', 'string', 'min:8', 'regex:/^[A-Za-z0-9]+$/'],
+            'exhibition_day' => ['required', 'string', Rule::in(FestivalSetting::allowedExhibitionDays())],
             'is_open' => ['required', 'boolean'],
             'is_visible' => ['required', 'boolean'],
+            'show_on_monitor' => ['required', 'boolean'],
+            'show_on_call_page' => ['sometimes', 'boolean'],
             'current_wait_min' => ['required', 'integer', 'min:0'],
             'current_queue_count' => ['required', 'integer', 'min:0'],
+            ...$this->timeSlotRules(),
         ]);
+        $this->assertTimeSlotsInOrder($validated);
+
+        $before = $this->serializeStore(
+            $store,
+            $storeUser,
+            null,
+            MapFacilities::query()->where('store_id', $store->id)->first(),
+        );
 
         $result = DB::transaction(function () use ($store, $storeUser, $validated) {
-            $store->fill([
+            $attributes = [
                 'name' => $validated['name'],
-                'description' => $validated['description'],
-                'ticket_prefix' => $validated['ticket_prefix']
-                    ? Str::upper($validated['ticket_prefix'])
-                    : $store->ticket_prefix,
+                'description' => $validated['description'] ?? '',
                 'is_open' => $validated['is_open'],
                 'is_visible' => $validated['is_visible'],
                 'current_wait_min' => $validated['current_wait_min'],
                 'current_queue_count' => $validated['current_queue_count'],
-            ]);
+            ];
+            if (DbSchema::hasColumn('stores', 'exhibition_day')) {
+                $attributes['exhibition_day'] = $validated['exhibition_day'];
+            }
+            Store::ensureShowOnMonitorColumn();
+            $attributes['show_on_monitor'] = $validated['show_on_monitor'];
+            if (array_key_exists('show_on_call_page', $validated)) {
+                Store::ensureShowOnCallPageColumn();
+                $attributes['show_on_call_page'] = (bool) $validated['show_on_call_page'];
+            }
+            // 送られてこなければ今の出展時間のまま（モニター切り替えなどの一部更新で消さない）
+            if (array_key_exists('time_slots', $validated) && DbSchema::hasColumn('stores', 'time_slots')) {
+                $attributes['time_slots'] = BoothSchedule::normalize($validated['time_slots']);
+            }
+
+            $store->fill($attributes);
             $store->save();
 
             if ($storeUser && isset($validated['login_id'])) {
@@ -204,7 +282,116 @@ class AdminStoreController extends Controller
             return $this->serializeStore($store->refresh(), $storeUser?->refresh(), null, $facility);
         });
 
+        $changes = [];
+        foreach ($result as $key => $value) {
+            if (in_array($key, ['revenue', 'order_count'], true) || ($before[$key] ?? null) === $value) {
+                continue;
+            }
+            $changes[$key] = ['from' => $before[$key] ?? null, 'to' => $value];
+        }
+        AuditLog::record($request, 'store.update', $store->id, [
+            'changes' => $changes,
+            'password_changed' => $storeUser !== null && ! empty($validated['password']),
+            'has_login_account' => $storeUser !== null,
+        ]);
+
+        FestivalSetting::forgetVisitorListCaches();
+
         return response()->json(['data' => $result], 200, [], JSON_UNESCAPED_UNICODE);
+    }
+
+    public function updateMonitor(Request $request, string $id)
+    {
+        $this->authorizeAdmin($request);
+
+        $validated = $request->validate([
+            'show_on_monitor' => ['required', 'boolean'],
+        ]);
+
+        try {
+            Store::ensureShowOnMonitorColumn();
+            $store = Store::query()->findOrFail($id);
+            $store->fill([
+                'show_on_monitor' => $validated['show_on_monitor'],
+            ]);
+            $store->save();
+        } catch (\Throwable $exception) {
+            Store::ensureShowOnMonitorColumn();
+            $store = Store::query()->findOrFail($id);
+            $store->show_on_monitor = $validated['show_on_monitor'];
+            try {
+                $store->save();
+            } catch (\Throwable $retryException) {
+                return response()->json([
+                    'error' => [
+                        'code' => 'INTERNAL_ERROR',
+                        'message' => 'モニター表示の更新に失敗しました: '.$retryException->getMessage(),
+                    ],
+                ], 500, [], JSON_UNESCAPED_UNICODE);
+            }
+        }
+
+        $user = User::query()
+            ->where('role', 'store')
+            ->where('store_id', $store->id)
+            ->first();
+        $facility = MapFacilities::query()->where('store_id', $store->id)->first();
+
+        AuditLog::record($request, 'store.monitor', $store->id, [
+            'show_on_monitor' => (bool) $validated['show_on_monitor'],
+        ]);
+
+        return response()->json([
+            'data' => $this->serializeStore($store->refresh(), $user, null, $facility),
+        ], 200, [], JSON_UNESCAPED_UNICODE);
+    }
+
+    public function updateCallPage(Request $request, string $id)
+    {
+        $this->authorizeAdmin($request);
+
+        $validated = $request->validate([
+            'show_on_call_page' => ['required', 'boolean'],
+        ]);
+
+        try {
+            Store::ensureShowOnCallPageColumn();
+            $store = Store::query()->findOrFail($id);
+            $store->fill([
+                'show_on_call_page' => $validated['show_on_call_page'],
+            ]);
+            $store->save();
+        } catch (\Throwable $exception) {
+            Store::ensureShowOnCallPageColumn();
+            $store = Store::query()->findOrFail($id);
+            $store->show_on_call_page = $validated['show_on_call_page'];
+            try {
+                $store->save();
+            } catch (\Throwable $retryException) {
+                return response()->json([
+                    'error' => [
+                        'code' => 'INTERNAL_ERROR',
+                        'message' => '受取番号ページの表示更新に失敗しました: '.$retryException->getMessage(),
+                    ],
+                ], 500, [], JSON_UNESCAPED_UNICODE);
+            }
+        }
+
+        FestivalSetting::forgetVisitorListCaches();
+
+        $user = User::query()
+            ->where('role', 'store')
+            ->where('store_id', $store->id)
+            ->first();
+        $facility = MapFacilities::query()->where('store_id', $store->id)->first();
+
+        AuditLog::record($request, 'store.call_page', $store->id, [
+            'show_on_call_page' => (bool) $validated['show_on_call_page'],
+        ]);
+
+        return response()->json([
+            'data' => $this->serializeStore($store->refresh(), $user, null, $facility),
+        ], 200, [], JSON_UNESCAPED_UNICODE);
     }
 
     public function updateWaitTime(Request $request, string $id)
@@ -212,16 +399,37 @@ class AdminStoreController extends Controller
         abort_unless($request->user()?->role === 'admin', 403, '管理者権限が必要です。');
 
         $store = Store::query()->findOrFail($id);
+        Store::ensureCrowdLevelColumn();
 
-        $validated = $request->validate([
+        $rules = [
             'current_wait_min' => ['required', 'integer', 'min:0', 'max:180'],
             'current_queue_count' => ['required', 'integer', 'min:0', 'max:999'],
             'wait_display_mode' => ['sometimes', 'string', 'in:minutes,text'],
             'wait_display_text' => ['nullable', 'string', 'max:255'],
-        ]);
+            'crowd_level' => ['sometimes', 'nullable', 'string', 'in:empty,moderate,crowded'],
+        ];
+
+        $validated = $request->validate($rules);
+
+        if (array_key_exists('crowd_level', $validated)) {
+            $level = $validated['crowd_level'];
+            $currentText = trim((string) ($validated['wait_display_text'] ?? $store->wait_display_text ?? ''));
+            $currentMode = $validated['wait_display_mode'] ?? $store->wait_display_mode ?? 'minutes';
+            $canBackup = $currentMode !== 'text'
+                || str_starts_with($currentText, Store::CROWD_TEXT_PREFIX)
+                || $currentText === '';
+            if (is_string($level) && $level !== '' && $canBackup) {
+                $validated['wait_display_text'] = Store::CROWD_TEXT_PREFIX.$level;
+                $validated['wait_display_mode'] = 'minutes';
+            }
+            if (! Store::hasCrowdLevelColumn()) {
+                unset($validated['crowd_level']);
+            }
+        }
 
         $store->fill($validated);
         $store->save();
+        Cache::forget('api:v1:restaurants:index');
 
         return WaitTimeResource::make($store)
             ->response()
@@ -233,11 +441,17 @@ class AdminStoreController extends Controller
         $this->authorizeAdmin($request);
 
         $store = Store::query()->findOrFail($id);
-        $store->fill([
+        $hidden = [
             'is_open' => false,
             'is_visible' => false,
-        ]);
+        ];
+        if (DbSchema::hasColumn('stores', 'show_on_monitor')) {
+            $hidden['show_on_monitor'] = false;
+        }
+        $store->fill($hidden);
         $store->save();
+
+        AuditLog::record($request, 'store.hide', $store->id, ['name' => $store->name]);
 
         $facility = MapFacilities::query()->where('store_id', $store->id)->first();
 
@@ -253,6 +467,12 @@ class AdminStoreController extends Controller
         $this->authorizeAdmin($request);
 
         $store = Store::query()->findOrFail($id);
+        $loginIds = User::query()
+            ->where('role', 'store')
+            ->where('store_id', $store->id)
+            ->pluck('login_id')
+            ->all();
+        $orderCount = Order::query()->where('store_id', $store->id)->count();
 
         DB::transaction(function () use ($store) {
             // order_items.menu_item_id は restrict のため、先に明細→注文→メニューの順で消す
@@ -261,10 +481,10 @@ class AdminStoreController extends Controller
             Order::query()->where('store_id', $store->id)->delete();
             MenuItem::query()->where('store_id', $store->id)->delete();
 
-            if (Schema::hasTable('sales_entries')) {
+            if (DbSchema::hasTable('sales_entries')) {
                 SalesEntry::query()->where('store_id', $store->id)->delete();
             }
-            if (Schema::hasTable('ticket_counters')) {
+            if (DbSchema::hasTable('ticket_counters')) {
                 DB::table('ticket_counters')->where('store_id', $store->id)->delete();
             }
 
@@ -281,12 +501,42 @@ class AdminStoreController extends Controller
             $store->delete();
         });
 
+        AuditLog::record($request, 'store.force_delete', $store->id, [
+            'name' => $store->name,
+            'login_ids' => $loginIds,
+            'orders' => $orderCount,
+        ]);
+
         return response()->noContent();
     }
 
     private function authorizeAdmin(Request $request): void
     {
         abort_unless($request->user()?->role === 'admin', 403, '管理者権限が必要です。');
+    }
+
+    private function timeSlotRules(): array
+    {
+        return [
+            'time_slots' => ['sometimes', 'nullable', 'array', 'max:8'],
+            'time_slots.*.day' => ['nullable', 'string', Rule::in(FestivalSetting::allowedDays())],
+            'time_slots.*.start' => ['required', 'date_format:H:i'],
+            'time_slots.*.end' => ['required', 'date_format:H:i'],
+        ];
+    }
+
+    private function assertTimeSlotsInOrder(array $validated): void
+    {
+        $errors = [];
+        foreach ($validated['time_slots'] ?? [] as $index => $slot) {
+            if ($slot['end'] <= $slot['start']) {
+                $errors["time_slots.{$index}.end"] = '終了時刻は開始時刻より後にしてください。';
+            }
+        }
+
+        if ($errors !== []) {
+            throw ValidationException::withMessages($errors);
+        }
     }
 
     private function serializeStore(
@@ -305,28 +555,20 @@ class AdminStoreController extends Controller
             'map_x' => (int) ($facility?->x ?? 50),
             'map_y' => (int) ($facility?->y ?? 50),
             'ticket_prefix' => $store->ticket_prefix,
+            'exhibition_day' => $store->exhibition_day ?? FestivalSetting::DAY_BOTH,
+            'time_slots' => $store->time_slots ?? [],
             'is_open' => (bool) $store->is_open,
             'is_visible' => (bool) $store->is_visible,
+            'show_on_monitor' => (bool) ($store->show_on_monitor ?? false),
+            // 列がまだ無いあいだは、フードだけ今まで通り受取番号ページに出ているものとして扱う
+            'show_on_call_page' => Store::hasShowOnCallPageColumn()
+                ? (bool) ($store->show_on_call_page ?? false)
+                : ($facility?->type === 'food'),
             'current_wait_min' => (int) $store->current_wait_min,
             'current_queue_count' => (int) $store->current_queue_count,
             'login_id' => $user?->login_id,
             'revenue' => (int) ($revenue?->revenue ?? 0),
             'order_count' => (int) ($revenue?->order_count ?? 0),
         ];
-    }
-
-    private function makeTicketPrefix(string $source): string
-    {
-        $base = preg_replace('/[^A-Z0-9]/', '', Str::upper($source)) ?: 'S';
-        $base = Str::limit($base, 3, '');
-        $candidate = $base;
-        $index = 1;
-
-        while (Store::query()->where('ticket_prefix', $candidate)->exists()) {
-            $candidate = Str::limit($base, 2, '') . $index;
-            $index++;
-        }
-
-        return $candidate;
     }
 }

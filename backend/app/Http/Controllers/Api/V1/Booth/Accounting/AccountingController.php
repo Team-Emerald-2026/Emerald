@@ -5,10 +5,12 @@ namespace App\Http\Controllers\Api\V1\Booth\Accounting;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\Booth\Accounting\MenuItemResource;
 use App\Http\Resources\Booth\Accounting\OrderResource;
+use App\Models\FestivalSetting;
 use App\Models\MenuItem;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\Store;
+use App\Support\DbSchema;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -268,6 +270,9 @@ class AccountingController extends Controller
 
         $order->status = 'settled';
         $order->settled_at = now();
+        if (blank($order->festival_day) && DbSchema::hasColumn('orders', 'festival_day')) {
+            $order->festival_day = FestivalSetting::currentDay();
+        }
         $order->save();
 
         return OrderResource::make($order)
@@ -410,9 +415,9 @@ class AccountingController extends Controller
     }
 
     /**
-     * 整理券の番号を発番する。
+     * 整理券の番号を発番する（数字だけ。紙の整理券に店名があるため頭文字は付けない）。
      *
-     * 整理券は「1〜枚数（店舗ごとに設定、既定50）」を順番に使い回す。
+     * 整理券は「1〜枚数（店舗ごとに設定、既定10）」を順番に使い回す。
      * 次の番号は、前回発番した番号の次から探し、上限を超えたら1に戻る。
      * 以下の番号は飛ばす:
      * - 非表示（紛失など）にした番号（店舗情報の設定）
@@ -422,9 +427,9 @@ class AccountingController extends Controller
     private function generateNextTicketNumber(string $storeId): string
     {
         return DB::transaction(function () use ($storeId) {
+            Store::ensureTicketLimitDefault();
             $store = Store::query()->whereKey($storeId)->firstOrFail();
-            $prefix = $store->ticket_prefix ?: strtoupper(substr($storeId, -1));
-            $limit = max(1, (int) ($store->ticket_limit ?? 50));
+            $limit = max(1, (int) ($store->ticket_limit ?? 10));
 
             // 同じ店の発番が同時に走らないよう、カウンター行をロックして直列化する
             $counter = DB::table('ticket_counters')
@@ -436,14 +441,15 @@ class AccountingController extends Controller
                 ->map(fn ($number) => (int) $number);
 
             // 提供前（キャンセル以外）の注文が持っている番号
-            // （CAST ... AS UNSIGNED は MySQL 専用で Postgres では失敗するため、PHP 側で計算する）
+            // 旧形式「C-12」と新形式「12」のどちらでも数字部分を取る
             $inUse = Order::query()
                 ->forStore($storeId)
                 ->whereNull('served_at')
                 ->where('status', '!=', 'canceled')
                 ->where('ticket_number', 'like', $prefix.'-%')
                 ->pluck('ticket_number')
-                ->map(fn ($number) => (int) substr((string) $number, strlen($prefix) + 1));
+                ->map(fn ($number) => $this->ticketNumberValue((string) $number))
+                ->filter(fn ($number) => $number !== null);
 
             $unavailable = $disabled->merge($inUse)->flip();
 
@@ -485,6 +491,16 @@ class AccountingController extends Controller
 
             return $prefix.'-'.$next;
         });
+    }
+
+    /** 受付番号文字列から数字部分を取り出す。取れなければ null */
+    private function ticketNumberValue(string $ticketNumber): ?int
+    {
+        if (preg_match('/(\d+)$/', $ticketNumber, $matches) !== 1) {
+            return null;
+        }
+
+        return (int) $matches[1];
     }
 
     private function currentStoreId(): string

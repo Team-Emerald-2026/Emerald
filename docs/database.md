@@ -22,8 +22,10 @@ stores
 - id
 - name
 - description
-- ticket_prefix
+- ticket_prefix（未使用。互換のため残置。新規発番では使わない）
 - is_open
+- is_visible
+- exhibition_day（`day1` / `day2` / `both`。同じ部屋の日替わりブース用）
 - current_wait_min
 - current_queue_count
 - wait_display_mode（予定: `minutes` / `text`）
@@ -123,9 +125,9 @@ ticket_counters
 - updated_at
 
 運用メモ：
-- 初回利用時は各店舗の prefix で `PREFIX-101` が採番されます（例: `C-101`）。
+- 初回利用時は `1` から採番されます（数字だけ）。
 - カウンタは各店舗単位で管理され、DB トランザクションと行ロックで安全に更新されます。
-- 既存 orders がある場合は、その prefix の最大値から続けます。
+- 1〜枚数を使い回し、提供前の注文や非表示番号は飛ばします。
 
 #### テーブル名：
 order_items
@@ -290,6 +292,24 @@ store_id → stores.id
 
 読み取り権限：
 来場者、店舗、管理者
+
+書き込み権限：
+管理者
+
+#### テーブル名：
+festival_settings
+
+目的：
+学園祭の「今日が何日目か」など、全体設定を持つ
+
+主なカラム：
+- key（PK。例: `current_day`）
+- value（例: `day1` / `day2`）
+- created_at
+- updated_at
+
+読み取り権限：
+来場者（API経由）、管理者
 
 書き込み権限：
 管理者

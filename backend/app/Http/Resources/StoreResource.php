@@ -15,6 +15,7 @@ class StoreResource extends JsonResource
             'description' => $this->description,
             'is_open' => (bool) $this->is_open,
             'is_visible' => (bool) ($this->is_visible ?? true),
+            'exhibition_day' => $this->exhibition_day ?? 'both',
             // 1人当たりの待ち時間（分）
             'current_wait_min' => (int) $this->current_wait_min,
             'current_queue_count' => (int) $this->current_queue_count,
@@ -24,12 +25,25 @@ class StoreResource extends JsonResource
             'wait_time' => (int) $this->current_wait_min,
             'wait_display_mode' => $this->wait_display_mode ?? 'minutes',
             'wait_display_text' => $this->wait_display_text,
+            'crowd_level' => $this->resource->resolvedCrowdLevel(),
             'map_facility_id' => $this->relationLoaded('mapFacility')
                 ? ($this->mapFacility?->id !== null ? (string) $this->mapFacility->id : null)
                 : null,
+            'floor' => $this->relationLoaded('mapFacility') && $this->mapFacility?->floor !== null
+                ? (int) $this->mapFacility->floor
+                : null,
+            // 出展時間（日本時間）。空なら一日中
+            'time_slots' => $this->time_slots ?? [],
         ];
 
+        // 列を読んでいない古いキャッシュではキーを出さない。画面はフードを今まで通り出す
+        if (array_key_exists('show_on_call_page', $this->resource->getAttributes())) {
+            $data['show_on_call_page'] = (bool) $this->show_on_call_page;
+        }
+
         if ($this->relationLoaded('menuItems')) {
+            // Collection のままキャッシュすると、DB保存時に壊れ、
+            // 再取得で配列ではなくなり画面の .map が落ちる。配列にして返す。
             $data['menu_items'] = $this->menuItems->map(fn ($item) => [
                 'id' => $item->id,
                 'name' => $item->name,
@@ -37,18 +51,24 @@ class StoreResource extends JsonResource
                 'price' => (int) $item->price,
                 'is_available' => (bool) $item->is_available,
                 'is_sold_out' => (bool) $item->is_sold_out,
-            ])->values();
+            ])->values()->all();
         }
 
         if ($this->relationLoaded('orders')) {
             $data['ticket_numbers'] = $this->orders
                 ->pluck('ticket_number')
-                ->values();
+                ->values()
+                ->all();
         }
+
+        // 呼び出し画面は type=food で絞る。地図施設の種別を返す（無いときは booth）
+        $facilityType = $this->relationLoaded('mapFacility')
+            ? ($this->mapFacility?->type ?? 'booth')
+            : 'booth';
 
         return [
             ...$data,
-            'type' => 'stores',
+            'type' => $facilityType,
             'attributes' => $data,
         ];
     }

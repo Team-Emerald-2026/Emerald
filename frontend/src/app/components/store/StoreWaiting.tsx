@@ -1,8 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import StoreShell from './StoreShell';
 import { useFestival, logoutStore } from '../../lib/festivalStore';
-import { Plus, Minus, Users, Undo2 } from 'lucide-react';
-import { ApiError, fetchBoothDashboard, updateWaitTime } from '../../lib/api';
+import { Plus, Minus, Users, Undo2, Armchair } from 'lucide-react';
+import { ApiError, fetchBoothDashboard, updateWaitTime, type CrowdLevel } from '../../lib/api';
+import {
+  crowdBackupText,
+  crowdLevelLabel,
+  crowdLevelOptions,
+  crowdLevelStyle,
+  isCrowdBackupText,
+  parseCrowdFromStore,
+  parseCrowdLevel,
+} from '../../lib/crowdDisplay';
 
 /** サーバーの待ち人数を取りに行く間隔（ミリ秒） */
 const POLL_INTERVAL_MS = 5000;
@@ -36,6 +45,16 @@ export default function StoreWaiting() {
   const [flash, setFlash] = useState<string | null>(null);
   /** 直前に送った増減（「元に戻す」で打ち消す用） */
   const [lastDelta, setLastDelta] = useState<number | null>(null);
+  /** 店内の混雑。未設定は null */
+  const [crowdLevel, setCrowdLevel] = useState<CrowdLevel | null>(null);
+  const [crowdSaving, setCrowdSaving] = useState(false);
+  const [crowdError, setCrowdError] = useState('');
+  const [crowdFlash, setCrowdFlash] = useState<string | null>(null);
+  const crowdSavingRef = useRef(false);
+  /** 店内混雑の保存のたびに増やす。保存より前に始まった取得で「未設定」に戻さない */
+  const crowdVersionRef = useRef(0);
+  const waitModeRef = useRef<'minutes' | 'text'>('minutes');
+  const waitTextRef = useRef<string | null>(null);
 
   const setServerCount = (value: number) => {
     serverCountRef.current = value;
@@ -47,6 +66,7 @@ export default function StoreWaiting() {
     async (signal?: AbortSignal) => {
       if (!session) return;
       const version = sendVersionRef.current;
+      const crowdVersion = crowdVersionRef.current;
       try {
         const dashboard = await fetchBoothDashboard(undefined, signal);
         if (signal?.aborted) return;
@@ -57,6 +77,11 @@ export default function StoreWaiting() {
         // 送信中や、取得している間に送信があったときは、古い値で表示が戻らないよう上書きしない
         if (inFlightRef.current === 0 && version === sendVersionRef.current) {
           setServerCount(Number(dashboard.current_queue_count) || 0);
+        }
+        waitModeRef.current = dashboard.wait_display_mode === 'text' ? 'text' : 'minutes';
+        waitTextRef.current = dashboard.wait_display_text ?? null;
+        if (!crowdSavingRef.current && crowdVersion === crowdVersionRef.current) {
+          setCrowdLevel(parseCrowdFromStore(dashboard));
         }
         setLoadError('');
       } catch (err) {
@@ -89,6 +114,56 @@ export default function StoreWaiting() {
     const timer = window.setTimeout(() => setFlash(null), 4000);
     return () => window.clearTimeout(timer);
   }, [flash]);
+
+  useEffect(() => {
+    if (!crowdFlash) return;
+    const timer = window.setTimeout(() => setCrowdFlash(null), 4000);
+    return () => window.clearTimeout(timer);
+  }, [crowdFlash]);
+
+  const setCrowd = async (level: CrowdLevel) => {
+    if (!token || crowdSavingRef.current) return;
+    crowdSavingRef.current = true;
+    crowdVersionRef.current += 1;
+    const crowdVersion = crowdVersionRef.current;
+    setCrowdSaving(true);
+    setCrowdError('');
+    setCrowdFlash(null);
+    setCrowdLevel(level);
+    try {
+      const canBackup =
+        waitModeRef.current !== 'text' ||
+        isCrowdBackupText(waitTextRef.current) ||
+        !waitTextRef.current?.trim();
+      const updated = await updateWaitTime(token, {
+        crowd_level: level,
+        ...(canBackup
+          ? {
+              wait_display_mode: 'minutes' as const,
+              wait_display_text: crowdBackupText(level),
+            }
+          : {}),
+      });
+      if (crowdVersion !== crowdVersionRef.current) return;
+      if (canBackup) {
+        waitModeRef.current = 'minutes';
+        waitTextRef.current = crowdBackupText(level);
+      }
+      setCrowdLevel(parseCrowdFromStore(updated) ?? parseCrowdLevel(updated.crowd_level) ?? level);
+      setCrowdFlash(`店内を「${crowdLevelLabel(level)}」にしました`);
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) {
+        logoutStore();
+        return;
+      }
+      setCrowdError('店内の混雑を変更できませんでした。もう一度お試しください。');
+      crowdSavingRef.current = false;
+      void load();
+    } finally {
+      crowdSavingRef.current = false;
+      setCrowdSaving(false);
+    }
+  };
 
   const setPendingValue = (value: number) => {
     pendingRef.current = value;
@@ -189,7 +264,8 @@ export default function StoreWaiting() {
 
   return (
     <StoreShell title="待ち人数管理">
-      <div className="mx-auto max-w-md rounded-3xl border border-border bg-card p-8 text-center">
+      <div className="mx-auto grid max-w-6xl grid-cols-1 gap-4 lg:grid-cols-2 lg:items-stretch">
+      <div className="flex h-full flex-col rounded-3xl border border-border bg-card p-6 text-center sm:p-8">
         <span
           className="mx-auto grid h-12 w-12 place-items-center rounded-2xl"
           style={{ backgroundColor: 'var(--primary)' }}
@@ -220,7 +296,7 @@ export default function StoreWaiting() {
           </p>
         )}
 
-        <div className="mt-6 flex items-center justify-center gap-4">
+        <div className="mt-auto flex items-center justify-center gap-4 pt-6">
           <button
             type="button"
             onClick={() => changeBy(-1)}
@@ -261,6 +337,66 @@ export default function StoreWaiting() {
             )}
           </div>
         )}
+      </div>
+
+      <div className="flex h-full flex-col rounded-3xl border border-border bg-card p-6 text-center sm:p-8">
+        <span
+          className="mx-auto grid h-12 w-12 place-items-center rounded-2xl"
+          style={{ backgroundColor: 'var(--accent)' }}
+        >
+          <Armchair className="h-6 w-6 text-white" />
+        </span>
+        <p className="mt-3 text-sm text-muted-foreground">店内の混雑状況</p>
+        <p className="font-display text-3xl font-bold text-foreground">
+          {crowdLevel ? crowdLevelLabel(crowdLevel) : '未設定'}
+        </p>
+        <p className="mt-2 text-xs text-muted-foreground">
+          座席の埋まりを見て選んでください。来場者の店舗名の横に表示されます。待ち人数（注文の列）とは別です。
+        </p>
+        <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+          {crowdLevelOptions.map((option) => (
+            <span key={option.value} className="block">
+              {option.label} {option.hint}
+            </span>
+          ))}
+        </p>
+
+        {crowdError && (
+          <p role="alert" className="mt-3 text-sm text-red-500">
+            {crowdError}
+          </p>
+        )}
+
+        <div className="mt-auto grid grid-cols-1 gap-3 pt-6 sm:grid-cols-3">
+          {crowdLevelOptions.map((option) => {
+            const active = crowdLevel === option.value;
+            const colors = crowdLevelStyle(option.value);
+            return (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => void setCrowd(option.value)}
+                disabled={crowdSaving}
+                aria-pressed={active}
+                className="min-h-14 w-full rounded-2xl border px-3 py-3 text-sm font-bold sm:text-base disabled:opacity-40"
+                style={{
+                  backgroundColor: active ? colors.bg : 'transparent',
+                  borderColor: active ? colors.fg : 'var(--border)',
+                  color: active ? colors.fg : 'var(--foreground)',
+                }}
+              >
+                {option.label}
+              </button>
+            );
+          })}
+        </div>
+
+        {crowdFlash && (
+          <div className="mt-4 rounded-xl bg-muted px-3 py-2 text-sm text-foreground" aria-live="polite">
+            {crowdFlash}
+          </div>
+        )}
+      </div>
       </div>
     </StoreShell>
   );

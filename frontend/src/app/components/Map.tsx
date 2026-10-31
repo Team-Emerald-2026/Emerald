@@ -4,6 +4,7 @@ import {
   FlaskConical,
   UtensilsCrossed,
   Ticket,
+  ShoppingBag,
   Info as InfoIcon,
   HeartPulse,
   Headset,
@@ -13,11 +14,18 @@ import {
   DoorOpen,
   type LucideIcon,
 } from 'lucide-react';
-import { fetchMapFacilities, type BackendMapFacility } from '../lib/api';
+import { fetchFestivalDay, fetchMapFacilities, showsOnCallPage, type BackendMapFacility } from '../lib/api';
+import { compareRank, formatSlots, japanNowHm, pinRank } from '../lib/boothSchedule';
 import { floors, mapImageByFloor, type MapFloor } from '../lib/campusMap';
+import {
+  eventKeyToFestivalDay,
+  festivalDayToEventKey,
+  type EventDayKey,
+} from '../lib/eventSchedule';
+import EventDayTabs from './EventDayTabs';
 
-// 管理画面で選べるのは 体験 / フード / 作品展示 / 案内 / 金券販売 / 運営サポート / 男子トイレ / 女子トイレ / 男女トイレ /
-// 自販機 / 非常口 の11個。救護室は、以前に登録された場所を表示するためだけに残している。
+// 管理画面で選べるのは 体験 / フード / 作品展示 / 案内 / 金券販売 / サークル販売 / 運営サポート /
+// 男子トイレ / 女子トイレ / 男女トイレ / 自販機 / 非常口。救護室は旧データ表示用。
 type BoothType =
   | 'フード'
   | '体験'
@@ -25,6 +33,7 @@ type BoothType =
   | '案内'
   | '運営サポート'
   | '金券販売'
+  | 'サークル販売'
   | '男子トイレ'
   | '女子トイレ'
   | '男女トイレ'
@@ -40,6 +49,7 @@ const typeOrder: BoothType[] = [
   '案内',
   '運営サポート',
   '金券販売',
+  'サークル販売',
   '男子トイレ',
   '女子トイレ',
   '男女トイレ',
@@ -59,7 +69,14 @@ interface Facility {
   floor: Floor;
   x: number; // マップ上の相対座標（%）
   y: number;
+  /** 受取番号ページ（呼び出し）へ案内するか */
+  showOnCallPage: boolean;
+  /** この日の出展時間（空なら一日中） */
+  timeSlots: { start: string; end: string }[];
 }
+
+/** 同じ教室（同じ位置）かどうかの判定に使うキー */
+const positionKey = (f: Facility) => `${f.floor}:${Math.round(f.x)}:${Math.round(f.y)}`;
 
 /** 地図のピンに表示する文字（部屋番号などの場所の名前。なければ名前） */
 const pinText = (f: Facility) => f.label ?? f.name;
@@ -75,6 +92,7 @@ const typeIcon: Record<BoothType, LucideIcon> = {
   体験: FlaskConical,
   フード: UtensilsCrossed,
   金券販売: Ticket,
+  サークル販売: ShoppingBag,
   男子トイレ: Toilet,
   女子トイレ: Toilet,
   男女トイレ: Toilet,
@@ -90,6 +108,7 @@ const typeColor: Record<BoothType, string> = {
   体験: 'var(--primary)',
   フード: 'var(--accent)',
   金券販売: '#7c5cff',
+  サークル販売: '#e11d48',
   男子トイレ: '#2563eb',
   女子トイレ: '#db2777',
   男女トイレ: '#64748b',
@@ -117,6 +136,9 @@ function toBoothType(type: string): BoothType {
     case '金券販売':
     case '物販':
       return '金券販売';
+    case 'circle_sales':
+    case 'サークル販売':
+      return 'サークル販売';
     case 'toilet_men':
     case '男子トイレ':
       return '男子トイレ';
@@ -172,6 +194,8 @@ function toFacility(facility: BackendMapFacility): Facility {
     // 位置は管理画面の「マップ編集」で保存した値をそのまま使う
     x: toPercent(Number(facility.x), 240),
     y: toPercent(Number(facility.y), 180),
+    showOnCallPage: showsOnCallPage(facility),
+    timeSlots: (facility.time_slots ?? []).map(({ start, end }) => ({ start, end })),
   };
 }
 
@@ -186,16 +210,39 @@ export default function CampusMap() {
       : '1F';
   const [floor, setFloor] = useState<MapFloor>(initialFloor);
   const [type, setType] = useState<'すべて' | BoothType>('すべて');
+  const [dayKey, setDayKey] = useState<EventDayKey | null>(null);
+  const [todayKey, setTodayKey] = useState<EventDayKey | null>(null);
   const [facilities, setFacilities] = useState<Facility[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [clickPos, setClickPos] = useState<{ x: number; y: number } | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
+    fetchFestivalDay(controller.signal)
+      .then((current) => {
+        if (controller.signal.aborted) return;
+        const key = festivalDayToEventKey(current);
+        setTodayKey(key);
+        setDayKey((prev) => prev ?? key);
+      })
+      .catch(() => {
+        if (controller.signal.aborted) return;
+        const fallback = festivalDayToEventKey('day1');
+        setTodayKey(fallback);
+        setDayKey((prev) => prev ?? fallback);
+      });
+    return () => controller.abort();
+  }, []);
 
-    fetchMapFacilities(controller.signal)
+  useEffect(() => {
+    if (!dayKey) return;
+
+    const controller = new AbortController();
+
+    fetchMapFacilities(controller.signal, eventKeyToFestivalDay(dayKey))
       .then((backendFacilities) => {
         setFacilities(backendFacilities.map(toFacility));
+        setError(null);
       })
       .catch((err: unknown) => {
         if (err instanceof DOMException && err.name === 'AbortError') return;
@@ -203,7 +250,7 @@ export default function CampusMap() {
       });
 
     return () => controller.abort();
-  }, []);
+  }, [dayKey]);
 
   const displayFacilities = useMemo(() => {
     const unique: Record<string, Facility> = Object.create(null);
@@ -220,6 +267,14 @@ export default function CampusMap() {
     // 場所の一覧は DB が元。固定リストで補わない（管理画面で消した場所が復活しないように）
     return Object.values(unique);
   }, [facilities]);
+
+  // 出展時間の表示とピンの切り替え用。サーバーには取りに行かず、30秒ごとに時刻だけ更新する
+  const [nowHm, setNowHm] = useState(() => japanNowHm());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNowHm(japanNowHm()), 30_000);
+    return () => window.clearInterval(timer);
+  }, []);
+  const isToday = dayKey !== null && dayKey === todayKey;
 
   useEffect(() => {
     const target = displayFacilities.find(
@@ -241,14 +296,76 @@ export default function CampusMap() {
   );
 
   const match = (f: Facility) => f.floor === floor && (type === 'すべて' || f.type === type);
-  // ピンは管理画面で登録した位置のまま表示する（自動で動かすと管理画面の見た目とずれるため）
-  const filtered = displayFacilities.filter(match);
+  // 下の一覧は、同じ教室のブースも全部出す（教室ごと・開始時刻の順。時刻では消さない）
+  const filtered = displayFacilities
+    .filter(match)
+    .sort((a, b) => {
+      const byRoom = positionKey(a).localeCompare(positionKey(b));
+      if (byRoom !== 0) return byRoom;
+      const byStart = (a.timeSlots[0]?.start ?? '').localeCompare(b.timeSlots[0]?.start ?? '');
+      if (byStart !== 0) return byStart;
+      return a.name.localeCompare(b.name, 'ja');
+    });
   const selectedFacility =
     displayFacilities.find(
       (f) =>
         (targetStoreId != null && f.storeId === targetStoreId) ||
         (targetFacilityId != null && f.id === targetFacilityId),
     ) ?? null;
+
+  // 同じ教室のブース（開始時刻の順）
+  const facilitiesByPosition = useMemo(() => {
+    const groups = new Map<string, Facility[]>();
+    for (const f of displayFacilities) {
+      const key = positionKey(f);
+      groups.set(key, [...(groups.get(key) ?? []), f]);
+    }
+    return groups;
+  }, [displayFacilities]);
+  const roommates = (f: Facility) => facilitiesByPosition.get(positionKey(f)) ?? [f];
+
+  // ピンは管理画面で登録した位置のまま、1つの教室に1つだけ出す。
+  // 選んだブースがあればそれ、なければ今出展中（→一日中→これから→終了）のブース
+  const pins = Array.from(facilitiesByPosition.values())
+    .map((group) => {
+      const candidates = group.filter(match);
+      if (candidates.length === 0) return null;
+      const selected = candidates.find((f) => f.id === selectedFacility?.id);
+      if (selected) return selected;
+      return candidates.reduce((best, f) =>
+        compareRank(pinRank(f.timeSlots, isToday, nowHm), pinRank(best.timeSlots, isToday, nowHm)) < 0
+          ? f
+          : best,
+      );
+    })
+    .filter((f): f is Facility => f !== null);
+  const selectedRoom = selectedFacility ? roommates(selectedFacility).filter((f) => f.storeId) : [];
+
+  /** 一覧・時間割に出す、出展時間の状態 */
+  const slotBadge = (f: Facility): { label: string; active: boolean } | null => {
+    if (f.timeSlots.length === 0 || !isToday) return null;
+    const active = f.timeSlots.find((slot) => slot.start <= nowHm && nowHm < slot.end);
+    if (active) return { label: '出展中', active: true };
+    const next = f.timeSlots.find((slot) => nowHm < slot.start);
+    return { label: next ? `${next.start}から` : '本日終了', active: false };
+  };
+
+  const SlotBadge = ({ f }: { f: Facility }) => {
+    const badge = slotBadge(f);
+    if (!badge) return null;
+    return (
+      <span
+        className="rounded-full px-1.5 py-0.5 text-[10px] font-bold"
+        style={
+          badge.active
+            ? { backgroundColor: 'var(--primary)', color: 'var(--primary-foreground)' }
+            : { backgroundColor: 'var(--muted)', color: 'var(--muted-foreground)' }
+        }
+      >
+        {badge.label}
+      </span>
+    );
+  };
 
   useEffect(() => {
     if (!selectedFacility) return;
@@ -303,6 +420,12 @@ export default function CampusMap() {
               {f.floor}
               {roomNote(f) ? `・${roomNote(f)}` : ''}・{f.type}
             </p>
+            {f.timeSlots.length > 0 && (
+              <p className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+                <span>{formatSlots(f.timeSlots)}</span>
+                <SlotBadge f={f} />
+              </p>
+            )}
           </div>
           <span className="shrink-0 text-xs font-bold" style={{ color: 'var(--primary)' }}>
             {isSelected ? '選択中' : '地図で見る'}
@@ -315,6 +438,17 @@ export default function CampusMap() {
   return (
     <div className="space-y-3 p-4">
       <h1 className="font-display text-2xl font-bold text-foreground">{campusMap.name}</h1>
+
+      {dayKey && (
+        <EventDayTabs
+          value={dayKey}
+          todayKey={todayKey}
+          onChange={(next) => {
+            setDayKey(next);
+            setType('すべて');
+          }}
+        />
+      )}
 
       {error && (
         <div className="rounded-2xl border border-border bg-card p-6 text-center text-sm text-muted-foreground">
@@ -389,8 +523,9 @@ export default function CampusMap() {
           >
             {floor}
           </span>
-          {filtered.map((f) => {
-            const isSelected = selectedFacility?.id === f.id;
+          {pins.map((f) => {
+            const isSelected =
+              selectedFacility != null && positionKey(selectedFacility) === positionKey(f);
             const hasSelection = selectedFacility != null;
             const PinIcon = typeIcon[f.type];
             return (
@@ -433,13 +568,15 @@ export default function CampusMap() {
               </button>
             );
           })}
-          {filtered.length === 0 && (
+          {pins.length === 0 && (
             <p className="absolute bottom-3 left-1/2 z-10 -translate-x-1/2 rounded-full bg-white/90 px-3 py-1 text-xs text-muted-foreground">
               この階に表示できるブースはありません
             </p>
           )}
         </div>
       </div>
+
+      <p className="px-1 text-sm text-muted-foreground">※喫煙所は8階上の屋上になります。</p>
 
       {boothTypes.length > 0 && (
         <ul className="flex flex-wrap gap-x-3 gap-y-1.5 px-1" aria-label="アイコンの意味">
@@ -492,6 +629,34 @@ export default function CampusMap() {
               閉じる
             </button>
           </div>
+          {selectedFacility.storeId && (selectedRoom.length > 1 || selectedFacility.timeSlots.length > 0) && (
+            <div className="mt-3 rounded-xl bg-muted p-3">
+              <p className="text-xs font-bold text-muted-foreground">この教室の出展時間</p>
+              <ul className="mt-1.5 space-y-1">
+                {selectedRoom.map((f) => {
+                  const isSelected = f.id === selectedFacility.id;
+                  return (
+                    <li key={f.id}>
+                      <button
+                        type="button"
+                        onClick={() => selectFacility(f)}
+                        className={`flex w-full items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-left text-sm ${
+                          isSelected ? 'bg-card font-bold text-foreground' : 'text-foreground'
+                        }`}
+                        aria-pressed={isSelected}
+                      >
+                        <span className="min-w-0 truncate">{f.name}</span>
+                        <span className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
+                          {f.timeSlots.length > 0 ? formatSlots(f.timeSlots) : '終日'}
+                          <SlotBadge f={f} />
+                        </span>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          )}
           <div className="mt-4 flex gap-2">
             {selectedFacility.storeId ? (
               <Link
@@ -506,7 +671,7 @@ export default function CampusMap() {
                 詳細準備中
               </span>
             )}
-            {selectedFacility.type === 'フード' && selectedFacility.storeId && (
+            {selectedFacility.showOnCallPage && selectedFacility.storeId && (
               <Link
                 to={`/restaurants?store=${encodeURIComponent(selectedFacility.storeId)}`}
                 className="min-h-11 flex-1 rounded-xl border border-border px-3 py-2 text-center text-sm font-bold text-foreground"

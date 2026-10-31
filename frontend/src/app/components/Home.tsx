@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Clock, ShoppingBag, MapPin, ChevronRight, Sparkles, Megaphone } from 'lucide-react';
+import { Clock, ShoppingBag, MapPin, ClipboardList, ChevronRight, Sparkles, Megaphone } from 'lucide-react';
 import {
   fetchEvents,
   fetchMapFacilities,
@@ -9,6 +9,7 @@ import {
   type BackendStore,
   type EventNotice,
 } from '../lib/api';
+import { japanNowHm, slotState } from '../lib/boothSchedule';
 import { isNoticeVisibleAt, jstParts, timeLabel } from '../lib/eventSchedule';
 import {
   BUSY_QUEUE_COUNT,
@@ -46,6 +47,9 @@ function shouldLoadHeroVideo(): boolean {
   return true;
 }
 
+const SURVEY_URL =
+  'https://forms.cloud.microsoft/Pages/ResponsePage.aspx?id=ayQ05X5z-keKpy3ftq9Xxm86-CHQVhRBs1-vWwLshCpURjNUMzFIUVpNVjJMSjE2OFI5N1BIUFk4Wi4u';
+
 const quickMenu = [
   {
     to: '/attractions',
@@ -67,6 +71,13 @@ const quickMenu = [
     title: 'マップ',
     desc: '会場とブースの場所を確認',
     color: '#7c5cff',
+  },
+  {
+    href: SURVEY_URL,
+    icon: ClipboardList,
+    title: 'アンケート',
+    desc: '学園祭のご感想をお聞かせください',
+    color: '#0ea5e9',
   },
 ];
 
@@ -90,10 +101,16 @@ interface RecommendedBooth {
 }
 
 function toArea(store: BackendStore, facility?: BackendMapFacility): string {
-  if (!facility) return store.description ?? '場所未設定';
+  if (!facility) {
+    const description = store.description?.trim();
+    return description || '場所未設定';
+  }
 
   const floor = Number(facility.floor);
-  return Number.isFinite(floor) ? `${floor}F` : '場所未設定';
+  const floorLabel = Number.isFinite(floor) ? `${floor}F` : null;
+  const room = facility.label?.trim();
+  if (floorLabel && room) return `${floorLabel}・${room}`;
+  return floorLabel ?? room ?? '場所未設定';
 }
 
 function RecommendationSkeleton() {
@@ -145,10 +162,18 @@ export default function Home() {
       fetchRestaurants(controller.signal),
       fetchMapFacilities(controller.signal),
     ])
-      .then(([stores, facilities]) => {
+      .then(([restaurantResult, facilities]) => {
+        const stores = restaurantResult.stores;
+        const today = restaurantResult.meta?.current_day ?? 'day1';
+        const nowHm = japanNowHm();
         const facilityByStoreId = new Map(facilities.map((facility) => [facility.store_id, facility]));
         const nextBooths = stores
           .filter((store) => store.is_open)
+          // 出展時間外のブースはおすすめしない
+          .filter((store) => {
+            const state = slotState(store.time_slots, today, true, nowHm).kind;
+            return state === 'always' || state === 'active';
+          })
           .map((store) => {
             const wait = getWaitDisplay(store);
             return {
@@ -367,12 +392,11 @@ export default function Home() {
           まずはここから
         </h2>
         <ul className="space-y-3">
-          {quickMenu.map(({ to, icon: Icon, title, desc, color }) => (
-            <li key={to}>
-              <Link
-                to={to}
-                className="flex items-center gap-4 rounded-2xl border border-border bg-card p-4 transition-colors hover:bg-muted"
-              >
+          {quickMenu.map(({ to, href, icon: Icon, title, desc, color }) => {
+            const className =
+              'flex items-center gap-4 rounded-2xl border border-border bg-card p-4 transition-colors hover:bg-muted';
+            const content = (
+              <>
                 <span
                   className="grid h-12 w-12 shrink-0 place-items-center rounded-xl"
                   style={{ backgroundColor: color }}
@@ -384,9 +408,28 @@ export default function Home() {
                   <span className="block text-sm text-muted-foreground">{desc}</span>
                 </span>
                 <ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground" />
-              </Link>
-            </li>
-          ))}
+              </>
+            );
+
+            return (
+              <li key={to ?? href}>
+                {href ? (
+                  <a
+                    href={href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={className}
+                  >
+                    {content}
+                  </a>
+                ) : (
+                  <Link to={to!} className={className}>
+                    {content}
+                  </Link>
+                )}
+              </li>
+            );
+          })}
         </ul>
       </section>
     </div>

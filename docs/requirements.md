@@ -36,5 +36,5 @@
 - ホームのヒーローは `frontend/public/hero.mp4` を使用する。
 - 店舗ログイン、ログアウト、ダッシュボード、会計メニュー、会計注文、清算 API が追加済み。
 - 店舗登録画面 `/store/register` と店舗情報画面 `/store/profile` が追加済み。
-- 受付番号は `stores.ticket_prefix` と `ticket_counters` により、店舗ごとに `C-101` のような形式で採番する。
+- 受付番号は `ticket_counters` により、店舗ごとに数字だけ（例: `1`, `2`）で採番する。
 - OpenAPI 仕様 `docs/openapi.yml` と API 計測用 `frontend/tests/apitest.js` が追加済み。

@@ -24,6 +24,7 @@ const AdminDashboard = lazy(() => import('./components/admin/AdminDashboard'));
 const AdminStores = lazy(() => import('./components/admin/AdminStores'));
 const AdminEvents = lazy(() => import('./components/admin/AdminEvents'));
 const AdminMap = lazy(() => import('./components/admin/AdminMap'));
+const AdminAnalytics = lazy(() => import('./components/admin/AdminAnalytics'));
 
 // 遅延読み込み中に表示する簡易ローディング
 function withSuspense(element: ReactNode) {
@@ -52,7 +53,7 @@ export const router = createBrowserRouter([
       { path: '/map', element: <CampusMap /> },
     ],
   },
-  // 校内モニター（プロジェクター）向け呼び出し番号一覧（認証不要）
+  // 校内モニター（階段上プロジェクター）向け案内スライド＋呼び出し番号（認証不要）
   { path: '/monitor', element: withSuspense(<Monitor />) },
   // 店舗向け画面（来場者ナビとは独立）
   { path: '/store/login', element: withSuspense(<StoreLogin />) },
@@ -64,6 +65,7 @@ export const router = createBrowserRouter([
   { path: '/store/profile', element: withSuspense(<StoreProfile />) },
   { path: '/admin/login', element: withSuspense(<AdminLogin />) },
   { path: '/admin', element: withSuspense(<AdminDashboard />) },
+  { path: '/admin/analytics', element: withSuspense(<AdminAnalytics />) },
   { path: '/admin/stores', element: withSuspense(<AdminStores />) },
   { path: '/admin/map', element: withSuspense(<AdminMap />) },
   { path: '/admin/events', element: withSuspense(<AdminEvents />) },

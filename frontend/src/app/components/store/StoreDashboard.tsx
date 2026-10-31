@@ -164,6 +164,63 @@ export default function StoreDashboard() {
         ))}
       </div>
 
+      <div className="mt-5 rounded-2xl border border-border bg-card p-4">
+        <h2 className="font-display text-base font-bold text-foreground">売上の内訳</h2>
+        {!dashboard ? (
+          <p className="mt-3 rounded-xl bg-muted p-6 text-center text-sm text-muted-foreground">
+            読み込み中...
+          </p>
+        ) : (
+          <>
+            <div className="mt-3 grid gap-2 sm:grid-cols-3">
+              <div className="rounded-xl bg-muted px-3 py-2">
+                <p className="text-xs text-muted-foreground">会計済み</p>
+                <p className="font-display text-xl font-bold text-foreground">
+                  {dashboard.settled_order_count ?? 0}
+                  <span className="ml-1 text-sm font-medium">件</span>
+                </p>
+              </div>
+              <div className="rounded-xl bg-muted px-3 py-2">
+                <p className="text-xs text-muted-foreground">レジ売上</p>
+                <p className="font-display text-xl font-bold text-foreground">
+                  {yen(dashboard.order_revenue ?? 0)}
+                </p>
+              </div>
+              <div className="rounded-xl bg-muted px-3 py-2">
+                <p className="text-xs text-muted-foreground">手入力売上</p>
+                <p className="font-display text-xl font-bold text-foreground">
+                  {yen(dashboard.sales_entry_revenue ?? 0)}
+                </p>
+              </div>
+            </div>
+
+            <h3 className="mt-4 text-sm font-bold text-foreground">商品別の売上数</h3>
+            {dashboard.item_sales?.length ? (
+              <ul className="mt-2 space-y-2">
+                {dashboard.item_sales.map((item) => (
+                  <li
+                    key={item.menu_item_id}
+                    className="flex items-center justify-between gap-3 rounded-xl bg-muted px-3 py-2"
+                  >
+                    <p className="min-w-0 truncate font-bold text-foreground">{item.name}</p>
+                    <p className="shrink-0 text-sm text-muted-foreground">
+                      {item.quantity}点
+                      <span className="ml-2 font-display text-base font-bold text-foreground">
+                        {yen(item.subtotal)}
+                      </span>
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="mt-2 rounded-xl bg-muted p-4 text-center text-sm text-muted-foreground">
+                まだ商品の売上はありません。
+              </p>
+            )}
+          </>
+        )}
+      </div>
+
       <div className="mt-5">
         <h2 className="mb-2 font-display text-base font-bold text-foreground">提供待ち一覧</h2>
         {ordersLoading ? (

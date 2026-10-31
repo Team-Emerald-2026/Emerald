@@ -248,16 +248,19 @@ export default function StoreTicket() {
                   </div>
                 ) : (
                   <div className="mt-3 flex gap-2">
-                    <button
-                      type="button"
-                      onClick={() => void callOrder(o)}
-                      disabled={busyId !== null}
-                      className="flex min-h-11 flex-1 items-center justify-center gap-1 rounded-lg py-2 text-sm font-bold text-white disabled:opacity-40"
-                      style={{ backgroundColor: 'var(--primary)' }}
-                    >
-                      <Megaphone className="h-4 w-4" />
-                      {busy ? '送信中...' : called ? '再呼び出し' : '呼び出し'}
-                    </button>
+                    {/* 呼び出し中は「再呼び出し」を出さない（提供完了・キャンセルだけで運用する） */}
+                    {!called && (
+                      <button
+                        type="button"
+                        onClick={() => void callOrder(o)}
+                        disabled={busyId !== null}
+                        className="flex min-h-11 flex-1 items-center justify-center gap-1 rounded-lg py-2 text-sm font-bold text-white disabled:opacity-40"
+                        style={{ backgroundColor: 'var(--primary)' }}
+                      >
+                        <Megaphone className="h-4 w-4" />
+                        {busy ? '送信中...' : '呼び出し'}
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={() => setConfirm({ id: o.id, kind: 'serve' })}

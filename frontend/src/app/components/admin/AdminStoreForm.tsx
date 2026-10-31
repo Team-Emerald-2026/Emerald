@@ -1,7 +1,20 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import type { AdminMapFacility, AdminStore, AdminStoreInput } from '../../lib/api';
+import type {
+  AdminMapFacility,
+  AdminStore,
+  AdminStoreInput,
+  BoothTimeSlot,
+  ExhibitionDay,
+  FestivalDay,
+} from '../../lib/api';
 import { facilityTypeOptions, PLACE_ONLY_TYPES } from '../../lib/campusMap';
+
+const EXHIBITION_DAY_OPTIONS: { value: ExhibitionDay; label: string }[] = [
+  { value: 'both', label: '両日' },
+  { value: 'day1', label: '10月24日(土)のみ' },
+  { value: 'day2', label: '10月25日(日)のみ' },
+];
 
 interface Props {
   store: AdminStore | null;
@@ -24,14 +37,23 @@ const emptyInput: AdminStoreInput = {
   floor: 1,
   map_x: 46,
   map_y: 15,
-  ticket_prefix: '',
   login_id: '',
   password: '',
+  exhibition_day: 'both',
   is_open: true,
   is_visible: true,
+  show_on_monitor: false,
+  show_on_call_page: false,
   current_wait_min: 5,
   current_queue_count: 0,
+  time_slots: [],
 };
+
+const SLOT_DAY_OPTIONS: { value: 'both' | FestivalDay; label: string }[] = [
+  { value: 'both', label: '両日' },
+  { value: 'day1', label: '24日(土)' },
+  { value: 'day2', label: '25日(日)' },
+];
 
 interface LocationOption {
   key: string;
@@ -75,19 +97,31 @@ export default function AdminStoreForm({
       floor: store.floor ?? 1,
       map_x: store.map_x ?? 50,
       map_y: store.map_y ?? 50,
-      ticket_prefix: store.ticket_prefix ?? '',
       login_id: store.login_id ?? '',
       password: '',
+      exhibition_day: store.exhibition_day ?? 'both',
       is_open: store.is_open,
       is_visible: store.is_visible,
+      show_on_monitor: Boolean(store.show_on_monitor),
+      show_on_call_page: Boolean(store.show_on_call_page),
       current_wait_min: store.current_wait_min,
       current_queue_count: store.current_queue_count,
+      time_slots: store.time_slots ?? [],
     });
   }, [store]);
 
   const update = <K extends keyof AdminStoreInput>(key: K, value: AdminStoreInput[K]) => {
     setInput((current) => ({ ...current, [key]: value }));
   };
+
+  const timeSlots = input.time_slots ?? [];
+  const updateSlot = (index: number, patch: Partial<BoothTimeSlot>) => {
+    update(
+      'time_slots',
+      timeSlots.map((slot, i) => (i === index ? { ...slot, ...patch } : slot)),
+    );
+  };
+  const invalidSlot = timeSlots.some((slot) => !slot.start || !slot.end || slot.end <= slot.start);
 
   // 候補は「店舗がまだ入っていない場所」＋「他の店舗が使用中の場所（選べない）」
   const locationOptions = useMemo<LocationOption[]>(() => {
@@ -116,10 +150,13 @@ export default function AdminStoreForm({
           floor: place.floor,
           x: place.x,
           y: place.y,
+          // 日替わりブースは同じ場所を共有できるので、使用中でも選べる
           label: `${place.floor}F ${place.name}${
-            usedByOther ? `（使用中: ${usedByOther.store_name ?? usedByOther.store_id}）` : ''
+            usedByOther
+              ? `（他店舗あり: ${usedByOther.store_name ?? usedByOther.store_id}／日替わり・時間替わり可）`
+              : ''
           }`,
-          disabled: Boolean(usedByOther),
+          disabled: false,
         };
       });
   }, [locations, store?.id]);
@@ -176,7 +213,22 @@ export default function AdminStoreForm({
           <span className="mb-1 block text-muted-foreground">種類</span>
           <select
             value={input.type}
-            onChange={(event) => update('type', event.target.value)}
+            onChange={(event) => {
+              const type = event.target.value;
+              setInput((current) => ({
+                ...current,
+                type,
+                // フードは受取番号ページに出したままにする。種類を戻したときは、保存済みの設定に戻す
+                show_on_call_page:
+                  type === 'food'
+                    ? true
+                    : store && current.type === 'food' && store.type !== 'food'
+                      ? Boolean(store.show_on_call_page)
+                      : store
+                        ? current.show_on_call_page
+                        : false,
+              }));
+            }}
             className="w-full rounded-lg border border-input bg-background px-3 py-2.5 text-foreground outline-none"
           >
             {facilityTypeOptions(input.type)
@@ -189,23 +241,97 @@ export default function AdminStoreForm({
           </select>
         </label>
         <label className="text-sm">
-          <span className="mb-1 block text-muted-foreground">受付番号の頭文字（英数字）</span>
-          <input
-            value={input.ticket_prefix}
-            onChange={(event) => update('ticket_prefix', event.target.value.toUpperCase())}
-            placeholder="例: Y"
+          <span className="mb-1 block text-muted-foreground">出展日</span>
+          <select
+            value={input.exhibition_day}
+            onChange={(event) => update('exhibition_day', event.target.value as ExhibitionDay)}
             className="w-full rounded-lg border border-input bg-background px-3 py-2.5 text-foreground outline-none"
-          />
+          >
+            {EXHIBITION_DAY_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
           <span className="mt-1 block text-xs text-muted-foreground">
-            受付番号が「{input.ticket_prefix || 'Y'}-101」のようになります。空欄なら自動で決まります。
+            同じ場所（例: 604）を日替わりで使う場合は、店舗を2つ作り出展日を分けます。
           </span>
         </label>
+        <div className="sm:col-span-2 text-sm">
+          <span className="mb-1 block text-muted-foreground">出展時間（任意）</span>
+          {timeSlots.length === 0 ? (
+            <p className="text-xs text-muted-foreground">未設定（出展日は一日中）</p>
+          ) : (
+            <ul className="space-y-2">
+              {timeSlots.map((slot, index) => (
+                <li key={index} className="flex flex-wrap items-center gap-2">
+                  <select
+                    value={slot.day ?? 'both'}
+                    onChange={(event) =>
+                      updateSlot(index, {
+                        day: event.target.value === 'both' ? null : (event.target.value as FestivalDay),
+                      })
+                    }
+                    aria-label="日"
+                    className="rounded-lg border border-input bg-background px-2 py-2 text-foreground outline-none"
+                  >
+                    {SLOT_DAY_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    type="time"
+                    value={slot.start}
+                    onChange={(event) => updateSlot(index, { start: event.target.value })}
+                    aria-label="開始"
+                    className="rounded-lg border border-input bg-background px-2 py-2 text-foreground outline-none"
+                  />
+                  <span className="text-muted-foreground">〜</span>
+                  <input
+                    type="time"
+                    value={slot.end}
+                    onChange={(event) => updateSlot(index, { end: event.target.value })}
+                    aria-label="終了"
+                    className="rounded-lg border border-input bg-background px-2 py-2 text-foreground outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => update('time_slots', timeSlots.filter((_, i) => i !== index))}
+                    className="rounded-lg border border-border px-2.5 py-2 text-xs text-foreground hover:bg-muted"
+                  >
+                    削除
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          {timeSlots.length < 8 && (
+            <button
+              type="button"
+              onClick={() =>
+                update('time_slots', [...timeSlots, { day: null, start: '11:00', end: '12:00' }])
+              }
+              className="mt-2 rounded-lg border border-border px-3 py-1.5 text-xs font-bold text-foreground hover:bg-muted"
+            >
+              ＋ 時間帯を追加
+            </button>
+          )}
+          {invalidSlot && (
+            <span className="mt-1 block text-xs text-red-500">終了時刻は開始時刻より後にしてください。</span>
+          )}
+          <span className="mt-1 block text-xs text-muted-foreground">
+            801 や 603 のように同じ教室を時間で入れ替える場合は、店舗ごとに同じ場所を選んで時間帯を入れます。地図のピンには今の時間のブースが出ます。
+          </span>
+        </div>
         <label className="sm:col-span-2 text-sm">
-          <span className="mb-1 block text-muted-foreground">説明</span>
+          <span className="mb-1 block text-muted-foreground">説明（任意）</span>
           <textarea
             value={input.description}
             onChange={(event) => update('description', event.target.value)}
             rows={3}
+            placeholder="空欄でも保存できます"
             className="w-full rounded-lg border border-input bg-background px-3 py-2.5 text-foreground outline-none"
           />
         </label>
@@ -229,8 +355,14 @@ export default function AdminStoreForm({
             onChange={(event) => update('password', event.target.value)}
             // 保存済みのパスワードを自動入力させない（店舗のパスワードを上書きしてしまうため）
             autoComplete="new-password"
+            placeholder={store ? '変更しない場合は空欄のまま' : '英数字8文字以上'}
             className="w-full rounded-lg border border-input bg-background px-3 py-2.5 text-foreground outline-none"
           />
+          <span className="mt-1 block text-xs text-muted-foreground">
+            {store
+              ? '入力した場合だけ変更されます。英字・数字のみ、8文字以上（記号は使えません）'
+              : '英字・数字のみ、8文字以上（記号は使えません）'}
+          </span>
         </label>
         {/* 新規の店舗は待ち人数0から始まる。編集時は、ずれた待ち人数を直すために残す */}
         {store && (
@@ -295,12 +427,31 @@ export default function AdminStoreForm({
           />
           来場者画面に表示
         </label>
+        <label className="flex items-center gap-2">
+          <input
+            type="checkbox"
+            checked={input.show_on_monitor}
+            onChange={(event) => update('show_on_monitor', event.target.checked)}
+          />
+          校内モニターに表示
+        </label>
+        <label className="flex items-center gap-2">
+          <input
+            type="checkbox"
+            checked={input.show_on_call_page}
+            onChange={(event) => update('show_on_call_page', event.target.checked)}
+          />
+          受取番号ページに表示
+        </label>
       </div>
+      <p className="mt-2 text-xs text-muted-foreground">
+        オンの店舗だけ、来場者の受取番号ページに出ます。フードは初めからオンです。オフにしても、店舗側の呼び出しは続けて使えます。
+      </p>
 
       <button
         type="button"
         onClick={() => onSubmit(input)}
-        disabled={saving}
+        disabled={saving || invalidSlot}
         className="mt-4 w-full rounded-xl py-3 font-bold text-white disabled:opacity-50"
         style={{ backgroundColor: 'var(--primary)' }}
       >

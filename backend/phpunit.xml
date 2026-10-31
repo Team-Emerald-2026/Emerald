@@ -34,5 +34,6 @@
         <env name="TELESCOPE_ENABLED" value="false"/>
         <env name="NIGHTWATCH_ENABLED" value="false"/>
         <env name="ADMIN_PUBLIC_ACCESS" value="false"/>
+        <env name="ACCESS_LOG_ENABLED" value="false"/>
     </php>
 </phpunit>

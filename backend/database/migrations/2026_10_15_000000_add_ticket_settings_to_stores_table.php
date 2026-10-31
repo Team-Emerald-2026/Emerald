@@ -10,14 +10,14 @@ return new class extends Migration
      * Run the migrations.
      *
      * 整理券を「1〜上限枚数」で使い回す方式にするための設定を追加する。
-     * - ticket_limit: 整理券の枚数（既定50）
+     * - ticket_limit: 整理券の枚数（既定20）
      * - disabled_ticket_numbers: 非表示（紛失など）にした番号の一覧。発番時に飛ばす
      * 番号を使い回すため、(store_id, ticket_number) の一意制約も外す。
      */
     public function up(): void
     {
         Schema::table('stores', function (Blueprint $table) {
-            $table->unsignedInteger('ticket_limit')->default(50);
+            $table->unsignedInteger('ticket_limit')->default(20);
             $table->json('disabled_ticket_numbers')->nullable();
         });
 

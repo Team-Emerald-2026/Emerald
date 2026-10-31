@@ -7,7 +7,19 @@ export interface BoothLoginResponse {
   role?: 'store' | 'admin';
 }
 
-export type BoothKind = 'booth' | 'food' | 'exhibit' | 'information' | 'shop';
+export type BoothKind = 'booth' | 'food' | 'exhibit' | 'information' | 'shop' | 'circle_sales';
+/** 店内の混雑。待ち人数（注文の列）とは別 */
+export type CrowdLevel = 'empty' | 'moderate' | 'crowded';
+
+/** 商品ごとの売上（清算済みの会計だけを集計） */
+export interface BoothItemSales {
+  menu_item_id: number;
+  name: string;
+  /** 売れた数 */
+  quantity: number;
+  /** 売上金額 */
+  subtotal: number;
+}
 
 export interface BoothDashboard {
   id: string;
@@ -18,9 +30,18 @@ export interface BoothDashboard {
   current_queue_count: number;
   wait_display_mode?: 'minutes' | 'text';
   wait_display_text?: string | null;
+  crowd_level?: CrowdLevel | null;
   revenue?: number;
+  /** レジ（会計済み注文）の売上 */
+  order_revenue?: number;
+  /** 手入力した売上 */
+  sales_entry_revenue?: number;
+  /** 清算済みの会計数 */
+  settled_order_count?: number;
+  /** 商品ごとの売上数・金額（売れた数が多い順） */
+  item_sales?: BoothItemSales[];
   type?: string;
-  /** 整理券の枚数（1〜この番号までを使い回す。既定50） */
+  /** 整理券の枚数（1〜この番号までを使い回す。既定10） */
   ticket_limit?: number;
   /** 非表示（紛失など）にした整理券の番号。発番時に飛ばされる */
   disabled_ticket_numbers?: number[];
@@ -33,14 +54,31 @@ export interface BackendStore {
   is_open: boolean;
   is_visible?: boolean;
   type?: string;
+  /**
+   * 受取番号ページに出すか。
+   * 未設定の古い応答では、画面側がフードだけ今まで通り出す。
+   */
+  show_on_call_page?: boolean;
   current_wait_min: number;
   current_queue_count: number;
   wait_time?: number;
   wait_display_mode?: 'minutes' | 'text';
   wait_display_text?: string | null;
+  crowd_level?: CrowdLevel | null;
   map_facility_id?: string | null;
+  /** 地図上の階（地図に置かれていなければ null） */
+  floor?: number | null;
+  /** 出展時間（日本時間）。空なら一日中 */
+  time_slots?: BoothTimeSlot[];
   menu_items?: BackendMenuItem[];
   ticket_numbers?: string[];
+}
+
+/** 出展時間の1枠。day が null なら両日。時刻は日本時間の "HH:MM" */
+export interface BoothTimeSlot {
+  day: FestivalDay | null;
+  start: string;
+  end: string;
 }
 
 export interface BackendMenuItem {
@@ -58,6 +96,12 @@ export interface AdminLoginResponse {
   login_id: string;
 }
 
+/** 出展日: 1日目のみ / 2日目のみ / 両日 */
+export type ExhibitionDay = 'day1' | 'day2' | 'both';
+
+/** 学園祭の「今日」（1日目 or 2日目） */
+export type FestivalDay = 'day1' | 'day2';
+
 export interface AdminStore {
   id: string;
   name: string;
@@ -66,14 +110,28 @@ export interface AdminStore {
   floor: number;
   map_x: number;
   map_y: number;
-  ticket_prefix: string | null;
+  /** 使っていない（受付番号は数字だけ）。古いAPI互換のため残している */
+  ticket_prefix?: string | null;
+  exhibition_day: ExhibitionDay;
+  time_slots?: BoothTimeSlot[];
   is_open: boolean;
   is_visible: boolean;
+  show_on_monitor: boolean;
+  show_on_call_page: boolean;
   current_wait_min: number;
   current_queue_count: number;
   login_id: string | null;
   revenue: number;
   order_count: number;
+}
+
+export interface FestivalDayInfo {
+  current_day: FestivalDay;
+  store_counts?: {
+    day1: number;
+    day2: number;
+    both: number;
+  };
 }
 
 export interface AdminAnalyticsStore {
@@ -100,13 +158,25 @@ export interface AdminStoreInput {
   floor: number;
   map_x: number;
   map_y: number;
-  ticket_prefix?: string;
   login_id?: string;
   password?: string;
+  exhibition_day: ExhibitionDay;
   is_open: boolean;
   is_visible: boolean;
+  show_on_monitor: boolean;
+  show_on_call_page: boolean;
   current_wait_min: number;
   current_queue_count: number;
+  /** 送らなければ今の出展時間のまま。空配列で一日中に戻す */
+  time_slots?: BoothTimeSlot[];
+}
+
+const FOOD_FACILITY_TYPES = new Set(['food', 'フード', '飲食ブース']);
+
+/** 受取番号ページに出す店。フラグが無い古い応答では、今まで通りフードだけ出す */
+export function showsOnCallPage(store: Pick<BackendStore, 'show_on_call_page' | 'type'>): boolean {
+  if (typeof store.show_on_call_page === 'boolean') return store.show_on_call_page;
+  return FOOD_FACILITY_TYPES.has(store.type ?? 'food');
 }
 
 export interface BackendMapFacility {
@@ -119,6 +189,10 @@ export interface BackendMapFacility {
   floor: number;
   x: number;
   y: number;
+  /** 紐づく店舗を受取番号ページに出すか。店舗が無い場所では未設定 */
+  show_on_call_page?: boolean;
+  /** この日の出展時間（空なら一日中） */
+  time_slots?: BoothTimeSlot[];
 }
 
 type JsonApiItem = {
@@ -179,11 +253,29 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
 
+/** バリデーション details / errors から文言を取り出す */
+function collectValidationMessages(details: unknown): string[] {
+  if (!isRecord(details)) return [];
+
+  const messages: string[] = [];
+  for (const value of Object.values(details)) {
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        if (typeof item === 'string' && item.trim()) messages.push(item.trim());
+      }
+    } else if (typeof value === 'string' && value.trim()) {
+      messages.push(value.trim());
+    }
+  }
+  return messages;
+}
+
 function flattenResource<T extends { id: string }>(item: Record<string, unknown>): T {
-  const attributes = isRecord(item.attributes) ? item.attributes : item;
+  const nested = isRecord(item.attributes) ? item.attributes : null;
+  const merged = nested ? { ...item, ...nested } : item;
   return {
-    ...attributes,
-    id: String(attributes.id ?? item.id ?? ''),
+    ...merged,
+    id: String(merged.id ?? item.id ?? ''),
   } as T;
 }
 
@@ -197,6 +289,10 @@ function normalizeCollection<T extends { id: string }>(payload: unknown): T[] {
   }
 
   return [];
+}
+
+function asArray<T>(value: unknown): T[] {
+  return Array.isArray(value) ? (value as T[]) : [];
 }
 
 function normalizeItem<T extends { id: string }>(payload: unknown): T | null {
@@ -250,18 +346,32 @@ async function request(path: string, options: RequestOptions = {}): Promise<unkn
   }
 
   if (!response.ok) {
-    let message = `API request failed: ${response.status}`;
+    let message = `通信エラー（${response.status}）`;
     let code: string | undefined;
     try {
       const errorBody = (await response.json()) as unknown;
       if (isRecord(errorBody)) {
-        if (typeof errorBody.message === 'string' && errorBody.message.trim()) {
+        // API共通形式: { error: { code, message, details } }
+        if (isRecord(errorBody.error)) {
+          if (typeof errorBody.error.code === 'string') {
+            code = errorBody.error.code;
+          }
+          const detailMessages = collectValidationMessages(errorBody.error.details);
+          if (detailMessages.length > 0) {
+            message = detailMessages.join('\n');
+          } else if (typeof errorBody.error.message === 'string' && errorBody.error.message.trim()) {
+            message = errorBody.error.message;
+          }
+        } else if (isRecord(errorBody.errors)) {
+          // Laravel 標準の errors 形式
+          const detailMessages = collectValidationMessages(errorBody.errors);
+          if (detailMessages.length > 0) {
+            message = detailMessages.join('\n');
+          } else if (typeof errorBody.message === 'string' && errorBody.message.trim()) {
+            message = errorBody.message;
+          }
+        } else if (typeof errorBody.message === 'string' && errorBody.message.trim()) {
           message = errorBody.message;
-        } else if (isRecord(errorBody.error) && typeof errorBody.error.message === 'string') {
-          message = errorBody.error.message;
-        }
-        if (isRecord(errorBody.error) && typeof errorBody.error.code === 'string') {
-          code = errorBody.error.code;
         }
       }
     } catch {
@@ -274,20 +384,54 @@ async function request(path: string, options: RequestOptions = {}): Promise<unkn
   return response.json() as Promise<unknown>;
 }
 
-export function fetchRestaurants(signal?: AbortSignal) {
-  return request('/v1/restaurants', { signal }).then((payload) =>
-    normalizeCollection<BackendStore>(payload),
-  );
+export function fetchFestivalDay(signal?: AbortSignal) {
+  return request('/v1/festival-day', { signal }).then((payload) => {
+    if (isRecord(payload) && isRecord(payload.data) && typeof payload.data.current_day === 'string') {
+      return payload.data.current_day as FestivalDay;
+    }
+    return 'day1' as FestivalDay;
+  });
 }
 
-export function fetchRestaurant(id: string, signal?: AbortSignal) {
-  return request(`/v1/restaurants/${encodeURIComponent(id)}`, { signal }).then((payload) =>
-    normalizeItem<BackendStore>(payload),
-  );
+export function fetchRestaurants(signal?: AbortSignal, day?: FestivalDay) {
+  const query = day ? `?day=${encodeURIComponent(day)}` : '';
+  return request(`/v1/restaurants${query}`, { signal }).then((payload) => {
+    const stores = normalizeCollection<BackendStore>(payload);
+    const meta =
+      isRecord(payload) && isRecord(payload.meta)
+        ? {
+            current_day: (payload.meta.current_day as FestivalDay | undefined) ?? 'day1',
+            filter_day: (payload.meta.filter_day as FestivalDay | undefined) ?? day ?? 'day1',
+          }
+        : undefined;
+    return { stores, meta };
+  });
 }
 
-export function fetchMapFacilities(signal?: AbortSignal) {
-  return request('/v1/map/facilities', { signal }).then((payload) =>
+export function fetchRestaurant(
+  id: string,
+  signal?: AbortSignal,
+  day?: FestivalDay,
+  poll = false,
+) {
+  const params = new URLSearchParams();
+  if (day) params.set('day', day);
+  if (poll) params.set('poll', '1');
+  const query = params.toString() ? `?${params.toString()}` : '';
+  return request(`/v1/restaurants/${encodeURIComponent(id)}${query}`, { signal }).then((payload) => {
+    const store = normalizeItem<BackendStore>(payload);
+    if (!store) return null;
+    return {
+      ...store,
+      // 呼び出し番号は配列以外でも画面を落とさない。メニューは呼び出し側で前回の内容を残す
+      ticket_numbers: asArray<string>(store.ticket_numbers),
+    };
+  });
+}
+
+export function fetchMapFacilities(signal?: AbortSignal, day?: FestivalDay) {
+  const query = day ? `?day=${encodeURIComponent(day)}` : '';
+  return request(`/v1/map/facilities${query}`, { signal }).then((payload) =>
     normalizeCollection<BackendMapFacility>(payload),
   );
 }
@@ -429,8 +573,42 @@ export function deleteBoothMenuItem(token: string | undefined, id: string, signa
 
 export function fetchAdminStores(token?: string, signal?: AbortSignal) {
   return request('/v1/admin/stores', { signal, token }).then((payload) => {
-    if (isRecord(payload) && Array.isArray(payload.data)) return payload.data as AdminStore[];
+    if (isRecord(payload) && Array.isArray(payload.data)) {
+      return (payload.data as AdminStore[]).map((store) => ({
+        ...store,
+        exhibition_day: (store.exhibition_day ?? 'both') as ExhibitionDay,
+        show_on_monitor: Boolean(store.show_on_monitor),
+        show_on_call_page: Boolean(store.show_on_call_page),
+      }));
+    }
     return [];
+  });
+}
+
+export function fetchAdminFestivalDay(token?: string, signal?: AbortSignal) {
+  return request('/v1/admin/festival-day', { signal, token }).then((payload) => {
+    if (isRecord(payload) && isRecord(payload.data)) {
+      return payload.data as unknown as FestivalDayInfo;
+    }
+    return { current_day: 'day1' as FestivalDay };
+  });
+}
+
+export function updateAdminFestivalDay(
+  token: string | undefined,
+  day: FestivalDay,
+  signal?: AbortSignal,
+) {
+  return request('/v1/admin/festival-day', {
+    method: 'PATCH',
+    signal,
+    token,
+    body: { day },
+  }).then((payload) => {
+    if (isRecord(payload) && isRecord(payload.data)) {
+      return payload.data as unknown as FestivalDayInfo;
+    }
+    return { current_day: day };
   });
 }
 
@@ -455,6 +633,34 @@ export function updateAdminStore(
     token,
     body: input,
   }).then((payload) => (isRecord(payload) ? payload.data as AdminStore : null));
+}
+
+export function updateAdminStoreMonitor(
+  token: string | undefined,
+  id: string,
+  showOnMonitor: boolean,
+  signal?: AbortSignal,
+) {
+  return request(`/v1/admin/stores/${encodeURIComponent(id)}/monitor`, {
+    method: 'PATCH',
+    signal,
+    token,
+    body: { show_on_monitor: showOnMonitor },
+  }).then((payload) => (isRecord(payload) ? (payload.data as AdminStore) : null));
+}
+
+export function updateAdminStoreCallPage(
+  token: string | undefined,
+  id: string,
+  showOnCallPage: boolean,
+  signal?: AbortSignal,
+) {
+  return request(`/v1/admin/stores/${encodeURIComponent(id)}/call-page`, {
+    method: 'PATCH',
+    signal,
+    token,
+    body: { show_on_call_page: showOnCallPage },
+  }).then((payload) => (isRecord(payload) ? (payload.data as AdminStore) : null));
 }
 
 export function hideAdminStore(token: string | undefined, id: string, signal?: AbortSignal) {
@@ -545,6 +751,148 @@ export function fetchAdminAnalytics(token?: string, signal?: AbortSignal) {
   return request('/v1/admin/analytics', { signal, token }).then((payload) =>
     isRecord(payload) ? payload.data as AdminAnalytics : null,
   );
+}
+
+export type BoothSalesDay = 'day1' | 'day2' | 'all';
+
+export interface BoothSalesStore {
+  store_id: string;
+  store_name: string;
+  revenue: number;
+  settled_orders: number;
+  average_ticket: number;
+}
+
+export interface BoothSalesStatus {
+  store_id: string;
+  store_name: string;
+  served: number;
+  unserved: number;
+  canceled: number;
+}
+
+export interface BoothUnservedStore {
+  store_id: string;
+  store_name: string;
+  count: number;
+  amount: number;
+}
+
+export interface BoothSalesHour {
+  hour: number;
+  count: number;
+}
+
+export interface BoothMenuRank {
+  name: string;
+  /** 全体の売れ筋だけ。同じ名前を複数ブースで足したときは、そのブース名 */
+  store_names?: string[];
+  quantity: number;
+  amount: number;
+}
+
+export interface BoothStoreMenuRank {
+  store_id: string;
+  store_name: string;
+  items: BoothMenuRank[];
+}
+
+export interface BoothSales {
+  day: BoothSalesDay;
+  generated_at?: string;
+  total_revenue: number;
+  settled_orders: number;
+  average_ticket: number;
+  stores: BoothSalesStore[];
+  status_counts?: BoothSalesStatus[];
+  unserved?: BoothUnservedStore[];
+  hourly?: BoothSalesHour[];
+  menu_ranking?: BoothMenuRank[];
+  store_menu_rankings?: BoothStoreMenuRank[];
+}
+
+export function fetchAdminBoothSales(token?: string, day: BoothSalesDay = 'all', signal?: AbortSignal) {
+  return request(`/v1/admin/analytics/booth?day=${encodeURIComponent(day)}`, { signal, token }).then((payload) =>
+    isRecord(payload) ? payload.data as BoothSales : null,
+  );
+}
+
+export interface AdminAccessHour {
+  hour: string;
+  total: number;
+  visitor: number;
+  poll: number;
+  store: number;
+  admin: number;
+  server_error: number;
+  slow: number;
+}
+
+export interface AdminAccessSlot {
+  slot: string;
+  total: number;
+  visitor: number;
+  poll: number;
+  store: number;
+  admin: number;
+  server_error: number;
+  slow: number;
+}
+
+export interface AdminAccessSummary {
+  date: string;
+  total: number;
+  visitor: number;
+  poll: number;
+  store: number;
+  admin: number;
+  server_error: number;
+  slow: number;
+  slow_ms: number;
+  peak: { hour: string; count: number } | null;
+  hours: AdminAccessHour[];
+  peak_slot: { slot: string; count: number } | null;
+  slots: AdminAccessSlot[];
+}
+
+export function fetchAdminAccess(token?: string, date?: string, signal?: AbortSignal) {
+  const query = date ? `?date=${encodeURIComponent(date)}` : '';
+  return request(`/v1/admin/access${query}`, { signal, token }).then((payload) =>
+    isRecord(payload) ? (payload.data as AdminAccessSummary) : null,
+  );
+}
+
+export async function downloadAdminAccessLog(token: string | undefined, date: string) {
+  const headers: Record<string, string> = { Accept: 'text/plain' };
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  const response = await fetch(
+    `${apiBase}/v1/admin/access/log?date=${encodeURIComponent(date)}`,
+    { headers },
+  );
+
+  if (!response.ok) {
+    let message = 'アクセスログをダウンロードできませんでした。';
+    try {
+      const errorBody = (await response.json()) as unknown;
+      if (isRecord(errorBody) && isRecord(errorBody.error) && typeof errorBody.error.message === 'string') {
+        message = errorBody.error.message;
+      }
+    } catch {
+      // 本文が JSON でないときは既定の文言のまま
+    }
+    throw new ApiError(message, response.status);
+  }
+
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `access-${date}.txt`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 /** 売上データ（会計・売上入力・受付番号）をすべて消して待ち人数を 0 に戻す。元に戻せない。 */
@@ -709,6 +1057,8 @@ export interface CallNumber {
 export interface MonitorCallNumber {
   store_id: string;
   store_name: string;
+  location_name?: string | null;
+  is_open?: boolean;
   current_call_number: string | null;
   called_numbers: string[];
   waiting_numbers: string[];
@@ -785,6 +1135,7 @@ export function deleteBoothSale(token: string | undefined, id: string, signal?: 
  * 待ち時間・待ち人数の更新。送った項目だけが更新される。
  * - current_queue_delta: 待ち人数を +1 / -1 のように増減する（注文の登録・提供と同時でも数え違いが起きない）
  * - current_queue_count: 待ち人数をその値にそろえる（current_queue_delta とは同時に送れない）
+ * - crowd_level: 店内の混雑（空いている / 少し混雑 / 混雑）
  */
 export function updateWaitTime(
   token: string | undefined,
@@ -794,6 +1145,7 @@ export function updateWaitTime(
     current_queue_delta?: number;
     wait_display_mode?: 'minutes' | 'text';
     wait_display_text?: string | null;
+    crowd_level?: CrowdLevel | null;
   },
   signal?: AbortSignal,
 ) {
@@ -809,6 +1161,7 @@ export function updateWaitTime(
       current_queue_count: number;
       wait_display_mode: 'minutes' | 'text';
       wait_display_text: string | null;
+      crowd_level: CrowdLevel | null;
       updated_at: string | null;
     }>(payload);
 
@@ -839,7 +1192,7 @@ export type BoothOrderStatus = 'issued' | 'settled' | 'canceled';
 export interface BoothOrder {
   /** 注文のID。API のパスに使う値（表示用の番号は ticket_number） */
   id: string;
-  /** 表示用の番号（例: C-101） */
+  /** 表示用の番号（例: 101）。旧データは C-101 形式のこともある */
   ticket_number: string;
   total_price: number;
   status: BoothOrderStatus;
@@ -968,7 +1321,7 @@ export interface StoreProfile {
   current_queue_count: number;
   type?: string;
   revenue?: number;
-  /** 整理券の枚数（1〜この番号までを使い回す。既定50） */
+  /** 整理券の枚数（1〜この番号までを使い回す。既定10） */
   ticket_limit?: number;
   /** 非表示（紛失など）にした整理券の番号。発番時に飛ばされる */
   disabled_ticket_numbers?: number[];

@@ -40,6 +40,8 @@ npm run build
 校内マップは `public/` 配下のフロア画像 **`/campus-map-1f.png` 〜 `/campus-map-8f.png`** を使用します。
 フロア画像は全階 **1042×745 px**（建物の図を中央に置き、余りは白）にそろえています。マップの枠（`Map.tsx` / `AdminMap.tsx` の `aspect-[1042/745]`）とピンの位置（％）はこの大きさが前提なので、画像を差し替えるときは同じ大きさ・同じ位置で書き出してください。
 
+公式ロゴ（Illustrator 原寸）は `src/assets/brand/kyoto-tech-logo.ai` です。Web 用に書き出した SVG は同じフォルダの `kyoto-tech-logo.svg`（ロゴ＋ロゴタイプ）と `kyoto-tech-logo-mark.svg`（3×3 のマーク）です。ファビコンは `public/favicon.svg` と `public/apple-touch-icon.png` です。
+
 Vite では `public/` 配下のファイルがルート `/` から配信されます。
 
 ---
@@ -50,7 +52,7 @@ Vite では `public/` 配下のファイルがルート `/` から配信され�
 
 ### ヘッダー
 
-- 中央にタイトル文言: **「京都TECH学園祭」**
+- 中央に公式ロゴマークとタイトル文言: **「京都TECH学園祭」**
 - **右上**: ライト / ダークテーマ切替ボタン
   - `document.documentElement` に `dark` クラスを付与・削除
   - 選択は `localStorage` キー `theme` に `light` / `dark` で保存
@@ -217,7 +219,7 @@ UI:
   - 今後、管理画面側の店舗作成へ移す予定
 - **レジ**（`/store`）
   - 店舗情報で登録したメニューから商品を選び、会計すると、サーバー（`POST /v1/booth/accounting/orders`、`settle: true`）に注文を登録して精算する
-  - 受付番号（C-101, Y-101... のようなブース別 prefix）はサーバーが発行。登録に成功してから表示する
+  - 受付番号（数字だけ。例: 1, 2）はサーバーが発行。登録に成功してから表示する
   - 連打しても二重に送らない。失敗したときはカートを残してやり直せる。通信が途中で切れたときは、登録済みかもしれない旨を表示する
   - 会計すると、サーバー側で待ち人数が +1 される
 - **待ち人数管理**（`/store/waiting`）

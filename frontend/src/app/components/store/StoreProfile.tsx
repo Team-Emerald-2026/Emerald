@@ -21,12 +21,21 @@ const boothTypes: Array<{ value: BoothKind; label: string }> = [
   { value: 'exhibit', label: '作品展示' },
   { value: 'information', label: '案内' },
   { value: 'shop', label: '金券販売' },
+  { value: 'circle_sales', label: 'サークル販売' },
 ];
 
 const yen = (value: number) => `¥${value.toLocaleString('ja-JP')}`;
 
 function toBoothKind(type?: string | null): BoothKind {
-  if (type === 'food' || type === 'exhibit' || type === 'information' || type === 'shop') return type;
+  if (
+    type === 'food' ||
+    type === 'exhibit' ||
+    type === 'information' ||
+    type === 'shop' ||
+    type === 'circle_sales'
+  ) {
+    return type;
+  }
   // 体験のほか、廃止した種類（イベントもの・トイレなど）は体験として扱う
   return 'booth';
 }
@@ -49,7 +58,7 @@ export default function StoreProfile() {
   const [saving, setSaving] = useState(false);
   const [savingProduct, setSavingProduct] = useState(false);
   // 整理券の設定（枚数と、非表示にした番号）
-  const [ticketLimitInput, setTicketLimitInput] = useState('50');
+  const [ticketLimitInput, setTicketLimitInput] = useState('10');
   const [disabledTickets, setDisabledTickets] = useState<number[]>([]);
   const [ticketError, setTicketError] = useState('');
   const [ticketMessage, setTicketMessage] = useState('');
@@ -70,7 +79,7 @@ export default function StoreProfile() {
         setBoothType(toBoothKind(data.type));
         setIsOpen(Boolean(data.is_open));
         setMenuItems(items.filter((item) => item.is_available !== false));
-        setTicketLimitInput(String(data.ticket_limit ?? 50));
+        setTicketLimitInput(String(data.ticket_limit ?? 10));
         setDisabledTickets((data.disabled_ticket_numbers ?? []).map(Number));
       })
       .catch((err: unknown) => {
@@ -124,7 +133,7 @@ export default function StoreProfile() {
   };
 
   // いま保存されている整理券の枚数（画面の入力途中の値ではなく、サーバーに保存済みの値）
-  const savedTicketLimit = Math.max(1, Number(profile?.ticket_limit) || 50);
+  const savedTicketLimit = Math.max(1, Number(profile?.ticket_limit) || 10);
   const parsedTicketLimit = Number(ticketLimitInput);
   const ticketLimitValid =
     Number.isInteger(parsedTicketLimit) && parsedTicketLimit >= 1 && parsedTicketLimit <= 999;

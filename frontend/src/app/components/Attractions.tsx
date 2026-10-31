@@ -1,15 +1,29 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Ticket, Flame, MapPin, Info, ShoppingBag, ChevronDown, ChevronUp } from 'lucide-react';
+import { Ticket, Flame, MapPin, Info, ShoppingBag, ChevronDown, ChevronUp, Armchair, Clock } from 'lucide-react';
 import {
+  fetchFestivalDay,
   fetchMapFacilities,
   fetchRestaurant,
   fetchRestaurants,
+  showsOnCallPage,
   type BackendMapFacility,
   type BackendStore,
+  type BoothTimeSlot,
 } from '../lib/api';
+import { formatSlots, japanNowHm, slotState, slotsForDay, type SlotState } from '../lib/boothSchedule';
 import { BUSY_QUEUE_COUNT, getWaitDisplay, waitLevelStyle, type WaitDisplay } from '../lib/waitDisplay';
+import { crowdLevelLabel, crowdLevelStyle, parseCrowdFromStore } from '../lib/crowdDisplay';
+import {
+  eventKeyToFestivalDay,
+  festivalDayToEventKey,
+  type EventDayKey,
+} from '../lib/eventSchedule';
+import EventDayTabs from './EventDayTabs';
 import { Skeleton, SkeletonText } from './Skeleton';
+
+/** ブース詳細を開いているあいだ、店内混雑などを取り直す間隔（ミリ秒） */
+const DETAIL_POLL_INTERVAL_MS = 5000;
 
 type Category = '体験' | 'フード' | '作品展示' | 'ステージ';
 
@@ -17,10 +31,14 @@ interface Booth {
   id: string;
   name: string;
   area: string;
+  floor: number | null; // 並び替え用。地図に登録されていなければ null
   wait: WaitDisplay; // 待ち人数の表示（文字表示モードのときは文字）
+  crowdLevel: ReturnType<typeof parseCrowdFromStore>;
   category: Category;
   ticket?: boolean; // 整理券対応
   popular?: boolean; // 人気ブース
+  showOnCallPage: boolean;
+  timeSlots: BoothTimeSlot[]; // 出展時間。空なら一日中
 }
 
 // 絞り込みのチップ。「ステージ」は出さない（ステージ・イベントもの のブースは「すべて」で表示される）
@@ -40,29 +58,64 @@ function toCategory(type?: string): Category {
     case 'ステージ':
     case 'イベントもの':
       return 'ステージ';
+    case 'circle_sales':
+    case 'サークル販売':
+      return '体験';
     default:
       return '体験';
   }
 }
 
-function toArea(store: BackendStore, facility?: BackendMapFacility): string {
-  if (!facility) return store.description ?? '場所未設定';
+function toFloor(store: BackendStore, facility?: BackendMapFacility): number | null {
+  const raw = facility?.floor ?? store.floor;
+  if (raw == null) return null;
+  const floor = Number(raw);
+  return Number.isFinite(floor) ? floor : null;
+}
 
-  const floor = Number(facility.floor);
-  return Number.isFinite(floor) ? `${floor}F` : '場所未設定';
+function toArea(store: BackendStore, facility?: BackendMapFacility): string {
+  if (!facility) {
+    const description = store.description?.trim();
+    return description || '場所未設定';
+  }
+
+  const floor = toFloor(store, facility);
+  const floorLabel = floor === null ? null : `${floor}F`;
+  const room = facility.label?.trim();
+  if (floorLabel && room) return `${floorLabel}・${room}`;
+  return floorLabel ?? room ?? '場所未設定';
 }
 
 function toBooth(store: BackendStore, facility?: BackendMapFacility): Booth {
   const wait = getWaitDisplay(store);
+  const floor = toFloor(store, facility);
 
   return {
     id: store.id,
     name: store.name,
     area: toArea(store, facility),
+    floor,
     wait,
-    category: toCategory(facility?.type),
+    crowdLevel: parseCrowdFromStore(store),
+    category: toCategory(facility?.type ?? store.type),
     popular: store.is_open && wait.queueCount >= BUSY_QUEUE_COUNT,
+    showOnCallPage: showsOnCallPage(store),
+    timeSlots: store.time_slots ?? [],
   };
+}
+
+/** 出展時間のバッジ（時間指定のないブースは出さない） */
+function slotBadge(state: SlotState): { label: string; bg: string; fg: string } | null {
+  switch (state.kind) {
+    case 'active':
+      return { label: `出展中（${state.until}まで）`, bg: 'var(--primary)', fg: 'var(--primary-foreground)' };
+    case 'upcoming':
+      return { label: `${state.from}から`, bg: 'var(--info-soft)', fg: 'var(--info)' };
+    case 'ended':
+      return { label: '本日終了', bg: 'var(--muted)', fg: 'var(--muted-foreground)' };
+    default:
+      return null;
+  }
 }
 
 /** 詳細（説明・メニュー）の取得状況。開いたブースだけ、サーバーから取りに行く */
@@ -96,7 +149,7 @@ function BoothDetail({ booth, detail }: { booth: Booth; detail?: DetailState }) 
   }
 
   const description = detail.store.description?.trim();
-  const menuItems = detail.store.menu_items ?? [];
+  const menuItems = Array.isArray(detail.store.menu_items) ? detail.store.menu_items : [];
   // 体験ブースなどは、メニューがなくて普通なので、メニューがあるときだけ出す（フードは未登録の案内も出す）
   const showMenu = menuItems.length > 0 || booth.category === 'フード';
 
@@ -147,9 +200,9 @@ function BoothDetail({ booth, detail }: { booth: Booth; detail?: DetailState }) 
         </div>
       )}
 
-      <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-muted-foreground">
         <span>場所: {booth.area}</span>
-        <span>待ち状況: {booth.wait.label}</span>
+        <span>列の待ち: {booth.wait.label}</span>
       </div>
     </div>
   );
@@ -179,41 +232,107 @@ function BoothCardSkeleton() {
 export default function Attractions() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [filter, setFilter] = useState<'すべて' | Category>('すべて');
+  const [floorFilter, setFloorFilter] = useState<number | 'all'>('all');
+  const [dayKey, setDayKey] = useState<EventDayKey | null>(null);
+  const [todayKey, setTodayKey] = useState<EventDayKey | null>(null);
   const [booths, setBooths] = useState<Booth[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // 出展時間のバッジ用。サーバーには取りに行かず、表示だけ30秒ごとに更新する
+  const [nowHm, setNowHm] = useState(() => japanNowHm());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNowHm(japanNowHm()), 30_000);
+    return () => window.clearInterval(timer);
+  }, []);
+  const festivalDay = dayKey ? eventKeyToFestivalDay(dayKey) : null;
+  const isToday = dayKey !== null && dayKey === todayKey;
   const detailId = searchParams.get('detail');
-  const list = booths.filter((b) => filter === 'すべて' || b.category === filter);
+  const floors = Array.from(
+    new Set(booths.map((b) => b.floor).filter((f): f is number => f !== null)),
+  ).sort((a, b) => a - b);
+  // 日付を切り替えて、選んでいた階にブースがなくなったら全フロアに戻す
+  const activeFloor = floorFilter !== 'all' && floors.includes(floorFilter) ? floorFilter : 'all';
+  // 1F から上の階へ。同じ階は届いた順（店舗ID順）のまま、場所未設定は最後
+  const list = booths
+    .filter((b) => filter === 'すべて' || b.category === filter)
+    .filter((b) => activeFloor === 'all' || b.floor === activeFloor)
+    .sort((a, b) => (a.floor ?? Infinity) - (b.floor ?? Infinity));
   const selectedBooth = booths.find((b) => b.id === detailId) ?? null;
+  // 取り直しのたびにブースのオブジェクトは作り直されるので、下の effect は「一覧にあるか」だけで動かす
+  const hasSelectedBooth = selectedBooth !== null;
 
-  // 開いたブースの詳細（説明・メニュー）。一度取ったものは、閉じても使い回す
+  // 開いたブースの詳細（説明・メニュー・店内混雑）。開いているあいだは取り直す
   const [details, setDetails] = useState<Record<string, DetailState>>({});
-  const requestedRef = useRef<Set<string>>(new Set());
   const detailPanelRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    if (!detailId || !selectedBooth) return;
-    if (requestedRef.current.has(detailId)) return;
-    requestedRef.current.add(detailId);
+    if (!detailId || !hasSelectedBooth) return;
 
-    setDetails((current) => ({ ...current, [detailId]: { status: 'loading' } }));
-    fetchRestaurant(detailId)
-      .then((store) => {
-        if (!store) throw new Error('empty response');
-        setDetails((current) => ({ ...current, [detailId]: { status: 'ready', store } }));
-      })
-      .catch(() => {
-        // 失敗したら、次に開いたときにもう一度取りに行けるようにする
-        requestedRef.current.delete(detailId);
-        setDetails((current) => ({ ...current, [detailId]: { status: 'error' } }));
-      });
-  }, [detailId, selectedBooth]);
+    const controller = new AbortController();
+
+    setDetails((current) =>
+      current[detailId]?.status === 'ready'
+        ? current
+        : { ...current, [detailId]: { status: 'loading' } },
+    );
+
+    const load = (poll = false) =>
+      fetchRestaurant(
+        detailId,
+        controller.signal,
+        dayKey ? eventKeyToFestivalDay(dayKey) : undefined,
+        poll,
+      )
+        .then((store) => {
+          if (controller.signal.aborted) return;
+          if (!store) throw new Error('empty response');
+          setDetails((current) => {
+            const previous = current[detailId]?.status === 'ready' ? current[detailId].store.menu_items : undefined;
+            // キャッシュが壊れると menu_items がオブジェクトになる。配列以外のときは直前のメニューを残す
+            const menuItems = Array.isArray(store.menu_items)
+              ? store.menu_items
+              : Array.isArray(previous)
+                ? previous
+                : [];
+            return {
+              ...current,
+              [detailId]: { status: 'ready', store: { ...store, menu_items: menuItems } },
+            };
+          });
+          setBooths((current) =>
+            current.map((booth) =>
+              booth.id === detailId
+                ? { ...booth, crowdLevel: parseCrowdFromStore(store), wait: getWaitDisplay(store) }
+                : booth,
+            ),
+          );
+        })
+        .catch((err: unknown) => {
+          if (controller.signal.aborted) return;
+          if (err instanceof DOMException && err.name === 'AbortError') return;
+          // 一度取れていれば、通信に失敗しても直前の内容を残す
+          setDetails((current) => {
+            if (current[detailId]?.status === 'ready') return current;
+            return { ...current, [detailId]: { status: 'error' } };
+          });
+        });
+
+    void load();
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === 'visible') void load(true);
+    }, DETAIL_POLL_INTERVAL_MS);
+
+    return () => {
+      controller.abort();
+      window.clearInterval(timer);
+    };
+  }, [detailId, hasSelectedBooth, dayKey]);
 
   // 詳細を開いたら、その位置までスクロールして見える場所に出す
   useEffect(() => {
-    if (!detailId || !selectedBooth) return;
+    if (!detailId || !hasSelectedBooth) return;
     detailPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-  }, [detailId, selectedBooth]);
+  }, [detailId, hasSelectedBooth]);
 
   const showDetail = (id: string) => {
     const next = new URLSearchParams(searchParams);
@@ -227,19 +346,51 @@ export default function Attractions() {
     setSearchParams(next);
   };
 
+  // 学園祭の「本日」を取得して、初期の日付タブにする
   useEffect(() => {
     const controller = new AbortController();
+    fetchFestivalDay(controller.signal)
+      .then((current) => {
+        if (controller.signal.aborted) return;
+        const key = festivalDayToEventKey(current);
+        setTodayKey(key);
+        setDayKey((prev) => prev ?? key);
+      })
+      .catch(() => {
+        if (controller.signal.aborted) return;
+        const fallback = festivalDayToEventKey('day1');
+        setTodayKey(fallback);
+        setDayKey((prev) => prev ?? fallback);
+      });
+    return () => controller.abort();
+  }, []);
+
+  useEffect(() => {
+    if (!dayKey) return;
+
+    const controller = new AbortController();
+    const festivalDay = eventKeyToFestivalDay(dayKey);
 
     setLoading(true);
     setError(null);
 
     Promise.all([
-      fetchRestaurants(controller.signal),
-      fetchMapFacilities(controller.signal),
+      fetchRestaurants(controller.signal, festivalDay),
+      fetchMapFacilities(controller.signal, festivalDay),
     ])
-      .then(([stores, facilities]) => {
+      .then(([restaurantResult, facilities]) => {
         const facilityByStoreId = new Map(facilities.map((facility) => [facility.store_id, facility]));
-        setBooths(stores.map((store) => toBooth(store, facilityByStoreId.get(store.id))));
+        const nextBooths = restaurantResult.stores.map((store) =>
+          toBooth(store, facilityByStoreId.get(store.id)),
+        );
+        setBooths(nextBooths);
+
+        // 日付を変えたあと、一覧にない詳細は閉じる
+        if (detailId && !nextBooths.some((booth) => booth.id === detailId)) {
+          const next = new URLSearchParams(searchParams);
+          next.delete('detail');
+          setSearchParams(next, { replace: true });
+        }
       })
       .catch((err: unknown) => {
         if (err instanceof DOMException && err.name === 'AbortError') return;
@@ -250,11 +401,23 @@ export default function Attractions() {
       });
 
     return () => controller.abort();
-  }, []);
+  }, [dayKey]);
 
   return (
     <div className="space-y-4 p-4">
       <h1 className="font-display text-2xl font-bold text-foreground">ブース待ち状況</h1>
+
+      {dayKey && (
+        <EventDayTabs
+          value={dayKey}
+          todayKey={todayKey}
+          onChange={(next) => {
+            setDayKey(next);
+            setFilter('すべて');
+            setFloorFilter('all');
+          }}
+        />
+      )}
 
       {/* カテゴリフィルタ（チップ） */}
       <div className="flex flex-wrap gap-2" role="tablist" aria-label="カテゴリ">
@@ -278,6 +441,31 @@ export default function Attractions() {
           );
         })}
       </div>
+
+      {/* フロアフィルタ（チップ）。ブースが1つの階にしかないときは出さない */}
+      {floors.length > 1 && (
+        <div className="flex flex-wrap gap-2" role="tablist" aria-label="フロア">
+          {(['all', ...floors] as const).map((f) => {
+            const active = activeFloor === f;
+            return (
+              <button
+                key={f}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                onClick={() => setFloorFilter(f)}
+                className="rounded-full px-4 py-1.5 text-sm font-medium transition-colors"
+                style={{
+                  backgroundColor: active ? 'var(--primary)' : 'var(--muted)',
+                  color: active ? 'var(--primary-foreground)' : 'var(--muted-foreground)',
+                }}
+              >
+                {f === 'all' ? '全フロア' : `${f}F`}
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {loading && (
         <ul className="space-y-3" aria-label="ブース情報を読み込み中">
@@ -304,6 +492,10 @@ export default function Attractions() {
         <ul className="space-y-3">
           {list.map((b) => {
             const w = waitLevelStyle(b.wait.level);
+            const crowdLevel = b.crowdLevel;
+            const crowdColors = crowdLevel ? crowdLevelStyle(crowdLevel) : null;
+            const daySlots = festivalDay ? slotsForDay(b.timeSlots, festivalDay) : [];
+            const badge = festivalDay ? slotBadge(slotState(b.timeSlots, festivalDay, isToday, nowHm)) : null;
             return (
               <li
                 key={b.id}
@@ -316,10 +508,33 @@ export default function Attractions() {
                 >
                   <div className="min-w-0">
                     <h3 className="truncate font-bold text-foreground">{b.name}</h3>
+                    {crowdLevel && crowdColors && (
+                      <p className="mt-0.5 flex items-center gap-1 text-xs">
+                        <Armchair className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                        <span className="text-muted-foreground">店内</span>
+                        <span className="font-bold" style={{ color: crowdColors.fg }}>
+                          {crowdLevelLabel(crowdLevel)}
+                        </span>
+                      </p>
+                    )}
                     <p className="mt-0.5 flex items-center gap-1 text-sm text-muted-foreground">
                       <MapPin className="h-3.5 w-3.5" />
                       {b.area}
                     </p>
+                    {daySlots.length > 0 && (
+                      <p className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+                        <Clock className="h-3.5 w-3.5 shrink-0" />
+                        <span>出展時間 {formatSlots(daySlots)}</span>
+                        {badge && (
+                          <span
+                            className="rounded-full px-2 py-0.5 text-[11px] font-bold"
+                            style={{ backgroundColor: badge.bg, color: badge.fg }}
+                          >
+                            {badge.label}
+                          </span>
+                        )}
+                      </p>
+                    )}
                   </div>
                   <div className="shrink-0 text-right">
                     <span
@@ -328,7 +543,7 @@ export default function Attractions() {
                     >
                       {b.wait.label}
                     </span>
-                    <p className="mt-1 text-[11px] text-muted-foreground">待ち状況</p>
+                    <p className="mt-1 text-[11px] text-muted-foreground">列の待ち</p>
                   </div>
                 </button>
 
@@ -376,7 +591,7 @@ export default function Attractions() {
                     <MapPin className="h-3.5 w-3.5" />
                     マップ
                   </Link>
-                  {b.category === 'フード' && (
+                  {b.showOnCallPage && (
                     <Link
                       to={`/restaurants?store=${encodeURIComponent(b.id)}`}
                       className="inline-flex min-h-11 flex-1 items-center justify-center gap-1 rounded-xl px-3 py-2 text-xs font-bold text-white"
@@ -406,7 +621,7 @@ export default function Attractions() {
       >
         <Info className="mt-0.5 h-4 w-4 shrink-0" />
         <p>
-          待ち人数は、ページを開いた時点の目安です。最新の状況は、画面を更新してご確認ください。
+          「待ち人数」は列の長さ、「店内」は座席の埋まりです。待ち人数はページを開いた時点の目安なので、最新は画面を更新してご確認ください。
         </p>
       </div>
     </div>

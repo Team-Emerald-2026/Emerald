@@ -21,6 +21,7 @@ export const FACILITY_TYPES = [
   { value: 'exhibit', label: '作品展示', color: '#9333ea' },
   { value: 'information', label: '案内', color: '#0ea5a3' },
   { value: 'shop', label: '金券販売', color: '#7c5cff' },
+  { value: 'circle_sales', label: 'サークル販売', color: '#e11d48' },
   { value: 'support', label: '運営サポート', color: '#d97706' },
   { value: 'toilet_men', label: '男子トイレ', color: '#2563eb' },
   { value: 'toilet_women', label: '女子トイレ', color: '#db2777' },

@@ -1,12 +1,13 @@
 import type { ReactNode } from 'react';
 import { Navigate, NavLink, useNavigate } from 'react-router-dom';
-import { BarChart3, CalendarDays, LogOut, MapPin, Store } from 'lucide-react';
+import { BarChart3, CalendarDays, LineChart, LogOut, MapPin, Store } from 'lucide-react';
 import { logoutAdmin, ApiError } from '../../lib/api';
 import { logoutAdminSession, useFestival } from '../../lib/festivalStore';
 import { ADMIN_PUBLIC_ACCESS } from '../../lib/adminAccess';
 
 const links = [
   { to: '/admin', label: 'ダッシュボード', icon: BarChart3, end: true },
+  { to: '/admin/analytics', label: 'アナリティクス', icon: LineChart, end: false },
   { to: '/admin/stores', label: '店舗管理', icon: Store, end: false },
   { to: '/admin/map', label: 'マップ編集', icon: MapPin, end: false },
   { to: '/admin/events', label: 'イベント', icon: CalendarDays, end: false },

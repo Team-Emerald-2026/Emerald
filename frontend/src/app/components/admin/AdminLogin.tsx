@@ -5,7 +5,6 @@ import { ApiError, loginAdmin } from '../../lib/api';
 import { loginAdminSession, useFestival } from '../../lib/festivalStore';
 
 export default function AdminLogin() {
-  const session = useFestival((s) => s.session);
   const adminSession = useFestival((s) => s.adminSession);
   const navigate = useNavigate();
   const [id, setId] = useState('');
@@ -14,7 +13,6 @@ export default function AdminLogin() {
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  if (session) return <Navigate to="/store" replace />;
   if (adminSession) return <Navigate to="/admin" replace />;
 
   const submit = async () => {
@@ -37,6 +35,8 @@ export default function AdminLogin() {
     } catch (e) {
       if (e instanceof ApiError && e.status === 401) {
         setError('ログインIDまたはパスワードが正しくありません。');
+      } else if (e instanceof ApiError && e.status === 429) {
+        setError('ログインの試行回数が多すぎます。1分ほど待ってから再試行してください。');
       } else {
         setError('ログインに失敗しました。時間をおいて再試行してください。');
       }
@@ -59,16 +59,24 @@ export default function AdminLogin() {
           <p className="text-sm text-muted-foreground">京都TECH学園祭 管理者向け管理画面</p>
         </div>
 
-        <div className="space-y-3 rounded-2xl border border-border bg-card p-6 sm:p-8">
+        <form
+          className="space-y-3 rounded-2xl border border-border bg-card p-6 sm:p-8"
+          action="/admin/login"
+          method="post"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void submit();
+          }}
+        >
           <label className="block text-sm">
             <span className="mb-1 block text-muted-foreground">ログインID</span>
             <div className="flex items-center gap-2 rounded-lg border border-input bg-background px-3">
               <Shield className="h-4 w-4 text-muted-foreground" />
               <input
+                name="admin_login_id"
                 value={id}
                 onChange={(e) => setId(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && submit()}
-                autoComplete="username"
+                autoComplete="section-admin username"
                 className="w-full bg-transparent py-2.5 text-foreground outline-none"
               />
             </div>
@@ -78,11 +86,11 @@ export default function AdminLogin() {
             <div className="flex items-center gap-2 rounded-lg border border-input bg-background px-3">
               <KeyRound className="h-4 w-4 text-muted-foreground" />
               <input
+                name="admin_password"
                 type={showPassword ? 'text' : 'password'}
                 value={pw}
                 onChange={(e) => setPw(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && submit()}
-                autoComplete="current-password"
+                autoComplete="section-admin current-password"
                 className="w-full bg-transparent py-2.5 text-foreground outline-none"
               />
               <button
@@ -103,15 +111,14 @@ export default function AdminLogin() {
           )}
 
           <button
-            type="button"
-            onClick={submit}
+            type="submit"
             disabled={submitting}
             className="min-h-12 w-full rounded-xl py-3 font-bold text-white"
             style={{ backgroundColor: 'var(--primary)' }}
           >
             {submitting ? 'ログイン中...' : 'ログイン'}
           </button>
-        </div>
+        </form>
       </div>
     </div>
   );
