@@ -52,17 +52,7 @@ class StoreController extends Controller
                     ->select(['id', 'store_id', 'ticket_number', 'called_at'])
                     ->orderBy('called_at'),
             ])
-            ->find($id);
-
-        if (! $store) {
-            return response()->json([
-                'error' => [
-                    'code' => 'NOT_FOUND',
-                    'message' => '指定した飲食店が見つかりません',
-                    'details' => ['field' => 'id'],
-                ],
-            ], 404, [], JSON_UNESCAPED_UNICODE);
-        }
+            ->findOrFail($id);
 
         return (new StoreResource($store))
             ->response()

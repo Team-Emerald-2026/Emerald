@@ -48,11 +48,7 @@ class SalesController extends Controller
     {
         $entry = SalesEntry::query()
             ->forStore($this->currentStoreId())
-            ->find($id);
-
-        if (! $entry) {
-            return $this->notFound();
-        }
+            ->findOrFail($id);
 
         $validated = $request->validate([
             'amount' => ['required', 'integer', 'min:0', 'max:10000000'],
@@ -76,11 +72,7 @@ class SalesController extends Controller
     {
         $entry = SalesEntry::query()
             ->forStore($this->currentStoreId())
-            ->find($id);
-
-        if (! $entry) {
-            return $this->notFound();
-        }
+            ->findOrFail($id);
 
         $entry->delete();
 
@@ -96,16 +88,5 @@ class SalesController extends Controller
         }
 
         return $storeId;
-    }
-
-    private function notFound()
-    {
-        return response()->json([
-            'error' => [
-                'code' => 'NOT_FOUND',
-                'message' => '指定した売上記録が見つかりません',
-                'details' => ['field' => 'id'],
-            ],
-        ], 404, [], JSON_UNESCAPED_UNICODE);
     }
 }

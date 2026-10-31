@@ -10,6 +10,7 @@ use App\Models\OrderItem;
 use App\Models\SalesEntry;
 use App\Models\Store;
 use App\Models\User;
+use Database\Seeders\AdminUserSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -398,7 +399,7 @@ class MissingApisTest extends TestCase
     public function test_admin_seeder_creates_login_account(): void
     {
         config(['admin.login_id' => 'admin', 'admin.password' => 'password']);
-        $this->seed(\Database\Seeders\AdminUserSeeder::class);
+        $this->seed(AdminUserSeeder::class);
 
         $this->postJson('/api/v1/admin/auth/login', [
             'login_id' => 'admin',
@@ -441,6 +442,19 @@ class MissingApisTest extends TestCase
         ])->assertUnauthorized();
     }
 
+    public function test_login_rejects_non_string_credentials(): void
+    {
+        $this->postJson('/api/v1/booth/auth/login', [
+            'login_id' => ['cafe_admin'],
+            'password' => ['password123'],
+        ])->assertUnprocessable();
+
+        $this->postJson('/api/v1/admin/auth/login', [
+            'login_id' => ['admin'],
+            'password' => ['password123'],
+        ])->assertUnprocessable();
+    }
+
     public function test_cookie_session_is_invalidated_on_logout(): void
     {
         $admin = $this->createAdmin();
@@ -462,7 +476,7 @@ class MissingApisTest extends TestCase
     public function test_admin_seeder_skips_without_credentials(): void
     {
         config(['admin.login_id' => null, 'admin.password' => null]);
-        $this->seed(\Database\Seeders\AdminUserSeeder::class);
+        $this->seed(AdminUserSeeder::class);
 
         $this->assertDatabaseCount('users', 0);
     }
@@ -477,7 +491,7 @@ class MissingApisTest extends TestCase
         ]);
         config(['admin.login_id' => 'admin', 'admin.password' => 'password']);
 
-        $this->seed(\Database\Seeders\AdminUserSeeder::class);
+        $this->seed(AdminUserSeeder::class);
 
         $this->postJson('/api/v1/admin/auth/login', [
             'login_id' => 'admin',

@@ -30,4 +30,9 @@ abstract class Controller
     {
         return $this->errorResponse('FORBIDDEN', $message, 403);
     }
+
+    protected function conflictResponse(string $message, array $details = []): JsonResponse
+    {
+        return $this->errorResponse('CONFLICT', $message, 409, $details);
+    }
 }

@@ -14,8 +14,8 @@ class AuthController extends Controller
     public function login(Request $request)
     {
         $request->validate([
-            'login_id' => ['required'],
-            'password' => ['required'],
+            'login_id' => ['required', 'string', 'max:255'],
+            'password' => ['required', 'string', 'max:255'],
         ]);
 
         $user = User::query()
@@ -23,8 +23,8 @@ class AuthController extends Controller
             ->where('role', 'store')
             ->first();
 
-        if (!$user || !Hash::check($request->password, $user->password)) {
-            throw new AuthenticationException();
+        if (! $user || ! Hash::check($request->password, $user->password)) {
+            throw new AuthenticationException;
         }
 
         Auth::guard('web')->login($user);
@@ -33,7 +33,7 @@ class AuthController extends Controller
         return response()->json([
             'store_id' => $user->store_id,
             'role' => $user->role,
-        ]);
+        ], 200, [], JSON_UNESCAPED_UNICODE);
     }
 
     public function logout(Request $request)

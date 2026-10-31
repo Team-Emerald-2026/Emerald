@@ -14,8 +14,8 @@ class AdminAuthController extends Controller
     public function login(Request $request)
     {
         $validated = $request->validate([
-            'login_id' => ['required', 'string'],
-            'password' => ['required', 'string'],
+            'login_id' => ['required', 'string', 'max:255'],
+            'password' => ['required', 'string', 'max:255'],
         ]);
 
         $user = User::query()
@@ -23,8 +23,8 @@ class AdminAuthController extends Controller
             ->where('role', 'admin')
             ->first();
 
-        if (!$user || !Hash::check($validated['password'], $user->password)) {
-            throw new AuthenticationException();
+        if (! $user || ! Hash::check($validated['password'], $user->password)) {
+            throw new AuthenticationException;
         }
 
         Auth::guard('web')->login($user);

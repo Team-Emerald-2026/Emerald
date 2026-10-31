@@ -139,6 +139,7 @@ interface RequestOptions {
   /** 旧API呼び出しとの互換用。Cookie認証では使用しない。 */
   token?: string;
   body?: unknown;
+  retryCsrf?: boolean;
 }
 
 let csrfCookiePromise: Promise<void> | null = null;
@@ -210,7 +211,7 @@ function normalizeItem<T extends { id: string }>(payload: unknown): T | null {
 }
 
 async function request(path: string, options: RequestOptions = {}): Promise<unknown> {
-  const { method = 'GET', signal, body } = options;
+  const { method = 'GET', signal, body, retryCsrf = false } = options;
   const headers: Record<string, string> = {
     Accept: 'application/json',
   };
@@ -240,6 +241,13 @@ async function request(path: string, options: RequestOptions = {}): Promise<unkn
     body: hasBody ? JSON.stringify(body) : undefined,
     signal,
   });
+
+  // セッション切れなどでCSRF Cookieが古くなっていた場合は、Cookieを再取得して一度だけ再送する。
+  if (response.status === 419 && method !== 'GET' && !retryCsrf) {
+    csrfCookiePromise = null;
+    await ensureCsrfCookie();
+    return request(path, { ...options, retryCsrf: true });
+  }
 
   if (!response.ok) {
     let message = `API request failed: ${response.status}`;
@@ -293,7 +301,15 @@ export function loginBooth(loginId: string, password: string, signal?: AbortSign
       login_id: loginId,
       password,
     },
-  }) as Promise<BoothLoginResponse>;
+  }).then((payload) => {
+    if (!isRecord(payload) || payload.role !== 'store' || typeof payload.store_id !== 'string') {
+      throw new ApiError('ログイン応答が不正です。', 500);
+    }
+    return {
+      store_id: payload.store_id,
+      role: payload.role,
+    } satisfies BoothLoginResponse;
+  });
 }
 
 export function loginAdmin(loginId: string, password: string, signal?: AbortSignal) {
@@ -304,7 +320,15 @@ export function loginAdmin(loginId: string, password: string, signal?: AbortSign
       login_id: loginId,
       password,
     },
-  }) as Promise<AdminLoginResponse>;
+  }).then((payload) => {
+    if (!isRecord(payload) || payload.role !== 'admin' || typeof payload.login_id !== 'string') {
+      throw new ApiError('ログイン応答が不正です。', 500);
+    }
+    return {
+      role: payload.role,
+      login_id: payload.login_id,
+    } satisfies AdminLoginResponse;
+  });
 }
 
 export function logoutBooth(token: string | undefined, signal?: AbortSignal) {
