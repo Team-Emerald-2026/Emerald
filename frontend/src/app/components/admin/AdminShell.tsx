@@ -28,8 +28,8 @@ export default function AdminShell({
   }
 
   const logout = () => {
-    if (adminSession?.token) {
-      void logoutAdmin(adminSession.token).catch((error) => {
+    if (adminSession) {
+      void logoutAdmin(undefined).catch((error) => {
         if (!(error instanceof ApiError && error.status === 401)) {
           console.error('Admin logout failed', error);
         }

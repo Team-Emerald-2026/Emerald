@@ -98,15 +98,11 @@ export default function AdminStores() {
     setLoading(true);
     setError('');
     // 場所の一覧は店舗の位置の候補に使う。取得できなくても店舗一覧は表示する
-    void fetchAdminMapFacilities(adminSession?.token, signal)
+    void fetchAdminMapFacilities(undefined, signal)
       .then((data) => setLocations(data))
       .catch(() => undefined);
 
-    void fetchAdminFestivalDay(adminSession?.token, signal)
-      .then((data) => setFestivalDay(data))
-      .catch(() => undefined);
-
-    return fetchAdminStores(adminSession?.token, signal)
+    return fetchAdminStores(undefined, signal)
       .then((data) => setStores(data))
       .catch((err: unknown) => {
         if (signal?.aborted) return;
@@ -202,10 +198,10 @@ export default function AdminStores() {
 
     try {
       if (editing) {
-        await updateAdminStore(adminSession?.token, editing.id, input);
+        await updateAdminStore(undefined, editing.id, input);
         setMessage('店舗情報を更新しました。');
       } else {
-        await createAdminStore(adminSession?.token, input);
+        await createAdminStore(undefined, input);
         setMessage('店舗を作成しました。');
       }
       setShowForm(false);
@@ -285,7 +281,7 @@ export default function AdminStores() {
     setError('');
     setMessage('');
     try {
-      await hideAdminStore(adminSession?.token, store.id);
+      await hideAdminStore(undefined, store.id);
       setMessage('店舗を営業停止・非表示にしました。');
       if (editing?.id === store.id) {
         setShowForm(false);
@@ -307,7 +303,7 @@ export default function AdminStores() {
     setError('');
     setMessage('');
     try {
-      await deleteAdminStorePermanently(adminSession?.token, store.id);
+      await deleteAdminStorePermanently(undefined, store.id);
       setMessage(`店舗「${store.name}」を完全に削除しました。`);
       setShowForm(false);
       setEditing(null);

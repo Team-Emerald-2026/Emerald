@@ -89,7 +89,7 @@ export default function StoreShell({
         <button
           type="button"
           onClick={() => {
-            void logoutBooth(session.token).catch((error) => {
+            void logoutBooth(undefined).catch((error) => {
               console.error('Logout API failed', error);
             });
             logoutStore();

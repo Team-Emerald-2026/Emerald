@@ -39,10 +39,10 @@ export default function StorePos() {
 
   // ログイン中の店舗が「店舗情報」で登録したメニューを読み込む
   const loadProducts = useCallback(
-    (token: string, signal?: AbortSignal) => {
+    (_token: string | undefined, signal?: AbortSignal) => {
       setLoading(true);
       setLoadError('');
-      return fetchBoothMenuItems(token, signal)
+      return fetchBoothMenuItems(undefined, signal)
         .then((items) => {
           const next = items
             .filter((item) => item.is_available !== false)
@@ -67,15 +67,15 @@ export default function StorePos() {
   );
 
   useEffect(() => {
-    if (!session?.token) {
+    if (!session) {
       setLoading(false);
       return;
     }
 
     const controller = new AbortController();
-    void loadProducts(session.token, controller.signal);
+    void loadProducts(undefined, controller.signal);
     return () => controller.abort();
-  }, [session?.token, loadProducts]);
+  }, [session, loadProducts]);
 
   const setQty = (id: string, qty: number) =>
     setCart((c) => {
@@ -94,7 +94,7 @@ export default function StorePos() {
 
   // 会計と同時に、サーバーへ注文を登録（精算も同じ処理で行う）。成功してはじめて受付番号を出す。
   const checkout = async () => {
-    if (!session?.token || lineItems.length === 0) return;
+    if (!session || lineItems.length === 0) return;
     if (submittingRef.current) return;
 
     submittingRef.current = true;
@@ -103,7 +103,7 @@ export default function StorePos() {
     setIssued(null);
 
     try {
-      const order = await createBoothOrder(session.token, {
+      const order = await createBoothOrder(undefined, {
         items: lineItems.map((item) => ({
           menu_item_id: Number(item.id),
           quantity: item.qty,
@@ -119,7 +119,7 @@ export default function StorePos() {
       }
       if (err instanceof ApiError && err.status === 422) {
         // 販売停止や削除でメニューが変わっていた場合は、読み込み直して選び直してもらう
-        await loadProducts(session.token);
+        await loadProducts(undefined);
         setSubmitError(
           'メニューの内容が変わっていたため、最新のメニューに更新しました。注文内容を確認して、もう一度会計してください。',
         );
@@ -127,7 +127,7 @@ export default function StorePos() {
       }
       if (err instanceof ApiError && err.code === 'SOLD_OUT') {
         // 別の端末で売り切れにされていた場合は、最新のメニューを読み込んでカートから外す
-        await loadProducts(session.token);
+        await loadProducts(undefined);
         setSubmitError(describeOrderError(err, '売り切れの商品が含まれています。'));
         return;
       }

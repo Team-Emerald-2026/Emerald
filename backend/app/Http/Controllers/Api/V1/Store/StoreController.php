@@ -76,53 +76,20 @@ class StoreController extends Controller
 
     public function show(Request $request, string $id)
     {
-        Store::ensureCrowdLevelColumn();
-        Store::ensureShowOnCallPageColumn();
-
-        $validated = $request->validate([
-            'day' => ['nullable', 'string', Rule::in(FestivalSetting::allowedDays())],
-        ]);
-        // day 指定時はその日の出展ブース詳細を見られる。未指定なら今日の学園祭日で絞る
-        $filterDay = $validated['day'] ?? FestivalSetting::currentDay();
-
-        // 詳細を開いている来場者は数秒ごとに取り直すので、一覧と同じく短時間キャッシュする。
-        // v2: 古いキーには Collection が壊れた値が残っているため使わない。
-        $payload = Cache::remember(
-            'api:v1:restaurants:show:v2:'.$id.':'.$filterDay,
-            config('cache.api_list_ttl'),
-            function () use ($id, $filterDay) {
-                $store = Store::query()
-                    ->when(DbSchema::hasColumn('stores', 'is_visible'), fn ($query) => $query->where('is_visible', true))
-                    ->when(
-                        DbSchema::hasColumn('stores', 'exhibition_day'),
-                        fn ($query) => $query->forCurrentFestivalDay($filterDay),
-                    )
-                    ->with([
-                        'menuItems' => fn ($query) => $query
-                            ->where('is_available', true)
-                            ->select(['id', 'store_id', 'name', 'description', 'price', 'is_available', 'is_sold_out'])
-                            ->orderBy('id'),
-                        'mapFacility:id,store_id,name,type,floor,x,y',
-                        'orders' => fn ($query) => $query
-                            ->currentlyCalled()
-                            ->select(['id', 'store_id', 'ticket_number', 'called_at'])
-                            ->orderBy('called_at'),
-                    ])
-                    ->find($id);
-
-                return $store ? (new StoreResource($store))->resolve() : null;
-            },
-        );
-
-        if ($payload === null) {
-            return response()->json([
-                'error' => [
-                    'code' => 'NOT_FOUND',
-                    'message' => '指定した飲食店が見つかりません',
-                    'details' => ['field' => 'id'],
-                ],
-            ], 404, [], JSON_UNESCAPED_UNICODE);
-        }
+        $store = Store::query()
+            ->when(Schema::hasColumn('stores', 'is_visible'), fn ($query) => $query->where('is_visible', true))
+            ->with([
+                'menuItems' => fn ($query) => $query
+                    ->where('is_available', true)
+                    ->select(['id', 'store_id', 'name', 'description', 'price', 'is_available', 'is_sold_out'])
+                    ->orderBy('id'),
+                'mapFacility:id,store_id,name,type,floor,x,y',
+                'orders' => fn ($query) => $query
+                    ->currentlyCalled()
+                    ->select(['id', 'store_id', 'ticket_number', 'called_at'])
+                    ->orderBy('called_at'),
+            ])
+            ->findOrFail($id);
 
         return response()->json(['data' => $payload], 200, [], JSON_UNESCAPED_UNICODE);
     }

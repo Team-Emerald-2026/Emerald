@@ -26,7 +26,6 @@ const SEND_DELAY_MS = 1000;
  */
 export default function StoreWaiting() {
   const session = useFestival((s) => s.session);
-  const token = session?.token;
 
   /** サーバーから受け取った最新の待ち人数 */
   const [serverCount, setServerCountState] = useState<number | null>(null);
@@ -65,11 +64,11 @@ export default function StoreWaiting() {
   // 待ち人数をサーバーから定期的に取得する（レジの会計・提供済みの変化にも追随する）
   const load = useCallback(
     async (signal?: AbortSignal) => {
-      if (!token) return;
+      if (!session) return;
       const version = sendVersionRef.current;
       const crowdVersion = crowdVersionRef.current;
       try {
-        const dashboard = await fetchBoothDashboard(token, signal);
+        const dashboard = await fetchBoothDashboard(undefined, signal);
         if (signal?.aborted) return;
         if (!dashboard) {
           setLoadError('待ち人数を取得できませんでした。');
@@ -94,11 +93,11 @@ export default function StoreWaiting() {
         setLoadError('待ち人数を取得できませんでした。通信状況を確認してください。');
       }
     },
-    [token],
+    [session],
   );
 
   useEffect(() => {
-    if (!token) return;
+    if (!session) return;
     const controller = new AbortController();
     void load(controller.signal);
     const timer = window.setInterval(() => {
@@ -108,7 +107,7 @@ export default function StoreWaiting() {
       controller.abort();
       window.clearInterval(timer);
     };
-  }, [token, load]);
+  }, [session, load]);
 
   useEffect(() => {
     if (!flash) return;
@@ -183,7 +182,7 @@ export default function StoreWaiting() {
         window.clearTimeout(sendTimerRef.current);
         sendTimerRef.current = null;
       }
-      if (!token || inFlightRef.current !== 0 || pendingRef.current === 0) return;
+      if (!session || inFlightRef.current !== 0 || pendingRef.current === 0) return;
 
       const delta = pendingRef.current;
       sendVersionRef.current += 1;
@@ -192,7 +191,7 @@ export default function StoreWaiting() {
       setActionError('');
 
       try {
-        const updated = await updateWaitTime(token, { current_queue_delta: delta });
+        const updated = await updateWaitTime(undefined, { current_queue_delta: delta });
         const next = Number(updated.current_queue_count) || 0;
         setServerCount(next);
         if (isUndo) {
@@ -219,7 +218,7 @@ export default function StoreWaiting() {
       // 送信中に押された分があれば、続けて送る
       if (pendingRef.current !== 0) void flush();
     },
-    [token, load],
+    [session, load],
   );
 
   // 画面を離れるとき・裏に回ったときは、待たずに送る（押した分を失わないように）
@@ -239,7 +238,7 @@ export default function StoreWaiting() {
 
   const changeBy = (delta: number) => {
     // 連打は再描画より速いことがあるので、表示中の値ではなく ref から今の人数を求める
-    if (!token || serverCountRef.current === null) return;
+    if (!session || serverCountRef.current === null) return;
     const current = serverCountRef.current + inFlightRef.current + pendingRef.current;
     if (delta < 0 && current <= 0) return;
 

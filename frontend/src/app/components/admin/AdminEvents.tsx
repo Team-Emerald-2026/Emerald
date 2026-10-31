@@ -195,7 +195,7 @@ export default function AdminEvents() {
     if (!adminSession && !ADMIN_PUBLIC_ACCESS) return Promise.resolve();
     setLoading(true);
     setError('');
-    return fetchAdminEvents(adminSession?.token, signal)
+    return fetchAdminEvents(undefined, signal)
       .then((data) => setItems(data))
       .catch((err: unknown) => {
         if (signal?.aborted) return;
@@ -221,7 +221,7 @@ export default function AdminEvents() {
   useEffect(() => {
     if (!adminSession && !ADMIN_PUBLIC_ACCESS) return;
     const controller = new AbortController();
-    fetchAdminMapFacilities(adminSession?.token, controller.signal)
+    fetchAdminMapFacilities(undefined, controller.signal)
       .then((facilities) => setRooms(toRoomOptions(facilities)))
       .catch(() => {});
     return () => controller.abort();
@@ -378,10 +378,10 @@ export default function AdminEvents() {
 
     try {
       if (editing) {
-        await updateAdminEvent(adminSession?.token, editing.id, input);
+        await updateAdminEvent(undefined, editing.id, input);
         setMessage('更新しました。来場者のイベント画面にも反映されます。');
       } else {
-        await createAdminEvent(adminSession?.token, input);
+        await createAdminEvent(undefined, input);
         setMessage('作成しました。来場者のイベント画面にも反映されます。');
       }
       if (noticeTicker && form.is_published) {
@@ -407,7 +407,7 @@ export default function AdminEvents() {
     setError('');
     setMessage('');
     try {
-      await deleteAdminEvent(adminSession?.token, item.id);
+      await deleteAdminEvent(undefined, item.id);
       setMessage('削除しました。来場者画面からも消えます。');
       if (editing?.id === item.id) closeForm();
       await loadItems();
@@ -471,7 +471,7 @@ export default function AdminEvents() {
     setError('');
     setMessage('');
     try {
-      await updateAdminEvent(adminSession?.token, item.id, { ticker_now: false });
+      await updateAdminEvent(undefined, item.id, { ticker_now: false });
       setMessage(`「${item.title}」を電光掲示板から止めました。`);
       await loadItems();
     } catch (err: unknown) {
