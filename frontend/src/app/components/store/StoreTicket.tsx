@@ -22,7 +22,7 @@ export default function StoreTicket() {
     error: fetchError,
     refresh,
     upsertOrder,
-  } = useBoothOrders(session?.token, { onUnauthorized: logoutStore });
+  } = useBoothOrders(Boolean(session), { onUnauthorized: logoutStore });
 
   // 確認中の操作（提供完了 / 注文のキャンセル）
   const [confirm, setConfirm] = useState<{ id: string; kind: 'serve' | 'cancel' } | null>(null);
@@ -34,7 +34,7 @@ export default function StoreTicket() {
 
   /** 1件ずつ操作する。失敗したときは、画面に理由を出して最新の状態に取り直す */
   const runAction = async (orderId: string, action: () => Promise<void>) => {
-    if (!session?.token || busyRef.current) return;
+    if (!session || busyRef.current) return;
     busyRef.current = orderId;
     setBusyId(orderId);
     setActionError('');
@@ -59,14 +59,14 @@ export default function StoreTicket() {
 
   const callOrder = (order: BoothOrder) =>
     runAction(order.id, async () => {
-      const updated = await callBoothOrder(session!.token, order.id);
+      const updated = await callBoothOrder(undefined, order.id);
       upsertOrder(updated);
       setBigNumber(updated.ticket_number);
     });
 
   const completeServe = (order: BoothOrder) =>
     runAction(order.id, async () => {
-      const updated = await serveBoothOrder(session!.token, order.id);
+      const updated = await serveBoothOrder(undefined, order.id);
       upsertOrder(updated);
       if (bigNumber === order.ticket_number) setBigNumber(null);
       setConfirm(null);
@@ -75,7 +75,7 @@ export default function StoreTicket() {
 
   const completeCancel = (order: BoothOrder) =>
     runAction(order.id, async () => {
-      const updated = await cancelBoothOrder(session!.token, order.id);
+      const updated = await cancelBoothOrder(undefined, order.id);
       upsertOrder(updated);
       if (bigNumber === order.ticket_number) {
         setBigNumber(null);

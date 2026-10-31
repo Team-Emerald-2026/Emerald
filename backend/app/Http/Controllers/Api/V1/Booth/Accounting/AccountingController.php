@@ -54,9 +54,6 @@ class AccountingController extends Controller
     public function updateMenuItem(Request $request, int $id)
     {
         $item = $this->findStoreMenuItem($id);
-        if (! $item) {
-            return $this->menuItemNotFound();
-        }
 
         $validated = $this->validateMenuItem($request);
         $item->fill([
@@ -76,9 +73,6 @@ class AccountingController extends Controller
     public function updateMenuItemSoldOut(Request $request, int $id)
     {
         $item = $this->findStoreMenuItem($id);
-        if (! $item) {
-            return $this->menuItemNotFound();
-        }
 
         $validated = $request->validate([
             'is_sold_out' => ['required', 'boolean'],
@@ -95,9 +89,6 @@ class AccountingController extends Controller
     public function destroyMenuItem(int $id)
     {
         $item = $this->findStoreMenuItem($id);
-        if (! $item) {
-            return $this->menuItemNotFound();
-        }
 
         $usedInOrders = OrderItem::query()
             ->where('menu_item_id', $item->id)
@@ -142,17 +133,7 @@ class AccountingController extends Controller
         $order = Order::query()
             ->forStore($storeId)
             ->with(['items' => $this->itemsWithNames()])
-            ->find($id);
-
-        if (!$order) {
-            return response()->json([
-                'errors' => [[
-                    'status' => '404',
-                    'title' => 'Not Found',
-                    'detail' => '指定した会計が見つかりません',
-                ]],
-            ], 404, [], JSON_UNESCAPED_UNICODE);
-        }
+            ->findOrFail($id);
 
         return OrderResource::make($order)
             ->response()
@@ -169,17 +150,7 @@ class AccountingController extends Controller
             ->where('ticket_number', strtoupper($ticketNumber))
             // 整理券の番号は使い回すため、同じ番号では最新の会計を返す
             ->orderByDesc('id')
-            ->first();
-
-        if (!$order) {
-            return response()->json([
-                'errors' => [[
-                    'status' => '404',
-                    'title' => 'Not Found',
-                    'detail' => '指定した会計番号が見つかりません',
-                ]],
-            ], 404, [], JSON_UNESCAPED_UNICODE);
-        }
+            ->firstOrFail();
 
         return OrderResource::make($order)
             ->response()
@@ -229,13 +200,12 @@ class AccountingController extends Controller
 
         $soldOutItems = $menuItems->filter(fn (MenuItem $menuItem) => $menuItem->is_sold_out);
         if ($soldOutItems->isNotEmpty()) {
-            return response()->json([
-                'error' => [
-                    'code' => 'SOLD_OUT',
-                    'message' => '売り切れの商品が含まれています: ' . $soldOutItems->pluck('name')->implode('、'),
-                    'details' => ['menu_item_ids' => $soldOutItems->keys()->values()],
-                ],
-            ], 409, [], JSON_UNESCAPED_UNICODE);
+            return $this->errorResponse(
+                'SOLD_OUT',
+                '売り切れの商品が含まれています: '.$soldOutItems->pluck('name')->implode('、'),
+                409,
+                ['menu_item_ids' => $soldOutItems->keys()->values()],
+            );
         }
 
         $result = DB::transaction(function () use ($requestedItems, $storeId, $menuItems, $settleNow) {
@@ -286,36 +256,14 @@ class AccountingController extends Controller
 
         $order = Order::query()
             ->forStore($storeId)
-            ->find($id);
-
-        if (!$order) {
-            return response()->json([
-                'errors' => [[
-                    'status' => '404',
-                    'title' => 'Not Found',
-                    'detail' => '指定した会計が見つかりません',
-                ]],
-            ], 404, [], JSON_UNESCAPED_UNICODE);
-        }
+            ->findOrFail($id);
 
         if ($order->status === 'canceled') {
-            return response()->json([
-                'errors' => [[
-                    'status' => '409',
-                    'title' => 'Conflict',
-                    'detail' => 'キャンセル済みの会計は清算できません',
-                ]],
-            ], 409, [], JSON_UNESCAPED_UNICODE);
+            return $this->conflictResponse('キャンセル済みの会計は清算できません');
         }
 
         if ($order->status === 'settled') {
-            return response()->json([
-                'errors' => [[
-                    'status' => '409',
-                    'title' => 'Conflict',
-                    'detail' => 'この会計はすでに清算済みです',
-                ]],
-            ], 409, [], JSON_UNESCAPED_UNICODE);
+            return $this->conflictResponse('この会計はすでに清算済みです');
         }
 
         $order->status = 'settled';
@@ -331,18 +279,8 @@ class AccountingController extends Controller
     {
         $order = $this->findStoreOrder($id);
 
-        if (! $order) {
-            return $this->orderNotFound();
-        }
-
         if ($order->served_at !== null || $order->status === 'canceled') {
-            return response()->json([
-                'error' => [
-                    'code' => 'CONFLICT',
-                    'message' => 'この会計は呼び出しできません',
-                    'details' => ['status' => $order->status],
-                ],
-            ], 409, [], JSON_UNESCAPED_UNICODE);
+            return $this->conflictResponse('この会計は呼び出しできません', ['status' => $order->status]);
         }
 
         $order->called_at = now();
@@ -357,18 +295,8 @@ class AccountingController extends Controller
     {
         $order = $this->findStoreOrder($id);
 
-        if (! $order) {
-            return $this->orderNotFound();
-        }
-
         if ($order->served_at !== null || $order->status === 'canceled') {
-            return response()->json([
-                'error' => [
-                    'code' => 'CONFLICT',
-                    'message' => 'この会計はすでに提供済みです',
-                    'details' => ['status' => $order->status],
-                ],
-            ], 409, [], JSON_UNESCAPED_UNICODE);
+            return $this->conflictResponse('この会計はすでに提供済みです', ['status' => $order->status]);
         }
 
         $wasWaiting = $order->served_at === null;
@@ -396,18 +324,8 @@ class AccountingController extends Controller
     {
         $order = $this->findStoreOrder($id);
 
-        if (! $order) {
-            return $this->orderNotFound();
-        }
-
         if ($order->served_at === null || $order->status === 'canceled') {
-            return response()->json([
-                'error' => [
-                    'code' => 'CONFLICT',
-                    'message' => 'この会計は提供済みではないため、戻せません',
-                    'details' => ['status' => $order->status],
-                ],
-            ], 409, [], JSON_UNESCAPED_UNICODE);
+            return $this->conflictResponse('この会計は提供済みではないため、戻せません', ['status' => $order->status]);
         }
 
         DB::transaction(function () use ($order) {
@@ -434,10 +352,6 @@ class AccountingController extends Controller
     {
         $order = $this->findStoreOrder($id);
 
-        if (! $order) {
-            return $this->orderNotFound();
-        }
-
         // 同時に2回押されても、待ち人数を二重に減らさないよう、行をロックして状態を確かめ直す
         $canceled = DB::transaction(function () use ($order) {
             $locked = Order::query()->lockForUpdate()->find($order->id);
@@ -461,15 +375,12 @@ class AccountingController extends Controller
         $order = $this->findStoreOrder($id);
 
         if (! $canceled) {
-            return response()->json([
-                'error' => [
-                    'code' => 'CONFLICT',
-                    'message' => $order->status === 'canceled'
-                        ? 'この会計はすでにキャンセル済みです'
-                        : '提供済みの会計はキャンセルできません',
-                    'details' => ['status' => $order->status],
-                ],
-            ], 409, [], JSON_UNESCAPED_UNICODE);
+            return $this->conflictResponse(
+                $order->status === 'canceled'
+                    ? 'この会計はすでにキャンセル済みです'
+                    : '提供済みの会計はキャンセルできません',
+                ['status' => $order->status],
+            );
         }
 
         return OrderResource::make($order)
@@ -477,12 +388,12 @@ class AccountingController extends Controller
             ->setEncodingOptions(JSON_UNESCAPED_UNICODE);
     }
 
-    private function findStoreOrder(int $id): ?Order
+    private function findStoreOrder(int $id): Order
     {
         return Order::query()
             ->forStore($this->currentStoreId())
             ->with(['items' => $this->itemsWithNames()])
-            ->find($id);
+            ->findOrFail($id);
     }
 
     /**
@@ -496,17 +407,6 @@ class AccountingController extends Controller
                 ->select(['id', 'order_id', 'menu_item_id', 'quantity', 'unit_price', 'subtotal'])
                 ->with('menuItem:id,name');
         };
-    }
-
-    private function orderNotFound()
-    {
-        return response()->json([
-            'error' => [
-                'code' => 'NOT_FOUND',
-                'message' => '指定した会計が見つかりません',
-                'details' => ['field' => 'id'],
-            ],
-        ], 404, [], JSON_UNESCAPED_UNICODE);
     }
 
     /**
@@ -541,7 +441,7 @@ class AccountingController extends Controller
                 ->forStore($storeId)
                 ->whereNull('served_at')
                 ->where('status', '!=', 'canceled')
-                ->where('ticket_number', 'like', $prefix . '-%')
+                ->where('ticket_number', 'like', $prefix.'-%')
                 ->pluck('ticket_number')
                 ->map(fn ($number) => (int) substr((string) $number, strlen($prefix) + 1));
 
@@ -559,13 +459,12 @@ class AccountingController extends Controller
             }
 
             if ($next === null) {
-                throw new HttpResponseException(response()->json([
-                    'error' => [
-                        'code' => 'NO_TICKET_AVAILABLE',
-                        'message' => '使える整理券がありません。提供完了やキャンセルで整理券を戻すか、店舗情報で整理券の枚数を増やしてください。',
-                        'details' => ['ticket_limit' => $limit],
-                    ],
-                ], 409, [], JSON_UNESCAPED_UNICODE));
+                throw new HttpResponseException($this->errorResponse(
+                    'NO_TICKET_AVAILABLE',
+                    '使える整理券がありません。提供完了やキャンセルで整理券を戻すか、店舗情報で整理券の枚数を増やしてください。',
+                    409,
+                    ['ticket_limit' => $limit],
+                ));
             }
 
             if ($counter) {
@@ -584,7 +483,7 @@ class AccountingController extends Controller
                 ]);
             }
 
-            return $prefix . '-' . $next;
+            return $prefix.'-'.$next;
         });
     }
 
@@ -601,23 +500,11 @@ class AccountingController extends Controller
         ]);
     }
 
-    private function findStoreMenuItem(int $id): ?MenuItem
+    private function findStoreMenuItem(int $id): MenuItem
     {
         return MenuItem::query()
             ->forStore($this->currentStoreId())
             ->where('is_available', true)
-            ->find($id);
+            ->findOrFail($id);
     }
-
-    private function menuItemNotFound()
-    {
-        return response()->json([
-            'error' => [
-                'code' => 'NOT_FOUND',
-                'message' => '指定した商品が見つかりません',
-                'details' => ['field' => 'id'],
-            ],
-        ], 404, [], JSON_UNESCAPED_UNICODE);
-    }
-
 }

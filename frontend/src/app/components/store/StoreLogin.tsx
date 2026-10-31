@@ -36,7 +36,7 @@ export default function StoreLogin() {
         setError('店舗情報がないアカウントです。');
         return;
       }
-      loginStore(result.store_id, result.token);
+      loginStore(result.store_id);
       navigate('/store/dashboard');
     } catch (e) {
       if (e instanceof ApiError && e.status === 401) {

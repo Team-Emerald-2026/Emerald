@@ -27,17 +27,7 @@ class EventController extends Controller
     {
         $event = EventNotice::query()
             ->published()
-            ->find($id);
-
-        if (! $event) {
-            return response()->json([
-                'error' => [
-                    'code' => 'NOT_FOUND',
-                    'message' => '指定したイベントが見つかりません',
-                    'details' => ['field' => 'id'],
-                ],
-            ], 404, [], JSON_UNESCAPED_UNICODE);
-        }
+            ->findOrFail($id);
 
         return EventNoticeResource::make($event)
             ->response()

@@ -56,14 +56,13 @@ export default function StoreProfile() {
   const [savingTickets, setSavingTickets] = useState(false);
 
   useEffect(() => {
-    if (!session?.token) {
+    if (!session) {
       setError('ログイン情報がありません。再度ログインしてください。');
       setLoading(false);
       return;
     }
 
-    const token = session.token;
-    Promise.all([fetchStoreProfile(token), fetchBoothMenuItems(token)])
+    Promise.all([fetchStoreProfile(undefined), fetchBoothMenuItems(undefined)])
       .then(([data, items]) => {
         setProfile(data);
         setName(data.name);
@@ -78,7 +77,7 @@ export default function StoreProfile() {
         setError(err instanceof Error ? err.message : '店舗情報を取得できませんでした。');
       })
       .finally(() => setLoading(false));
-  }, [session?.token]);
+  }, [session]);
 
   const resetProductForm = () => {
     setProductName('');
@@ -88,7 +87,7 @@ export default function StoreProfile() {
   };
 
   const save = async () => {
-    if (!session?.token || !profile) {
+    if (!session || !profile) {
       setError('ログイン情報がありません。再度ログインしてください。');
       return;
     }
@@ -105,7 +104,7 @@ export default function StoreProfile() {
     setMessage('');
 
     try {
-      const updated = await updateStoreProfile(session.token, profile.id, {
+      const updated = await updateStoreProfile(undefined, profile.id, {
         name: name.trim(),
         description: description.trim(),
         is_open: isOpen,
@@ -132,7 +131,7 @@ export default function StoreProfile() {
 
   /** 整理券の設定（枚数・非表示の番号）を保存する。店舗名などは保存済みの値を使う */
   const saveTicketSettings = async (nextLimit: number, nextDisabled: number[]) => {
-    if (!session?.token || !profile) {
+    if (!session || !profile) {
       setTicketError('ログイン情報がありません。再度ログインしてください。');
       return;
     }
@@ -142,7 +141,7 @@ export default function StoreProfile() {
     setTicketMessage('');
 
     try {
-      const updated = await updateStoreProfile(session.token, profile.id, {
+      const updated = await updateStoreProfile(undefined, profile.id, {
         name: profile.name,
         description: profile.description ?? '',
         is_open: isOpen,
@@ -182,7 +181,7 @@ export default function StoreProfile() {
   const productPriceValid = Number.isInteger(parsedPrice) && parsedPrice >= 0;
 
   const saveProduct = async () => {
-    if (!session?.token) {
+    if (!session) {
       setProductError('ログイン情報がありません。再度ログインしてください。');
       return;
     }
@@ -201,12 +200,12 @@ export default function StoreProfile() {
     try {
       const payload = { name: productName.trim(), price: parsedPrice };
       if (editingProductId !== null) {
-        const updated = await updateBoothMenuItem(session.token, editingProductId, payload);
+        const updated = await updateBoothMenuItem(undefined, editingProductId, payload);
         setMenuItems((current) =>
           current.map((item) => (String(item.id) === String(updated.id) ? updated : item)),
         );
       } else {
-        const created = await createBoothMenuItem(session.token, payload);
+        const created = await createBoothMenuItem(undefined, payload);
         setMenuItems((current) => [...current, created]);
       }
       resetProductForm();
@@ -225,7 +224,7 @@ export default function StoreProfile() {
   };
 
   const toggleSoldOut = async (item: BackendMenuItem) => {
-    if (!session?.token) {
+    if (!session) {
       setProductError('ログイン情報がありません。再度ログインしてください。');
       return;
     }
@@ -234,7 +233,7 @@ export default function StoreProfile() {
     setProductError('');
 
     try {
-      const updated = await setBoothMenuItemSoldOut(session.token, item.id, !item.is_sold_out);
+      const updated = await setBoothMenuItemSoldOut(undefined, item.id, !item.is_sold_out);
       setMenuItems((current) =>
         current.map((entry) => (String(entry.id) === String(updated.id) ? updated : entry)),
       );
@@ -246,7 +245,7 @@ export default function StoreProfile() {
   };
 
   const removeProduct = async (item: BackendMenuItem) => {
-    if (!session?.token) {
+    if (!session) {
       setProductError('ログイン情報がありません。再度ログインしてください。');
       return;
     }
@@ -255,7 +254,7 @@ export default function StoreProfile() {
     setProductError('');
 
     try {
-      await deleteBoothMenuItem(session.token, item.id);
+      await deleteBoothMenuItem(undefined, item.id);
       setMenuItems((current) => current.filter((entry) => String(entry.id) !== String(item.id)));
       if (String(editingProductId) === String(item.id)) {
         resetProductForm();
